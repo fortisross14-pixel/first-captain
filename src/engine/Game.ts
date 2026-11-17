@@ -27,6 +27,8 @@ import { buildSaltwharf } from '../world/saltwharf';
 import { CameraRig } from './CameraRig';
 import { Clock } from './Clock';
 import { Input } from './Input';
+import { Sound } from './Sound';
+import { sfx } from './sfx';
 
 type Mode = 'title' | 'create' | 'play';
 
@@ -58,6 +60,8 @@ export class Game {
   private creator: Creator | null = null;
   private busy = false;
   private readonly npcs: Npc[] = [];
+  private readonly sound = new Sound();
+  private readonly quality: 'high' | 'low';
 
   private readonly preview = { scene: new THREE.Scene(), camera: new THREE.PerspectiveCamera(30, 1, 0.1, 50), rig: null as Rig | null };
 
@@ -68,9 +72,20 @@ export class Game {
   private elapsed = 0;
 
   constructor(private readonly container: HTMLElement) {
-    this.renderer = new THREE.WebGLRenderer({ antialias: window.devicePixelRatio < 2, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.shadowMap.enabled = true;
+    // Graphics quality: saved choice, otherwise low on modest phones.
+    let savedQuality: string | null = null;
+    try {
+      savedQuality = localStorage.getItem('pale-lamps-quality');
+    } catch {
+      /* storage unavailable */
+    }
+    const nav = navigator as Navigator & { deviceMemory?: number };
+    const modest = (nav.hardwareConcurrency ?? 8) <= 4 || (nav.deviceMemory ?? 8) <= 3;
+    this.quality = savedQuality === 'high' || savedQuality === 'low' ? savedQuality : modest ? 'low' : 'high';
+    const low = this.quality === 'low';
+    this.renderer = new THREE.WebGLRenderer({ antialias: !low && window.devicePixelRatio < 2, powerPreference: 'high-performance' });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, low ? 1 : 2));
+    this.renderer.shadowMap.enabled = !low;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
@@ -100,6 +115,23 @@ export class Game {
     this.hud.renderJournal = () => this.renderJournal();
     this.hud.onBag = () => this.openBag();
     this.hud.onPeople = () => this.openContacts();
+    const soundLabel = () => `Sound: ${this.sound.enabled ? 'on' : 'off'}`;
+    const qualityLabel = (q: string) => `Graphics: ${q}`;
+    this.hud.setSettingLabels(soundLabel(), qualityLabel(this.quality));
+    this.hud.onSound = () => {
+      this.sound.toggle();
+      return soundLabel();
+    };
+    this.hud.onQuality = () => {
+      const next = this.quality === 'high' ? 'low' : 'high';
+      try {
+        localStorage.setItem('pale-lamps-quality', next);
+      } catch {
+        /* storage unavailable */
+      }
+      this.hud.toast('Graphics change applies after you reload the page.');
+      return `${qualityLabel(next)} (after reload)`;
+    };
     this.dialogue = new Dialogue(container);
     new Input(this.renderer.domElement, (x, y) => this.tap(x, y), (f) => this.rig.zoomBy(f));
 
@@ -280,9 +312,13 @@ export class Game {
       switch (place.id) {
         case 'hester':
           return [
-            act('Go up to your room', () => this.goTo('hesterRoom', 'door'), { primary: true }),
+            s.housed
+              ? act('Go up to your room', () => this.goTo('hesterRoom', 'door'), { primary: true })
+              : act(`Locked out. Pay Grubb £${s.rent.arrears.toFixed(2)}`, () => this.reclaimRoom(), { primary: true, disabled: s.money < s.rent.arrears }),
             act("Browse Pell's Chandlery", () => this.openShop('hester')),
           ];
+        case 'tenements':
+          return [act('Sleep rough in the archway', () => this.sleep('rough'), { primary: !s.housed })];
         case 'dockoffice':
           return this.jobActions('docks', act);
         case 'coppercup':
@@ -368,6 +404,7 @@ export class Game {
               disabled: s.money + 1e-9 < def.price || !canCarry(s, itemId),
               onClick: () => {
                 const r = buy(s, itemId);
+              if (r === 'ok') sfx('coin');
                 if (r === 'full') this.hud.toast('Your bag is full.');
                 render();
               },
@@ -489,6 +526,7 @@ export class Game {
     this.clock.minutes = Math.max(this.clock.minutes, end);
     s.minutes = this.clock.minutes;
     const rep = completeShift(s, jobId, grade, play, shiftDay);
+    sfx('coin');
     await this.hud.fade(false);
     const report = [
       ...(play ? lines : ['You kept your head down and did the same as last time.']),
@@ -639,7 +677,7 @@ export class Game {
     const dark = hour >= 21 || hour < 5;
     // Robbery: once a night at most; more likely with a fat purse, less if you are known to fight back.
     if (dark && s.lastRobberyDay !== day) {
-      const rate = 0.003 * (1 + s.money * 0.6) * (s.notoriety >= 3 ? 0.5 : 1);
+      const rate = 0.002 * (1 + s.money * 0.6) * (s.notoriety >= 3 ? 0.5 : 1);
       if (Math.random() < rate * gameMinutes) {
         s.lastRobberyDay = day;
         void this.robbery();
@@ -837,10 +875,10 @@ export class Game {
 
   // --- Sleep, rent and collapse -------------------------------------------
 
-  private async sleep(kind: 'morning' | 'nap' | 'collapse' | 'faint'): Promise<void> {
+  private async sleep(kind: 'morning' | 'nap' | 'collapse' | 'rough'): Promise<void> {
     const s = this.state!;
     if (this.busy) return;
-    if (kind === 'morning' && s.needs.rest > 90) {
+    if ((kind === 'morning' || kind === 'rough') && s.needs.rest > 90) {
       this.hud.toast("You're not tired enough to sleep.");
       return;
     }
@@ -850,42 +888,38 @@ export class Game {
     await this.hud.fade(true);
 
     let minutes: number;
-    if (kind === 'morning') {
+    if (kind === 'morning' || kind === 'rough') {
       const d = this.clock.date;
       const nowMin = d.getHours() * 60 + d.getMinutes();
       const wake = 6 * 60;
       minutes = nowMin < wake ? wake - nowMin : DAY - nowMin + wake;
     } else if (kind === 'nap') minutes = 120;
-    else if (kind === 'collapse') minutes = 6 * 60;
-    else minutes = 10 * 60;
+    else minutes = 6 * 60;
 
     const outdoors = this.location.id === 'saltwharf';
-    if (kind === 'faint') {
+    if (kind === 'morning' && this.location.id === 'hesterRoom') {
       const e = this.locations.hesterRoom.entries.bed;
-      this.enterLocation('hesterRoom', e.x, e.z, e.faceX, e.faceZ);
+      this.player!.teleport(this.location.grid, e.x, e.z);
     }
-    const mode = kind === 'collapse' && outdoors ? 'roughSleep' : 'asleep';
+    const mode = outdoors ? 'roughSleep' : 'asleep';
     for (let m = 0; m < minutes; m += 10) {
       simulateNeeds(s.needs, 10 / 60, mode);
       this.clock.minutes += 10;
     }
     s.minutes = this.clock.minutes;
-    if (kind === 'faint') {
-      s.needs.health = Math.max(s.needs.health, 25);
-      s.needs.hunger = Math.max(s.needs.hunger, 15);
-    }
     if (kind === 'collapse') addNeed(s.needs, 'health', -10);
+    if (outdoors) addNeed(s.needs, 'health', -5);
+    const theft = outdoors ? this.theftWhileAsleep() : null;
     const rentNews = this.checkRent();
     await this.hud.fade(false);
     this.busy = false;
 
     if (kind === 'morning') this.hud.toast(`You wake at ${this.clock.formatTime()}, ${this.clock.formatDate()}.`);
+    if (kind === 'rough') this.hud.toast(`You wake stiff and cold at ${this.clock.formatTime()}.`, 3500);
     if (kind === 'nap') this.hud.toast('You doze for two hours.');
     if (kind === 'collapse') this.hud.toast('You collapse from exhaustion and wake hours later, aching.', 4000);
-    if (kind === 'faint') {
-      await this.dialogue.say({ speaker: P, text: 'A neighbour carried you up the stairs. You were grey as a winding sheet. Eat. Sleep. I would rather not have company in my condition.' });
-    }
-    if (rentNews) await this.dialogue.say({ speaker: 'Mr. Grubb', text: rentNews });
+    if (theft) await this.dialogue.say({ speaker: '', text: theft });
+    if (rentNews) await this.announceRent(rentNews);
     await this.attendance();
 
     if (kind === 'morning' && s.tutorial.step === 'explore') {
@@ -893,6 +927,49 @@ export class Game {
       this.refreshObjectives();
       if (s.tutorial.askedDocks && s.tutorial.askedCup) await this.firstMorningScene();
     }
+    this.save();
+  }
+
+  /** Sleeping in the street: someone may go through your pockets. Cunning wakes you; a friend may keep watch. */
+  private theftWhileAsleep(): string | null {
+    const s = this.state!;
+    const mag = s.relations?.mag;
+    const watched = !!mag && mag.friendship >= 30;
+    const chance = Math.max(0.05, 0.45 - s.character.skills.cunning * 0.04) * (watched ? 0.4 : 1);
+    if (Math.random() >= chance) return watched ? 'Old Mag sat up all night beside you, muttering at shadows. Nothing was taken.' : null;
+    if (Math.random() < 0.3 + s.character.skills.cunning * 0.03) return 'You wake to a hand in your coat and grab the wrist. A boy tears free and runs. Nothing taken, this time.';
+    const take = Math.round(s.money * 0.5 * 100) / 100;
+    if (take > 0) {
+      s.money = Math.round((s.money - take) * 100) / 100;
+      return `Someone went through your pockets while you slept. £${take.toFixed(2)} gone.`;
+    }
+    if (s.inventory.length) {
+      const it = s.inventory[Math.floor(Math.random() * s.inventory.length)];
+      removeItem(s, it.id);
+      return `Someone went through your bag while you slept. Your ${ITEMS[it.id].name.toLowerCase()} is gone.`;
+    }
+    return null;
+  }
+
+  /** Grubb's news; if he has thrown you out, you are put on the street. */
+  private async announceRent(news: string): Promise<void> {
+    await this.dialogue.say({ speaker: 'Mr. Grubb', text: news });
+    if (!this.state!.housed && this.location.id === 'hesterRoom') {
+      await this.goTo('saltwharf', 'hester');
+      this.hud.toast('Evicted. Sleep rough in the Gull Court archway, or pay Grubb to get the room back.', 5000);
+    }
+  }
+
+  /** Pay off the arrears and take the room back. */
+  private async reclaimRoom(): Promise<void> {
+    const s = this.state!;
+    const cost = s.rent.arrears;
+    if (s.money < cost) return;
+    s.money = Math.round((s.money - cost) * 100) / 100;
+    s.rent.arrears = 0;
+    s.housed = true;
+    s.rent.dueMonth = monthIndex(this.clock.date);
+    await this.dialogue.say({ speaker: 'Mr. Grubb', text: `£${cost.toFixed(2)}. Here's the new key. Next month's due at the end of the month, same as ever.` });
     this.save();
   }
 
@@ -905,6 +982,7 @@ export class Game {
       s.money = Math.round((s.money - r.amount) * 100) / 100;
       r.dueMonth++;
     };
+    if (!s.housed) return null;
     if (r.graceUntil === null && now > r.dueMonth) {
       if (s.money >= r.amount) {
         pay();
@@ -920,9 +998,10 @@ export class Game {
         return "Paid at last. Don't make me climb those stairs again.";
       }
       if (this.clock.minutes > r.graceUntil) {
-        // Eviction arrives with milestone M7; until then Grubb keeps threatening.
-        r.graceUntil = this.clock.minutes + 3 * DAY;
-        return "I'm out of patience. Three more days, and I'm bringing my brother-in-law.";
+        s.housed = false;
+        r.graceUntil = null;
+        r.arrears = r.amount;
+        return `Time's up. The lock's changed and the room's let. You want it back, it's £${r.arrears.toFixed(2)}, cash.`;
       }
     }
     return null;
@@ -1082,6 +1161,8 @@ export class Game {
       return;
     }
 
+    this.sound.setAmbience(this.mode === 'play' ? this.clock.hour : 21, this.location.id !== 'saltwharf', document.querySelector('.minigame') !== null);
+
     if (this.mode === 'title') {
       this.location.update(20.8, this.elapsed);
       this.rig.update(dt, 16 + Math.sin(this.elapsed * 0.08) * 9, 12);
@@ -1098,7 +1179,7 @@ export class Game {
       simulateNeeds(s.needs, (this.clock.minutes - before) / 60, 'awake');
       s.minutes = this.clock.minutes;
       const news = this.checkRent();
-      if (news) void this.dialogue.say({ speaker: 'Mr. Grubb', text: news });
+      if (news) void this.announceRent(news);
       this.checkCollapse();
       this.night(this.clock.minutes - before);
       // Wages pay off hospital debt first.

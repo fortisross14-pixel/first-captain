@@ -57,7 +57,11 @@ export interface GameState {
     dueMonth: number;
     /** Game minute when the grace period ends, if rent is overdue. */
     graceUntil: number | null;
+    /** What Grubb wants to let you back in after an eviction. */
+    arrears: number;
   };
+  /** False once Grubb has thrown you out. */
+  housed: boolean;
   larderBread: number;
   tutorial: { step: TutorialStep; askedDocks: boolean; askedCup: boolean; slept: boolean };
   lastChatMinute: number;
@@ -104,7 +108,8 @@ export function newGame(character: Character): GameState {
     minutes: 0,
     location: 'hesterRoom',
     pos: { x: 1.5, z: 3.5 },
-    rent: { amount: 0.6, dueMonth: 0, graceUntil: null },
+    rent: { amount: 0.6, dueMonth: 0, graceUntil: null, arrears: 0 },
+    housed: true,
     larderBread: 3,
     tutorial: { step: 'intro', askedDocks: false, askedCup: false, slept: false },
     lastChatMinute: -9999,

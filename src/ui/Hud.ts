@@ -60,6 +60,10 @@ export class Hud {
           <div class="journal-sheet">
             <h2></h2>
             <div class="journal-body"></div>
+            <div class="actions settings">
+              <button class="sound-toggle"></button>
+              <button class="quality-toggle"></button>
+            </div>
             <div class="actions">
               <button class="quit">Save &amp; quit to title</button>
               <button class="save">Save</button>
@@ -93,6 +97,8 @@ export class Hud {
     this.q('.bag-btn').addEventListener('click', () => this.onBag?.());
     this.q('.people-btn').addEventListener('click', () => this.onPeople?.());
     this.q('.list-close').addEventListener('click', () => (this.q('.listsheet').hidden = true));
+    this.q('.sound-toggle').addEventListener('click', () => this.onSound && (this.q('.sound-toggle').textContent = this.onSound()));
+    this.q('.quality-toggle').addEventListener('click', () => this.onQuality && (this.q('.quality-toggle').textContent = this.onQuality()));
     this.q('.journal .save').addEventListener('click', () => this.onSave());
     this.q('.journal .quit').addEventListener('click', () => this.onQuit());
   }
@@ -135,6 +141,14 @@ export class Hud {
   renderJournal: (() => void) | null = null;
   onBag: (() => void) | null = null;
   onPeople: (() => void) | null = null;
+  /** Toggle handlers return the button's new label. */
+  onSound: (() => string) | null = null;
+  onQuality: (() => string) | null = null;
+
+  setSettingLabels(sound: string, quality: string): void {
+    this.q('.sound-toggle').textContent = sound;
+    this.q('.quality-toggle').textContent = quality;
+  }
 
   closeList(): void {
     this.q('.listsheet').hidden = true;
@@ -183,7 +197,9 @@ export class Hud {
     set('.time', time);
     set('.money', `£${state.money.toFixed(2)}`);
     set('.jobline', jobLine);
-    set('.rent', state.rent.graceUntil !== null ? 'Rent overdue!' : `Rent £${state.rent.amount.toFixed(2)} due ${rentDue}`);
+    set('.rent', !state.housed
+      ? `Homeless · Grubb wants £${state.rent.arrears.toFixed(2)}`
+      : state.rent.graceUntil !== null ? 'Rent overdue!' : `Rent £${state.rent.amount.toFixed(2)} due ${rentDue}`);
     for (const n of NEEDS) {
       const v = state.needs[n];
       const row = this.el.querySelector(`[data-need="${n}"]`) as HTMLElement;

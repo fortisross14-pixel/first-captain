@@ -1,3 +1,4 @@
+import { sfx } from '../engine/sfx';
 import type { MinigameParams, MinigameResult } from './types';
 
 interface Crate {
@@ -97,6 +98,7 @@ export function playCargo(root: HTMLElement, p: MinigameParams): Promise<Minigam
       lost++;
       score -= 5;
       splashes.push({ x: f.x, t: 0 });
+      sfx('splash');
       return;
     }
     const stack = stacks[f.col];
@@ -107,6 +109,7 @@ export function playCargo(root: HTMLElement, p: MinigameParams): Promise<Minigam
       score -= 20;
     }
     stack.push(f.crate);
+    sfx('drop');
     score += f.crate.weight * 10;
     loadedWeight += f.crate.weight;
     // Too much lean: the top crate on the heavy side slides into the river.
@@ -121,6 +124,7 @@ export function playCargo(root: HTMLElement, p: MinigameParams): Promise<Minigam
       score -= 15 + fell.weight * 10;
       loadedWeight -= fell.weight;
       splashes.push({ x: colCenter(c) + side * 40, t: 0 });
+      sfx('splash');
       tq = torque();
     }
   }

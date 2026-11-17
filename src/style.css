@@ -180,3 +180,5 @@ button.primary { background: #6a4e22; border-color: var(--brass); color: #fff4d8
 .fight-actions { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; width: min(100%, 480px); }
 .fight-actions button { min-height: 52px; }
 .fight-actions .fight-done { grid-column: 1 / -1; }
+
+.journal .actions.settings { justify-content: flex-start; margin-top: 12px; }

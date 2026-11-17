@@ -1,3 +1,4 @@
+import { sfx } from '../engine/sfx';
 import type { MinigameParams, MinigameResult } from './types';
 
 interface Patron {
@@ -66,6 +67,7 @@ export function playBar(root: HTMLElement, p: MinigameParams): Promise<MinigameR
   let running = false;
 
   const flash = (i: number, cls: string) => {
+    sfx(cls === 'good' ? 'pour' : 'bad');
     seatEls[i].classList.add(cls);
     setTimeout(() => seatEls[i].classList.remove(cls), 350);
   };

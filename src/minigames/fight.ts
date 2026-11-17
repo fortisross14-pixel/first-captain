@@ -1,4 +1,5 @@
 import { ITEMS, removeItem } from '../game/items';
+import { sfx } from '../engine/sfx';
 import { addNeed } from '../game/needs';
 import type { GameState } from '../game/state';
 
@@ -98,6 +99,7 @@ export function runFight(root: HTMLElement, s: GameState, base: Enemy, intro: st
         d = Math.round(d);
         addNeed(s.needs, 'health', -d);
         log(`${enemy.name} hits you. −${d} health.`, 'hurt');
+        sfx('hurt');
       } else log(`${enemy.name} swings and misses.`);
       guarding = false;
       if (s.needs.health <= 0) return finish('lost');
@@ -113,6 +115,7 @@ export function runFight(root: HTMLElement, s: GameState, base: Enemy, intro: st
           enemy.hp -= d;
           enemy.morale -= 5;
           log(`You hit ${enemy.name}. −${d}.`, 'good');
+          sfx('hit');
         } else log('You swing wide.');
       } else if (a === 'guard') {
         guarding = true;

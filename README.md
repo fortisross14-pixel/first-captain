@@ -5,7 +5,13 @@ A dark gothic life-sim RPG set in a fictional Victorian London (1871): work, ren
 - Build plan and milestones: [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md)
 - Story and world design: the *Pale Lamps Story Bible* (Claude Docs)
 
-## Current state: M6, Night in Saltwharf
+## Current state: M7, the Saltwharf vertical slice is complete
+
+**Play it:** https://fortisross14-pixel.github.io/first-captain/
+
+- Eviction, sleeping rough and theft in the night; synthesised sound; a low-graphics mode for older phones
+
+### From M6
 
 - Turn-based fights; robberies at night (pay, fight, talk or run); stepping in when a resident is attacked; the London Hospital and its bill
 
@@ -53,4 +59,4 @@ Open the printed URL on your phone (same Wi-Fi) with `npm run dev -- --host`.
 npm run build
 ```
 
-Pushing to `main` deploys to GitHub Pages.
+Pushing to `main` deploys to GitHub Pages (Settings → Pages → Source must be **GitHub Actions**). The live link appears under **Deployments → github-pages** on the repository page.

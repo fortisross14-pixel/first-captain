@@ -28,7 +28,7 @@ The design lives in the Story Bible (Claude Docs). This file tracks how we build
 | M4 ✅ | **The Copper Cup and shopping** | Order Juggling minigame, ranks 1–3, food stalls and a shop, inventory and items, eating, second job with the Rest trade-off | Two jobs work and you can feed yourself |
 | M5 ✅ | **The people of Saltwharf** | About 15 residents with schedules, class, traits and attraction; interaction menu; friendship, romance, rivalry and business meters; contact list | You can befriend, offend and start romancing residents |
 | M6 ✅ | **Night in Saltwharf** | Turn-based combat, night robberies, stepping into street fights, pay / fight / talk options by skill and job, hospital and its bill | You can be robbed, fight back or talk your way out |
-| M7 | **Falling and rising** | Eviction, sleeping rough, theft while asleep, balancing pass on money and needs, audio, polish, performance on low-end phones | The slice plays end to end for a full in-game month |
+| M7 ✅ | **Falling and rising** | Eviction, sleeping rough, theft while asleep, balancing pass on money and needs, audio, polish, performance on low-end phones | The slice plays end to end for a full in-game month |
 
 After the slice: more districts, factions, the main story and the Fog Clock, businesses, marriage, children and aging.
 
@@ -114,3 +114,18 @@ After the slice: more districts, factions, the main story and the Fog Clock, bus
 - [x] Street violence: in the evenings, a resident is set upon. Step in (a fight; win and they're your friend for it), shout for a constable (coin toss), or walk away (they remember)
 - [x] Winning earns notoriety (fewer robberies, better intimidation), a little loot and skill XP
 - [x] Losing, or Health hitting zero any other way: twelve hours in the London Hospital, a £0.15 bill, and if you were robbed they take 60% of your money and an item. Unpaid bills become debt, taken from your next money
+
+## M7 checklist
+
+- [x] Eviction: if the seven days' grace run out, Grubb changes the lock. Hester's door shows what he wants to let you back in; pay it and the room is yours again
+- [x] Sleeping rough: "Sleep rough in the archway" at Gull Court, any night; poor rest, a little Health lost
+- [x] Theft while asleep outdoors (also after collapsing in the street): Cunning lowers the odds and can wake you in time; if Old Mag Doyle is your friend (30+) she keeps watch
+- [x] Sleeping in your bed puts you in it, and you wake there
+- [x] Sound, all synthesised in the browser: river and wind that change with the hour and muffle indoors; clicks, coins, crates, splashes, pours and punches. On/off in the journal
+- [x] Graphics: Low (no shadows, 1× pixel ratio, no antialiasing) is picked automatically on modest phones; switch in the journal (applies after reload)
+- [x] Balancing pass: conversations give about 40% less, night robberies are a third rarer. A full pass on pay, prices and needs comes once the slice has been played on real phones
+- [x] Deploy workflow now names the `github-pages` environment, so the live link shows on the repository page and in each run
+
+## After the slice
+
+More districts, factions, the main story and the Fog Clock, businesses, marriage, children and aging.

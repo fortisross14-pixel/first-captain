@@ -31,16 +31,16 @@ export interface Interaction {
 }
 
 export const INTERACTIONS: Interaction[] = [
-  { id: 'chat', label: 'Chat', skill: 'charisma', meter: 'friendship', gain: 5, difficulty: -0.1 },
-  { id: 'joke', label: 'Joke', skill: 'charisma', meter: 'friendship', gain: 7, difficulty: 0.05 },
-  { id: 'compliment', label: 'Compliment', skill: 'charisma', meter: 'friendship', gain: 6, difficulty: 0 },
-  { id: 'gossip', label: 'Gossip', skill: 'cunning', meter: 'friendship', gain: 6, difficulty: 0.05 },
-  { id: 'debate', label: 'Debate', skill: 'study', meter: 'friendship', gain: 8, difficulty: 0.15 },
-  { id: 'brag', label: 'Brag', skill: 'strength', meter: 'friendship', gain: 6, difficulty: 0.1 },
-  { id: 'confide', label: 'Confide', skill: 'charisma', meter: 'friendship', gain: 9, difficulty: 0.15 },
-  { id: 'flirt', label: 'Flirt', skill: 'charisma', meter: 'romance', gain: 8, difficulty: 0.1 },
-  { id: 'business', label: 'Propose business', skill: 'cunning', meter: 'business', gain: 10, difficulty: 0.15 },
-  { id: 'gift', label: 'Give a gift', skill: 'charisma', meter: 'friendship', gain: 8, difficulty: -0.3 },
+  { id: 'chat', label: 'Chat', skill: 'charisma', meter: 'friendship', gain: 3, difficulty: -0.1 },
+  { id: 'joke', label: 'Joke', skill: 'charisma', meter: 'friendship', gain: 4, difficulty: 0.05 },
+  { id: 'compliment', label: 'Compliment', skill: 'charisma', meter: 'friendship', gain: 4, difficulty: 0 },
+  { id: 'gossip', label: 'Gossip', skill: 'cunning', meter: 'friendship', gain: 4, difficulty: 0.05 },
+  { id: 'debate', label: 'Debate', skill: 'study', meter: 'friendship', gain: 5, difficulty: 0.15 },
+  { id: 'brag', label: 'Brag', skill: 'strength', meter: 'friendship', gain: 4, difficulty: 0.1 },
+  { id: 'confide', label: 'Confide', skill: 'charisma', meter: 'friendship', gain: 6, difficulty: 0.15 },
+  { id: 'flirt', label: 'Flirt', skill: 'charisma', meter: 'romance', gain: 5, difficulty: 0.1 },
+  { id: 'business', label: 'Propose business', skill: 'cunning', meter: 'business', gain: 6, difficulty: 0.15 },
+  { id: 'gift', label: 'Give a gift', skill: 'charisma', meter: 'friendship', gain: 5, difficulty: -0.3 },
   { id: 'insult', label: 'Insult', skill: 'strength', meter: 'rivalry', gain: 10, difficulty: 0 },
 ];
 
