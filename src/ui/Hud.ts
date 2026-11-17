@@ -1,6 +1,12 @@
 import { NEED_NAMES, SKILL_INFO, SKILLS, fullName, type GameState, type NeedId } from '../game/state';
 import type { Place } from '../world/location';
 
+export interface ListRow {
+  label: string;
+  sub: string;
+  actions: Action[];
+}
+
 export interface Action {
   label: string;
   onClick: () => void;
@@ -38,7 +44,10 @@ export class Hud {
           </div>
           <div class="card objectives" hidden><div class="obj-title">To do</div><ul></ul></div>
         </div>
-        <button class="journal-btn" aria-label="Open journal">Journal</button>
+        <div class="bottom-left">
+          <button class="journal-btn" aria-label="Open journal">Journal</button>
+          <button class="bag-btn" aria-label="Open bag">Bag</button>
+        </div>
         <button class="speed" aria-label="Change time speed">1×</button>
         <div class="toast" role="status"></div>
         <div class="panel" hidden>
@@ -57,6 +66,14 @@ export class Hud {
             </div>
           </div>
         </div>
+        <div class="listsheet journal" hidden>
+          <div class="journal-sheet">
+            <h2></h2>
+            <p class="meta list-sub"></p>
+            <div class="list-rows"></div>
+            <div class="actions"><button class="primary list-close">Close</button></div>
+          </div>
+        </div>
         <div class="modal" hidden>
           <div class="journal-sheet">
             <h2></h2>
@@ -70,8 +87,10 @@ export class Hud {
     this.el = root.querySelector('.hud') as HTMLElement;
     const speed = this.q<HTMLButtonElement>('.speed');
     speed.addEventListener('click', () => (speed.textContent = `${onSpeed()}×`));
-    this.q('.journal-btn').addEventListener('click', () => this.journalOpen = true);
-    this.q('.close-journal').addEventListener('click', () => this.journalOpen = false);
+    this.q('.journal-btn').addEventListener('click', () => (this.journalOpen = true));
+    this.q('.close-journal').addEventListener('click', () => (this.journalOpen = false));
+    this.q('.bag-btn').addEventListener('click', () => this.onBag?.());
+    this.q('.list-close').addEventListener('click', () => (this.q('.listsheet').hidden = true));
     this.q('.journal .save').addEventListener('click', () => this.onSave());
     this.q('.journal .quit').addEventListener('click', () => this.onQuit());
   }
@@ -82,7 +101,7 @@ export class Hud {
 
   /** True while a menu covers the world and taps should not reach it. */
   get blocking(): boolean {
-    return !this.q('.journal').hidden || !this.q('.modal').hidden;
+    return !this.q('.journal').hidden || !this.q('.modal').hidden || !this.q('.listsheet').hidden;
   }
 
   /** A report the player must acknowledge, such as the end of a shift. */
@@ -112,6 +131,40 @@ export class Hud {
   }
 
   renderJournal: (() => void) | null = null;
+  onBag: (() => void) | null = null;
+
+  /** A list of rows with buttons, used for shops and the bag. Calling it again re-renders in place. */
+  showList(title: string, sub: string, rows: ListRow[]): void {
+    const el = this.q('.listsheet');
+    el.querySelector('h2')!.textContent = title;
+    el.querySelector('.list-sub')!.textContent = sub;
+    el.querySelector('.list-rows')!.replaceChildren(
+      ...rows.map((r) => {
+        const row = document.createElement('div');
+        row.className = 'list-row';
+        const text = document.createElement('div');
+        const l = document.createElement('div');
+        l.className = 'lr-label';
+        l.textContent = r.label;
+        const sb = document.createElement('div');
+        sb.className = 'lr-sub';
+        sb.textContent = r.sub;
+        text.append(l, sb);
+        const btns = document.createElement('div');
+        btns.className = 'lr-actions';
+        for (const a of r.actions) {
+          const b = document.createElement('button');
+          b.textContent = a.label;
+          b.disabled = !!a.disabled;
+          b.addEventListener('click', () => a.onClick());
+          btns.appendChild(b);
+        }
+        row.append(text, btns);
+        return row;
+      }),
+    );
+    el.hidden = false;
+  }
 
   update(state: GameState, district: string, date: string, time: string, rentDue: string, jobLine = ''): void {
     const set = (sel: string, text: string) => {
@@ -194,7 +247,7 @@ export class Hud {
       <h3>Needs</h3>
       <table class="sheet">${NEEDS.map((n) => `<tr><td>${NEED_NAMES[n]}</td><td class="num">${Math.round(state.needs[n])}</td></tr>`).join('')}</table>
       <h3>Work</h3>
-      <p>${work || 'Unemployed.'}</p>
+      <p class="pre">${work || 'Unemployed.'}</p>
       <h3>Purse</h3>
       <p>£${state.money.toFixed(2)}. ${rentLine}</p>`;
   }

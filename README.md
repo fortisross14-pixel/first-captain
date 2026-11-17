@@ -5,7 +5,12 @@ A dark gothic life-sim RPG set in a fictional Victorian London (1871): work, ren
 - Build plan and milestones: [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md)
 - Story and world design: the *Pale Lamps Story Bible* (Claude Docs)
 
-## Current state: M3, First job: the Docks
+## Current state: M4, The Copper Cup and shopping
+
+- Second job: evenings at the Copper Cup with the Order Juggling minigame; hold two jobs if the hours allow
+- Bag and items; the market, Pell's Chandlery and Moss the Pawnbroker
+
+### From M3
 
 - Get hired by Foreman Rudd, work 06:00–14:00 shifts by playing Cargo Stacking, or autopilot at your last grade
 - Grades, pay, promotion points, missed shifts, firing; Mudlark → Dockhand → Stevedore; skills grow from work

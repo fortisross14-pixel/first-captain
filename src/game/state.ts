@@ -60,11 +60,11 @@ export interface GameState {
   larderBread: number;
   tutorial: { step: TutorialStep; askedDocks: boolean; askedCup: boolean; slept: boolean };
   lastChatMinute: number;
-  job: Employment | null;
+  /** Up to two jobs. */
+  jobs: Employment[];
+  inventory: { id: string; qty: number }[];
   /** Progress toward the next level of each skill. */
   skillXp: Record<SkillId, number>;
-  /** Last day whose shift attendance has been checked. */
-  attendanceDay: number;
   /** Employer id → first day they will hire you again. */
   bans: Record<string, number>;
 }
@@ -73,9 +73,14 @@ const zeroSkills = (): Record<SkillId, number> => ({ study: 0, strength: 0, arts
 
 /** Fills in fields added after a save was written. */
 function upgrade(s: GameState): GameState {
-  s.job ??= null;
+  const old = s as GameState & { job?: Employment | null; attendanceDay?: number };
+  if (!s.jobs) {
+    s.jobs = old.job ? [{ ...old.job, checkedDay: old.attendanceDay ?? old.job.hiredDay }] : [];
+    delete old.job;
+    delete old.attendanceDay;
+  }
+  s.inventory ??= [];
   s.skillXp ??= zeroSkills();
-  s.attendanceDay ??= 0;
   s.bans ??= {};
   return s;
 }
@@ -95,9 +100,9 @@ export function newGame(character: Character): GameState {
     larderBread: 3,
     tutorial: { step: 'intro', askedDocks: false, askedCup: false, slept: false },
     lastChatMinute: -9999,
-    job: null,
+    jobs: [],
+    inventory: [],
     skillXp: zeroSkills(),
-    attendanceDay: 0,
     bans: {},
   };
 }

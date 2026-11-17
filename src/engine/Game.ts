@@ -3,14 +3,17 @@ import { Player } from '../actors/Player';
 import { createCharacter, type Rig } from '../actors/characterModel';
 import { GRADE_INFO, JOBS, dayIndex, gradeFor, type Grade } from '../game/jobs';
 import { addNeed, simulateNeeds } from '../game/needs';
+import { ITEMS, SHOPS, buy, canCarry, removeItem, sell, sellPrice, slots, usedSlots, useItem } from '../game/items';
 import {
-  canStartShift, checkAttendance, completeShift, currentJob, dayStart, hire, isBanned, nextShiftText, promotionText,
+  canStartShift, checkAttendance, completeShift, dayStart, employment, hire, hireBlocker, leave, nextShiftText,
+  promotionText, title,
 } from '../game/work';
+import { playBar } from '../minigames/bar';
 import { playCargo } from '../minigames/cargo';
-import { loadGame, newGame, saveGame, type Character, type GameState, type LocationId } from '../game/state';
+import { loadGame, newGame, saveGame, type Character, type GameState, type LocationId, type NeedId } from '../game/state';
 import { Creator } from '../ui/Creator';
 import { Dialogue, type Line } from '../ui/Dialogue';
-import { Hud, type Action } from '../ui/Hud';
+import { Hud, type Action, type ListRow } from '../ui/Hud';
 import { Title } from '../ui/Title';
 import { buildHesterRoom } from '../world/hesterRoom';
 import type { Location, Place } from '../world/location';
@@ -82,6 +85,7 @@ export class Game {
 
     this.hud = new Hud(container, () => this.clock.cycleSpeed(), () => this.save(true), () => this.quitToTitle());
     this.hud.renderJournal = () => this.renderJournal();
+    this.hud.onBag = () => this.openBag();
     this.dialogue = new Dialogue(container);
     new Input(this.renderer.domElement, (x, y) => this.tap(x, y), (f) => this.rig.zoomBy(f));
 
@@ -247,25 +251,21 @@ export class Game {
     if (this.location.id === 'saltwharf') {
       switch (place.id) {
         case 'hester':
-          return [act('Go up to your room', () => this.goTo('hesterRoom', 'door'), { primary: true })];
-        case 'dockoffice': {
-          if (s.job?.jobId !== 'docks') return [act('Ask about work', () => this.askDocks(), { primary: true })];
-          const open = canStartShift(s);
-          const rank = JOBS.docks.ranks[s.job.rank].title;
           return [
-            act(`Work your shift as ${rank}`, () => this.workShift(true), { primary: true, disabled: !open }),
-            act(s.job.lastGrade ? `Autopilot (${GRADE_INFO[s.job.lastGrade].name} pay, no points)` : 'Autopilot (play one shift first)',
-              () => this.workShift(false), { disabled: !open || !s.job.lastGrade }),
-            act('Quit the job', () => this.quitJob()),
+            act('Go up to your room', () => this.goTo('hesterRoom', 'door'), { primary: true }),
+            act("Browse Pell's Chandlery", () => this.openShop('hester')),
           ];
-        }
+        case 'dockoffice':
+          return this.jobActions('docks', act);
         case 'coppercup':
-          return [act('Ask about work', () => this.askCup(), { primary: true })];
-        case 'market':
           return [
-            act('Hot potato · £0.02', () => this.buyFood('a hot potato', 0.02, 25), { disabled: s.money < 0.02 }),
-            act('Eel pie · £0.06', () => this.buyFood('an eel pie', 0.06, 45), { disabled: s.money < 0.06 }),
+            ...this.jobActions('coppercup', act),
+            act('Buy a drink · £0.02', () => this.tavernDrink(), { disabled: s.money < 0.02 }),
           ];
+        case 'market':
+          return [act('Browse the stalls', () => this.openShop('market'), { primary: true })];
+        case 'pawnbroker':
+          return [act('Sell to Moss', () => this.openShop('pawnbroker'), { primary: true })];
         default:
           return [];
       }
@@ -295,14 +295,6 @@ export class Game {
     }
   }
 
-  private buyFood(what: string, price: number, hunger: number): void {
-    const s = this.state!;
-    if (s.money < price) return;
-    s.money = Math.round((s.money - price) * 100) / 100;
-    addNeed(s.needs, 'hunger', hunger);
-    this.hud.toast(`You eat ${what} standing up, like everyone else here.`);
-  }
-
   private eatBread(): void {
     const s = this.state!;
     if (s.larderBread <= 0) return;
@@ -311,75 +303,164 @@ export class Game {
     this.hud.toast(s.larderBread > 0 ? 'Stale, but bread.' : "That was the last of Hester's bread.");
   }
 
-  private async askDocks(): Promise<void> {
+  private tavernDrink(): void {
     const s = this.state!;
-    const R = JOBS.docks.boss;
-    s.tutorial.askedDocks = true;
+    if (s.money < 0.02) return;
+    s.money = Math.round((s.money - 0.02) * 100) / 100;
+    addNeed(s.needs, 'social', 15);
+    addNeed(s.needs, 'rest', -3);
+    this.hud.toast('A pint of thin ale and somebody else\'s story. Social +15.');
+  }
+
+  // --- Shops and the bag ----------------------------------------------------
+
+  private openShop(id: string): void {
+    const shop = SHOPS[id];
+    const s = this.state!;
+    const render = () => {
+      const rows: ListRow[] = [];
+      for (const itemId of shop.stock) {
+        const def = ITEMS[itemId];
+        rows.push({
+          label: `${def.name} · £${def.price.toFixed(2)}`,
+          sub: def.blurb,
+          actions: [
+            ...(def.use && def.verb === 'Eat' ? [{
+              label: 'Buy & eat',
+              disabled: s.money + 1e-9 < def.price,
+              onClick: () => {
+                s.money = Math.round((s.money - def.price) * 100) / 100;
+                for (const [k, v] of Object.entries(def.use!)) addNeed(s.needs, k as NeedId, v);
+                this.hud.toast(`You eat the ${def.name.toLowerCase()} standing up, like everyone else here.`);
+                render();
+              },
+            }] : []),
+            {
+              label: 'Buy',
+              disabled: s.money + 1e-9 < def.price || !canCarry(s, itemId),
+              onClick: () => {
+                const r = buy(s, itemId);
+                if (r === 'full') this.hud.toast('Your bag is full.');
+                render();
+              },
+            },
+          ],
+        });
+      }
+      if (shop.buys > 0) {
+        for (const it of s.inventory) {
+          const def = ITEMS[it.id];
+          rows.push({
+            label: `${def.name} ×${it.qty}`,
+            sub: `Moss offers £${sellPrice(shop, it.id).toFixed(2)}`,
+            actions: [{ label: 'Sell', onClick: () => { sell(s, shop, it.id); render(); } }],
+          });
+        }
+        if (s.inventory.length === 0) rows.push({ label: 'You have nothing Moss wants.', sub: '', actions: [] });
+      }
+      this.hud.showList(shop.name, `£${s.money.toFixed(2)} · bag ${usedSlots(s)} / ${slots(s)}`, rows);
+    };
+    render();
+  }
+
+  private openBag(): void {
+    const s = this.state!;
+    const render = () => {
+      const rows: ListRow[] = s.inventory.map((it) => {
+        const def = ITEMS[it.id];
+        const actions: Action[] = [];
+        if (def.use) actions.push({ label: def.verb ?? 'Use', onClick: () => { const m = useItem(s, it.id); if (m) this.hud.toast(m); render(); } });
+        actions.push({ label: 'Drop', onClick: () => { removeItem(s, it.id); render(); } });
+        return { label: `${def.name} ×${it.qty}`, sub: def.blurb, actions };
+      });
+      if (rows.length === 0) rows.push({ label: 'Your bag is empty.', sub: 'Buy food at the market, supplies at the chandlery.', actions: [] });
+      this.hud.showList('Bag', `${usedSlots(s)} / ${slots(s)} slots · Strength adds room`, rows);
+    };
+    render();
+  }
+
+  // --- Work -----------------------------------------------------------------
+
+  private jobActions(jobId: string, act: (label: string, fn: () => void | Promise<void>, opts?: Partial<Action>) => Action): Action[] {
+    const s = this.state!;
+    const e = employment(s, jobId);
+    if (!e) return [act('Ask about work', () => this.askForWork(jobId), { primary: true })];
+    const open = canStartShift(s, jobId);
+    return [
+      act(`Work your shift as ${title(s, e)}`, () => this.workShift(jobId, true), { primary: true, disabled: !open }),
+      act(e.lastGrade ? `Autopilot (${GRADE_INFO[e.lastGrade].name} pay, no points)` : 'Autopilot (play one shift first)',
+        () => this.workShift(jobId, false), { disabled: !open || !e.lastGrade }),
+      act('Quit the job', () => this.quitJob(jobId)),
+    ];
+  }
+
+  private async askForWork(jobId: string): Promise<void> {
+    const s = this.state!;
+    const job = JOBS[jobId];
+    const B = job.boss;
+    if (jobId === 'docks') s.tutorial.askedDocks = true;
+    if (jobId === 'coppercup') s.tutorial.askedCup = true;
     this.refreshObjectives();
-    if (s.job) {
-      await this.dialogue.say({ speaker: R, text: 'You\'ve already got work. I don\'t share hands with other masters.' });
-      return;
-    }
-    if (isBanned(s, 'docks') !== null) {
-      await this.dialogue.say({ speaker: R, text: 'You? After last time? Come back in a month, if you\'ve learned to set an alarm.' });
-      return;
-    }
-    const yes = await this.dialogue.ask(
-      { speaker: R, text: 'Work? I need a mudlark: fetching, carrying, stacking what the real men won\'t. Six till two, Monday to Saturday. Eight pence a shift.' },
-      ['I\'ll take it.', 'Not now.'],
-    );
+    const blocker = hireBlocker(s, jobId);
+    if (blocker === 'banned') return this.dialogue.say({ speaker: B, text: job.lines.banned });
+    if (blocker === 'full') return this.dialogue.say({ speaker: B, text: 'You\'ve two masters already. Nobody has the hours for three.' });
+    if (blocker === 'clash') return this.dialogue.say({ speaker: B, text: 'Those hours clash with your other work. Choose one.' });
+    if (blocker) return;
+    const yes = await this.dialogue.ask({ speaker: B, text: job.lines.offer }, ["I'll take it.", 'Not now.']);
     if (yes !== 0) return;
-    hire(s, 'docks');
-    await this.dialogue.say(
-      { speaker: R, text: 'Be here at six. Late is the same as absent, and absent three times is gone.' },
-      { speaker: R, text: 'Load the barge level. A barge that lists drops my cargo in the Thames, and then I drop you in after it.' },
-    );
+    hire(s, jobId);
+    await this.dialogue.say(...job.lines.hired.map((text) => ({ speaker: B, text })));
+    if (s.jobs.length === 2) this.hud.toast('Two jobs: mind your Rest. Sleep is the first thing you will run short of.', 4000);
     this.save();
   }
 
-  private async quitJob(): Promise<void> {
+  private async quitJob(jobId: string): Promise<void> {
     const s = this.state!;
-    const yes = await this.dialogue.ask({ speaker: 'You', text: 'Quit the docks? You will lose your rank and points.' }, ['Quit', 'Stay']);
+    const job = JOBS[jobId];
+    const yes = await this.dialogue.ask({ speaker: 'You', text: `Quit ${job.career === 'Docks' ? 'the docks' : job.career}? You will lose your rank and points.` }, ['Quit', 'Stay']);
     if (yes !== 0) return;
-    s.job = null;
-    await this.dialogue.say({ speaker: JOBS.docks.boss, text: 'Suit yourself. There\'s ten behind you for every one that walks.' });
+    leave(s, jobId, false);
+    await this.dialogue.say({ speaker: job.boss, text: job.lines.quit });
     this.save();
   }
 
   /** Plays (or skips) a shift, then jumps the clock to the end of the shift and reports. */
-  private async workShift(play: boolean): Promise<void> {
+  private async workShift(jobId: string, play: boolean): Promise<void> {
     const s = this.state!;
-    const job = currentJob(s);
-    if (!job || !s.job || !canStartShift(s) || this.busy) return;
+    const job = JOBS[jobId];
+    const e = employment(s, jobId);
+    if (!e || !canStartShift(s, jobId) || this.busy) return;
     this.busy = true;
     this.player!.stop();
+    const rankBefore = title(s, e);
     let grade: Grade;
     let lines: string[] = [];
     if (play) {
-      const r = await playCargo(this.container, {
-        rank: s.job.rank,
-        title: `${job.career} · ${job.ranks[s.job.rank].title}`,
+      const params = {
+        rank: e.rank,
+        title: `${job.career} · ${rankBefore}`,
         main: s.character.skills[job.main],
         second: s.character.skills[job.second],
         // Testing aid: ?mgseconds=8 shortens minigames.
         seconds: Number(new URLSearchParams(location.search).get('mgseconds')) || undefined,
-      });
+      };
+      const r = await (job.minigame === 'bar' ? playBar : playCargo)(this.container, params);
       grade = gradeFor(r.percent);
       lines = r.lines;
     } else {
-      grade = s.job.lastGrade!;
+      grade = e.lastGrade!;
     }
     await this.hud.fade(true);
-    const end = dayStart(dayIndex(s.minutes)) + job.end;
+    const shiftDay = dayIndex(s.minutes);
+    const end = dayStart(shiftDay) + job.end;
     const hours = Math.max(0, (end - this.clock.minutes) / 60);
     simulateNeeds(s.needs, hours, 'awake');
     addNeed(s.needs, 'hunger', job.strain.hunger);
     addNeed(s.needs, 'rest', job.strain.rest);
-    addNeed(s.needs, 'social', 6);
+    addNeed(s.needs, 'social', job.strain.social);
     this.clock.minutes = Math.max(this.clock.minutes, end);
-    const rankBefore = job.ranks[s.job.rank].title;
-    const rep = completeShift(s, grade, play);
     s.minutes = this.clock.minutes;
+    const rep = completeShift(s, jobId, grade, play, shiftDay);
     await this.hud.fade(false);
     const report = [
       ...(play ? lines : ['You kept your head down and did the same as last time.']),
@@ -389,36 +470,18 @@ export class Game {
       ...rep.levelUps,
     ];
     await this.hud.modal(`Shift over · ${rankBefore}`, report);
-    if (rep.promotedTo) {
-      await this.dialogue.say({ speaker: job.boss, text: `You've a back on you after all. From tomorrow you're ${rep.promotedTo}. More pay, heavier crates, same river.` });
-    }
-    if (rep.fired) {
-      await this.dialogue.say({ speaker: job.boss, text: 'That\'s enough. Collect your pennies and don\'t come back this month.' });
-    }
+    if (rep.promotedTo) await this.dialogue.say({ speaker: job.boss, text: job.lines.promoted.replace('{rank}', rep.promotedTo) });
+    if (rep.fired) await this.dialogue.say({ speaker: job.boss, text: job.lines.fired });
     this.busy = false;
     this.save();
   }
 
   /** Penalises missed shifts; called every frame and after sleeping. */
   private async attendance(): Promise<void> {
-    const s = this.state!;
-    const job = currentJob(s);
-    const { missed, fired } = checkAttendance(s);
-    if (!job || missed === 0) return;
-    if (fired) {
-      await this.dialogue.say({ speaker: job.boss, text: 'You didn\'t turn up. Again. You\'re finished here. Don\'t come back this month.' });
-    } else {
-      this.hud.toast(`You missed ${missed === 1 ? 'a shift' : `${missed} shifts`} at the docks. Promotion points -${missed * 3}.`, 4000);
+    for (const r of checkAttendance(this.state!)) {
+      if (r.fired) await this.dialogue.say({ speaker: r.job.boss, text: r.job.lines.absentFired });
+      else this.hud.toast(`You missed ${r.missed === 1 ? 'a shift' : `${r.missed} shifts`} at ${r.job.career === 'Docks' ? 'the docks' : r.job.career}. Promotion points −${r.missed * 3}.`, 4000);
     }
-  }
-
-  private async askCup(): Promise<void> {
-    await this.dialogue.say(
-      { speaker: 'Bessa Hartigan', text: 'Short of hands? Always. Short of coin to pay them? Also always.' },
-      { speaker: 'Bessa Hartigan', text: "The brewer gets paid at the end of the week. Come back after that and we'll talk." },
-    );
-    this.state!.tutorial.askedCup = true;
-    this.refreshObjectives();
   }
 
   private async chatPembleton(): Promise<void> {
@@ -619,10 +682,9 @@ export class Game {
     const rentLine = s.rent.graceUntil !== null
       ? `Rent of £${s.rent.amount.toFixed(2)} is overdue.`
       : `Rent of £${s.rent.amount.toFixed(2)} is due ${due}.`;
-    const job = currentJob(s);
-    const work = job && s.job
-      ? `${job.ranks[s.job.rank].title} at the ${job.employer}. ${nextShiftText(s)}. ${promotionText(s)}`
-      : '';
+    const work = s.jobs
+      .map((e) => `${title(s, e)} at the ${JOBS[e.jobId].employer}: ${nextShiftText(s, e.jobId)}. ${promotionText(s, e.jobId)}`)
+      .join('\n');
     this.hud.setJournal(Hud.titleFor(s), this.hud.journalHtml(s, rentLine, work));
   }
 
@@ -726,8 +788,7 @@ export class Game {
       this.marker.scale.setScalar(1 + (1 - this.markerLife) * 0.5);
     }
 
-    const job = currentJob(s);
-    const jobLine = job && s.job ? `${job.ranks[s.job.rank].title} · ${nextShiftText(s)}` : '';
+    const jobLine = s.jobs.map((e) => `${title(s, e)} · ${nextShiftText(s, e.jobId)}`).join('\n');
     this.hud.update(s, this.location.name, this.clock.formatDate(), this.clock.formatTime(), this.clock.formatShortDate(this.clock.rentDue), jobLine);
     this.renderer.render(this.location.scene, this.rig.camera);
   }

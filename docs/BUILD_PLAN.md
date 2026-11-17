@@ -25,7 +25,7 @@ The design lives in the Story Bible (Claude Docs). This file tracks how we build
 | M1 ✅ | **Saltwharf you can walk** | Three.js setup, angled camera, Saltwharf blockout (river, quay, streets, buildings, props), low-poly player, tap-to-move with pathfinding, tap a building to walk to its door, day/night clock with gaslight and fog, basic HUD, mobile layout | You can walk around Saltwharf on a phone through a full day and night |
 | M2 ✅ | **A life begins** | Character creator (name, surname, gender, attraction, look, 5 skill points), Hester's room interior, Mr. Pembleton and the tutorial, needs that drain and restore, sleeping, money, rent and the end-of-month deadline, save/load | You can create a character, live a few days and save |
 | M3 ✅ | **First job: the Docks** | Job framework (shifts, grades, pay, promotion points, firing, skipping), job board, Cargo Stacking minigame, ranks 1–3, skills gaining from work | You can get hired, play and skip shifts, and get promoted |
-| M4 | **The Copper Cup and shopping** | Order Juggling minigame, ranks 1–3, food stalls and a shop, inventory and items, eating, second job with the Rest trade-off | Two jobs work and you can feed yourself |
+| M4 ✅ | **The Copper Cup and shopping** | Order Juggling minigame, ranks 1–3, food stalls and a shop, inventory and items, eating, second job with the Rest trade-off | Two jobs work and you can feed yourself |
 | M5 | **The people of Saltwharf** | About 15 residents with schedules, class, traits and attraction; interaction menu; friendship, romance, rivalry and business meters; contact list | You can befriend, offend and start romancing residents |
 | M6 | **Night in Saltwharf** | Turn-based combat, night robberies, stepping into street fights, pay / fight / talk options by skill and job, hospital and its bill | You can be robbed, fight back or talk your way out |
 | M7 | **Falling and rising** | Eviction, sleeping rough, theft while asleep, balancing pass on money and needs, audio, polish, performance on low-end phones | The slice plays end to end for a full in-game month |
@@ -75,3 +75,17 @@ After the slice: more districts, factions, the main story and the Fog Clock, bus
 - [x] HUD shows your rank and next shift; the journal shows promotion progress
 - [x] Testing aid: `?mgseconds=6` shortens minigames
 - Pay, XP and difficulty numbers are placeholders for the final balancing pass
+
+## M4 checklist
+
+- [x] Up to two jobs at once, as long as their shifts don't overlap; saves from M3 are upgraded automatically
+- [x] The Copper Cup (Bessa Hartigan): 18:00–24:00, every night but Monday; Charisma main, Strength second; Pot Washer → Potboy / Barmaid → Barkeep
+- [x] Order Juggling minigame (`src/minigames/bar.ts`): tap a drink, then the patron who ordered it, before they walk out
+  - Rank 2 adds drunks you must cut off · Rank 3 adds fights you must break up in time
+  - Charisma makes patrons more patient; Strength gives you longer to stop a fight
+- [x] Working both jobs (06:00–14:00 and 18:00–24:00) leaves six hours' sleep: Rest is the price
+- [x] Bar shifts give Social; a pint at the Copper Cup (£0.02) gives Social too
+- [x] Items and inventory (`src/game/items.ts`): food, candles, bandages, tonic, rope; stacks of 5; 6 slots plus one per 2 Strength
+- [x] Shops: Saltwharf Market (food: buy, or buy & eat), Pell's Chandlery under Hester's room (supplies), Moss the Pawnbroker (buys anything at 40%)
+- [x] Bag: use or drop items
+- [x] Fixed: a shift ending at midnight is recorded on the day it started
