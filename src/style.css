@@ -160,3 +160,7 @@ button.primary { background: #6a4e22; border-color: var(--brass); color: #fff4d8
 .lr-label { font-size: 16px; }
 .lr-sub { font-size: 12.5px; color: var(--muted); }
 .lr-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+.lr-sub { white-space: pre-line; }
+.dialogue .text { white-space: pre-line; }
+.panel .actions button { min-height: 40px; padding: 0 12px; }

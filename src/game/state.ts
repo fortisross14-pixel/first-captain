@@ -1,5 +1,6 @@
 import type { Look } from '../actors/characterModel';
 import type { Employment } from './jobs';
+import type { Relation } from './social';
 
 export const SKILLS = ['study', 'strength', 'arts', 'charisma', 'cunning', 'occult'] as const;
 export type SkillId = (typeof SKILLS)[number];
@@ -63,6 +64,7 @@ export interface GameState {
   /** Up to two jobs. */
   jobs: Employment[];
   inventory: { id: string; qty: number }[];
+  relations: Record<string, Relation>;
   /** Progress toward the next level of each skill. */
   skillXp: Record<SkillId, number>;
   /** Employer id → first day they will hire you again. */
@@ -102,6 +104,7 @@ export function newGame(character: Character): GameState {
     lastChatMinute: -9999,
     jobs: [],
     inventory: [],
+    relations: {},
     skillXp: zeroSkills(),
     bans: {},
   };

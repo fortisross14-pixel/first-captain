@@ -5,7 +5,11 @@ A dark gothic life-sim RPG set in a fictional Victorian London (1871): work, ren
 - Build plan and milestones: [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md)
 - Story and world design: the *Pale Lamps Story Bible* (Claude Docs)
 
-## Current state: M4, The Copper Cup and shopping
+## Current state: M5, The people of Saltwharf
+
+- 15 residents with routines, traits and attraction; tap them to chat, joke, flirt, debate, insult and more; the People screen tracks friendship, romance, rivalry and business
+
+### From M4
 
 - Second job: evenings at the Copper Cup with the Order Juggling minigame; hold two jobs if the hours allow
 - Bag and items; the market, Pell's Chandlery and Moss the Pawnbroker

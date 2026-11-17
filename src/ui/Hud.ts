@@ -47,6 +47,7 @@ export class Hud {
         <div class="bottom-left">
           <button class="journal-btn" aria-label="Open journal">Journal</button>
           <button class="bag-btn" aria-label="Open bag">Bag</button>
+          <button class="people-btn" aria-label="Open contacts">People</button>
         </div>
         <button class="speed" aria-label="Change time speed">1×</button>
         <div class="toast" role="status"></div>
@@ -90,6 +91,7 @@ export class Hud {
     this.q('.journal-btn').addEventListener('click', () => (this.journalOpen = true));
     this.q('.close-journal').addEventListener('click', () => (this.journalOpen = false));
     this.q('.bag-btn').addEventListener('click', () => this.onBag?.());
+    this.q('.people-btn').addEventListener('click', () => this.onPeople?.());
     this.q('.list-close').addEventListener('click', () => (this.q('.listsheet').hidden = true));
     this.q('.journal .save').addEventListener('click', () => this.onSave());
     this.q('.journal .quit').addEventListener('click', () => this.onQuit());
@@ -132,6 +134,11 @@ export class Hud {
 
   renderJournal: (() => void) | null = null;
   onBag: (() => void) | null = null;
+  onPeople: (() => void) | null = null;
+
+  closeList(): void {
+    this.q('.listsheet').hidden = true;
+  }
 
   /** A list of rows with buttons, used for shops and the bag. Calling it again re-renders in place. */
   showList(title: string, sub: string, rows: ListRow[]): void {

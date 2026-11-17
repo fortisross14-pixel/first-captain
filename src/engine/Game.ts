@@ -1,11 +1,16 @@
 import * as THREE from 'three';
+import { Npc } from '../actors/Npc';
 import { Player } from '../actors/Player';
 import { createCharacter, type Rig } from '../actors/characterModel';
 import { GRADE_INFO, JOBS, dayIndex, gradeFor, type Grade } from '../game/jobs';
 import { addNeed, simulateNeeds } from '../game/needs';
+import { RESIDENTS, stopAt } from '../game/residents';
+import {
+  DAILY_LIMIT, INTERACTIONS, interact, knownTraits, newRelation, relationLabel, type Interaction, type Relation,
+} from '../game/social';
 import { ITEMS, SHOPS, buy, canCarry, removeItem, sell, sellPrice, slots, usedSlots, useItem } from '../game/items';
 import {
-  canStartShift, checkAttendance, completeShift, dayStart, employment, hire, hireBlocker, leave, nextShiftText,
+  canStartShift, checkAttendance, completeShift, dayStart, employment, gainXp, hire, hireBlocker, leave, nextShiftText,
   promotionText, title,
 } from '../game/work';
 import { playBar } from '../minigames/bar';
@@ -50,6 +55,7 @@ export class Game {
   private title: Title | null = null;
   private creator: Creator | null = null;
   private busy = false;
+  private readonly npcs: Npc[] = [];
 
   private readonly preview = { scene: new THREE.Scene(), camera: new THREE.PerspectiveCamera(30, 1, 0.1, 50), rig: null as Rig | null };
 
@@ -70,6 +76,11 @@ export class Game {
 
     this.locations = { saltwharf: buildSaltwharf(), hesterRoom: buildHesterRoom() };
     this.location = this.locations.saltwharf;
+    for (const r of RESIDENTS) {
+      const npc = new Npc(r, this.locations.saltwharf.grid);
+      this.locations.saltwharf.scene.add(npc.walker.rig.root);
+      this.npcs.push(npc);
+    }
     this.rig = new CameraRig(this.location.camera.bounds);
     this.rig.configure(this.location.camera);
     this.rig.snap(14, 12);
@@ -86,6 +97,7 @@ export class Game {
     this.hud = new Hud(container, () => this.clock.cycleSpeed(), () => this.save(true), () => this.quitToTitle());
     this.hud.renderJournal = () => this.renderJournal();
     this.hud.onBag = () => this.openBag();
+    this.hud.onPeople = () => this.openContacts();
     this.dialogue = new Dialogue(container);
     new Input(this.renderer.domElement, (x, y) => this.tap(x, y), (f) => this.rig.zoomBy(f));
 
@@ -199,6 +211,20 @@ export class Game {
     const ndc = new THREE.Vector2(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
     this.raycaster.setFromCamera(ndc, this.rig.camera);
 
+    for (const n of this.npcs) n.held = false;
+    if (this.location.id === 'saltwharf') {
+      const roots = this.npcs.filter((n) => n.visible).map((n) => n.walker.rig.root);
+      const nh = this.raycaster.intersectObjects(roots, true)[0];
+      if (nh) {
+        let o: THREE.Object3D | null = nh.object;
+        while (o && !o.userData.npcId) o = o.parent;
+        const npc = o && this.npcs.find((n) => n.res.id === o!.userData.npcId);
+        if (npc) {
+          this.approach(npc);
+          return;
+        }
+      }
+    }
     const solid = this.location.tappables.filter((o) => !this.faded.has(o));
     const hit = this.raycaster.intersectObjects(solid, true)[0];
     if (hit) {
@@ -482,6 +508,123 @@ export class Game {
       if (r.fired) await this.dialogue.say({ speaker: r.job.boss, text: r.job.lines.absentFired });
       else this.hud.toast(`You missed ${r.missed === 1 ? 'a shift' : `${r.missed} shifts`} at ${r.job.career === 'Docks' ? 'the docks' : r.job.career}. Promotion points −${r.missed * 3}.`, 4000);
     }
+  }
+
+  // --- People ---------------------------------------------------------------
+
+  private rel(id: string): Relation {
+    const s = this.state!;
+    s.relations ??= {};
+    return (s.relations[id] ??= newRelation());
+  }
+
+  private updateNpcs(dt: number): void {
+    const hour = Math.floor(this.clock.hour);
+    const outside = this.location.id === 'saltwharf';
+    for (const n of this.npcs) {
+      n.follow(stopAt(n.res, hour), outside);
+      n.update(dt, this.elapsed);
+    }
+  }
+
+  /** Walk up to a resident; they wait for you. */
+  private approach(npc: Npc): void {
+    const player = this.player!;
+    this.hud.hidePlace();
+    npc.held = true;
+    npc.walker.stop();
+    const c = npc.walker.cell;
+    const spot = [[0, -1], [1, 0], [-1, 0], [0, 1], [1, -1], [-1, -1], [1, 1], [-1, 1]]
+      .map(([dx, dz]) => ({ x: c.x + dx, z: c.z + dz }))
+      .filter((p) => this.location.grid.isWalkable(p.x, p.z))
+      .sort((a, b) => Math.hypot(a.x - player.position.x, a.z - player.position.y) - Math.hypot(b.x - player.position.x, b.z - player.position.y))[0];
+    const talk = () => {
+      player.faceToward({ x: npc.walker.position.x, z: npc.walker.position.y });
+      npc.walker.faceToward({ x: player.position.x, z: player.position.y });
+      this.showPerson(npc);
+    };
+    if (!spot || !player.walkTo(spot, talk)) talk();
+    else this.showMarker(spot.x + 0.5, spot.z + 0.5);
+  }
+
+  private showPerson(npc: Npc): void {
+    const s = this.state!;
+    const p = npc.res;
+    const r = this.rel(p.id);
+    const today = dayIndex(s.minutes);
+    if (r.day !== today) {
+      r.day = today;
+      r.today = 0;
+    }
+    if (!r.met) {
+      r.met = true;
+      this.hud.toast(`You meet ${p.name}: ${p.role.charAt(0).toLowerCase()}${p.role.slice(1)}.`, 3500);
+    }
+    const traits = knownTraits(p, r);
+    const description = `${p.role}. ${relationLabel(r)}.${traits.length ? ` ${traits.join(', ')}.` : ' You don\'t know them well yet.'}`;
+    const tired = r.today >= DAILY_LIMIT;
+    const actions: Action[] = INTERACTIONS.map((i) => ({
+      label: i.label,
+      disabled: tired || (i.id === 'gift' && s.inventory.length === 0),
+      onClick: () => {
+        this.hud.hidePlace();
+        if (i.id === 'gift') this.chooseGift(npc);
+        else void this.socialise(npc, i);
+      },
+    }));
+    const place: Place = { id: `npc:${p.id}`, name: p.name, description: tired ? `${description} They've had enough of you for today.` : description, door: { x: 0, z: 0 }, faceTo: { x: 0, z: 0 } };
+    this.hud.showPlace(place, actions);
+  }
+
+  private chooseGift(npc: Npc): void {
+    const s = this.state!;
+    const rows: ListRow[] = s.inventory.map((it) => ({
+      label: `${ITEMS[it.id].name} ×${it.qty}`,
+      sub: `Worth £${ITEMS[it.id].price.toFixed(2)}`,
+      actions: [{
+        label: 'Give',
+        onClick: () => {
+          removeItem(s, it.id);
+          this.hud.closeList();
+          const gift = INTERACTIONS.find((i) => i.id === 'gift')!;
+          void this.socialise(npc, { ...gift, gain: Math.round(gift.gain * (1 + ITEMS[it.id].price * 10)) });
+        },
+      }],
+    }));
+    this.hud.showList(`A gift for ${npc.res.name}`, 'Choose something from your bag', rows);
+  }
+
+  private async socialise(npc: Npc, i: Interaction): Promise<void> {
+    const s = this.state!;
+    const r = this.rel(npc.res.id);
+    r.today++;
+    // Mood varies by person and day.
+    const seed = Math.sin((dayIndex(s.minutes) + 1) * 12.9898 + npc.res.id.length * 78.233) * 43758.5453;
+    const mood = ((seed - Math.floor(seed)) - 0.5) * 0.2;
+    const out = interact(s, npc.res, r, i, mood);
+    addNeed(s.needs, 'social', out.success ? 6 : 3);
+    const xp = [...gainXp(s, i.skill, out.success ? 6 : 3)];
+    const names: Record<string, string> = { friendship: 'Friendship', romance: 'Romance', rivalry: 'Rivalry', business: 'Business' };
+    const delta = Object.entries(out.changes).filter(([, v]) => v).map(([k, v]) => `${names[k]} ${v! > 0 ? '+' : ''}${Math.round(v!)}`).join(' · ');
+    const hint = out.liked ? (out.success ? 'They liked that.' : 'They usually like that, just not today.') : out.disliked ? 'They did not like that.' : '';
+    await this.dialogue.say({ speaker: npc.res.name, text: [out.text, hint, delta, ...xp].filter(Boolean).join('\n') });
+    if (npc.held) this.showPerson(npc);
+  }
+
+  private openContacts(): void {
+    const s = this.state!;
+    s.relations ??= {};
+    const rows: ListRow[] = RESIDENTS.filter((p) => s.relations[p.id]?.met).map((p) => {
+      const r = s.relations[p.id];
+      const traits = knownTraits(p, r);
+      return {
+        label: `${p.name} · ${relationLabel(r)}`,
+        sub: `${p.role}${traits.length ? ` · ${traits.join(', ')}` : ''}\nFriendship ${Math.round(r.friendship)} · Romance ${Math.round(r.romance)} · Rivalry ${Math.round(r.rivalry)} · Business ${Math.round(r.business)}`,
+        actions: [],
+      };
+    });
+    if (rows.length === 0) rows.push({ label: 'You know nobody yet.', sub: 'Tap people in the street to talk to them.', actions: [] });
+    this.hud.showList('People', `${rows.length} known in Saltwharf`, rows);
   }
 
   private async chatPembleton(): Promise<void> {
@@ -771,6 +914,7 @@ export class Game {
     }
 
     player.update(dt, this.elapsed);
+    this.updateNpcs(dt);
     this.location.update(this.clock.hour, this.elapsed);
     this.rig.update(dt, player.position.x, player.position.y + this.location.camera.offsetZ);
 

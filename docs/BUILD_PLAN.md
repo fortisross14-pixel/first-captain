@@ -26,7 +26,7 @@ The design lives in the Story Bible (Claude Docs). This file tracks how we build
 | M2 ✅ | **A life begins** | Character creator (name, surname, gender, attraction, look, 5 skill points), Hester's room interior, Mr. Pembleton and the tutorial, needs that drain and restore, sleeping, money, rent and the end-of-month deadline, save/load | You can create a character, live a few days and save |
 | M3 ✅ | **First job: the Docks** | Job framework (shifts, grades, pay, promotion points, firing, skipping), job board, Cargo Stacking minigame, ranks 1–3, skills gaining from work | You can get hired, play and skip shifts, and get promoted |
 | M4 ✅ | **The Copper Cup and shopping** | Order Juggling minigame, ranks 1–3, food stalls and a shop, inventory and items, eating, second job with the Rest trade-off | Two jobs work and you can feed yourself |
-| M5 | **The people of Saltwharf** | About 15 residents with schedules, class, traits and attraction; interaction menu; friendship, romance, rivalry and business meters; contact list | You can befriend, offend and start romancing residents |
+| M5 ✅ | **The people of Saltwharf** | About 15 residents with schedules, class, traits and attraction; interaction menu; friendship, romance, rivalry and business meters; contact list | You can befriend, offend and start romancing residents |
 | M6 | **Night in Saltwharf** | Turn-based combat, night robberies, stepping into street fights, pay / fight / talk options by skill and job, hospital and its bill | You can be robbed, fight back or talk your way out |
 | M7 | **Falling and rising** | Eviction, sleeping rough, theft while asleep, balancing pass on money and needs, audio, polish, performance on low-end phones | The slice plays end to end for a full in-game month |
 
@@ -89,3 +89,17 @@ After the slice: more districts, factions, the main story and the Fog Clock, bus
 - [x] Shops: Saltwharf Market (food: buy, or buy & eat), Pell's Chandlery under Hester's room (supplies), Moss the Pawnbroker (buys anything at 40%)
 - [x] Bag: use or drop items
 - [x] Fixed: a shift ending at midnight is recorded on the day it started
+
+## M5 checklist
+
+- [x] 15 residents (`src/game/residents.ts`), each with gender, attraction, class, one or two traits, a role, a look, a home door and a daily routine; they walk between stops and go home at night
+  - Nell Hartigan, Bessa Hartigan, Foreman Rudd, Moss, Mrs. Agnes Pell, Mr. Grubb, Tom Fairley, Ruby Kettle, Father Ambrose Hale, Dr. Ezra Quill, Old Mag Doyle, Silas Crane, Lizzie Barlow, Jem Cotter, Hannah Rudd
+- [x] Tap a resident: you walk up, they stop and wait, and a conversation menu opens
+- [x] Eleven interactions (`src/game/social.ts`): chat, joke, compliment, gossip, debate, brag, confide, flirt, propose business, give a gift, insult
+  - Success depends on the matching skill, the resident's traits (likes and dislikes from the Story Bible), class, the day's mood and your friendship
+  - Flirting needs mutual attraction and some friendship; business needs friendship 25; debate needs some Study
+  - Results move four meters: friendship, romance, rivalry, business; you get told when they liked or disliked something
+- [x] Five interactions per person per day; every conversation feeds Social and trains the skill used
+- [x] Traits are revealed as you get closer (first at friendship 10, second at 30)
+- [x] People screen (contact list): everyone you've met, with their label (Acquaintance, Friend, Courting, Rival, Business partner…), known traits and meters
+- [x] The three standing extras from M1 are replaced by the residents

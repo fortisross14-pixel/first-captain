@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { animateRig, createCharacter, type Look, type Rig } from '../actors/characterModel';
 import { Lighting } from '../engine/Lighting';
 import { Grid } from './grid';
 import type { Location, Place } from './location';
@@ -67,13 +66,6 @@ const BUILDINGS: BuildingDef[] = [
     sign: 'RAG & BONE', style: { wall: C.plaster, roof: C.roofTile, roofType: 'gable', trim: 0x3a2a20 },
     description: 'Secondhand coats, boots and bonnets. Some still smell of their last owner.',
   },
-];
-
-/** Townsfolk standing about so the district is not empty. They come alive in M5. */
-const EXTRAS: { look: Look; x: number; z: number; face: number }[] = [
-  { look: { skin: 0xc89a78, hair: 0x5a3a22, coat: 0x5a4a3a, trousers: 0x3a3028, shirt: 0xb0a890, boots: 0x201a14, hat: 'cap', build: 1.1 }, x: 7.5, z: 5.5, face: -2.4 },
-  { look: { skin: 0xe8c4a0, hair: 0x9a4a22, coat: 0x6a2e2e, trousers: 0x3a2a2a, shirt: 0xe0d6c0, boots: 0x201a14, hat: 'bonnet', hatColor: 0xd8ccb0, skirt: true, build: 0.92 }, x: 19.5, z: 8.2, face: 0.3 },
-  { look: { skin: 0x8a5a3a, hair: 0x15110e, coat: 0x2e3440, trousers: 0x26262a, shirt: 0xc8c0a8, boots: 0x151210, hat: 'top', scarf: 0x2e4a3a }, x: 11.5, z: 20.0, face: Math.PI },
 ];
 
 export const CAMERA_DISTANCE = 40;
@@ -276,21 +268,11 @@ export function buildSaltwharf(): Location {
 
   const lighting = new Lighting(scene, new THREE.Vector3(MAP_W / 2, 0, MAP_H / 2), lamps, CAMERA_DISTANCE);
 
-  const extras: Rig[] = [];
-  for (const e of EXTRAS) {
-    const r = createCharacter(e.look);
-    r.root.position.set(e.x, 0, e.z);
-    r.root.rotation.y = e.face;
-    scene.add(r.root);
-    grid.block(Math.floor(e.x), Math.floor(e.z));
-    extras.push(r);
-  }
 
   // --- Animation ----------------------------------------------------------
   const pos = waterGeo.attributes.position as THREE.BufferAttribute;
   const update = (hour: number, t: number) => {
     lighting.update(hour, t);
-    extras.forEach((r, i) => animateRig(r, 0, 0, t + i * 2));
     for (let i = 0; i < pos.count; i++) {
       const bx = waterBase[i * 3];
       const bz = waterBase[i * 3 + 2];
