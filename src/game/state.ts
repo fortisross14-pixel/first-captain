@@ -1,4 +1,5 @@
 import type { Look } from '../actors/characterModel';
+import type { Employment } from './jobs';
 
 export const SKILLS = ['study', 'strength', 'arts', 'charisma', 'cunning', 'occult'] as const;
 export type SkillId = (typeof SKILLS)[number];
@@ -59,6 +60,24 @@ export interface GameState {
   larderBread: number;
   tutorial: { step: TutorialStep; askedDocks: boolean; askedCup: boolean; slept: boolean };
   lastChatMinute: number;
+  job: Employment | null;
+  /** Progress toward the next level of each skill. */
+  skillXp: Record<SkillId, number>;
+  /** Last day whose shift attendance has been checked. */
+  attendanceDay: number;
+  /** Employer id → first day they will hire you again. */
+  bans: Record<string, number>;
+}
+
+const zeroSkills = (): Record<SkillId, number> => ({ study: 0, strength: 0, arts: 0, charisma: 0, cunning: 0, occult: 0 });
+
+/** Fills in fields added after a save was written. */
+function upgrade(s: GameState): GameState {
+  s.job ??= null;
+  s.skillXp ??= zeroSkills();
+  s.attendanceDay ??= 0;
+  s.bans ??= {};
+  return s;
 }
 
 const KEY = 'pale-lamps-save-v1';
@@ -76,6 +95,10 @@ export function newGame(character: Character): GameState {
     larderBread: 3,
     tutorial: { step: 'intro', askedDocks: false, askedCup: false, slept: false },
     lastChatMinute: -9999,
+    job: null,
+    skillXp: zeroSkills(),
+    attendanceDay: 0,
+    bans: {},
   };
 }
 
@@ -93,7 +116,7 @@ export function loadGame(): GameState | null {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;
     const s = JSON.parse(raw) as GameState;
-    return s && s.version === 1 && s.character ? s : null;
+    return s && s.version === 1 && s.character ? upgrade(s) : null;
   } catch {
     return null;
   }

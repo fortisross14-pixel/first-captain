@@ -34,6 +34,7 @@ export class Hud {
           <div class="card purse">
             <div class="money"></div>
             <div class="rent"></div>
+            <div class="jobline"></div>
           </div>
           <div class="card objectives" hidden><div class="obj-title">To do</div><ul></ul></div>
         </div>
@@ -56,6 +57,13 @@ export class Hud {
             </div>
           </div>
         </div>
+        <div class="modal" hidden>
+          <div class="journal-sheet">
+            <h2></h2>
+            <div class="modal-body"></div>
+            <div class="actions"><button class="primary modal-ok">Continue</button></div>
+          </div>
+        </div>
       </div>
       <div class="fade"></div>`,
     );
@@ -74,7 +82,28 @@ export class Hud {
 
   /** True while a menu covers the world and taps should not reach it. */
   get blocking(): boolean {
-    return !this.q('.journal').hidden;
+    return !this.q('.journal').hidden || !this.q('.modal').hidden;
+  }
+
+  /** A report the player must acknowledge, such as the end of a shift. */
+  modal(title: string, lines: string[]): Promise<void> {
+    const m = this.q('.modal');
+    m.querySelector('h2')!.textContent = title;
+    m.querySelector('.modal-body')!.replaceChildren(
+      ...lines.map((l) => {
+        const p = document.createElement('p');
+        p.textContent = l;
+        return p;
+      }),
+    );
+    m.hidden = false;
+    return new Promise((res) => {
+      const ok = m.querySelector('.modal-ok') as HTMLButtonElement;
+      ok.onclick = () => {
+        m.hidden = true;
+        res();
+      };
+    });
   }
 
   set journalOpen(open: boolean) {
@@ -84,7 +113,7 @@ export class Hud {
 
   renderJournal: (() => void) | null = null;
 
-  update(state: GameState, district: string, date: string, time: string, rentDue: string): void {
+  update(state: GameState, district: string, date: string, time: string, rentDue: string, jobLine = ''): void {
     const set = (sel: string, text: string) => {
       const e = this.q(sel);
       if (e.textContent !== text) e.textContent = text;
@@ -93,6 +122,7 @@ export class Hud {
     set('.date', date);
     set('.time', time);
     set('.money', `£${state.money.toFixed(2)}`);
+    set('.jobline', jobLine);
     set('.rent', state.rent.graceUntil !== null ? 'Rent overdue!' : `Rent £${state.rent.amount.toFixed(2)} due ${rentDue}`);
     for (const n of NEEDS) {
       const v = state.needs[n];
@@ -153,7 +183,7 @@ export class Hud {
     return new Promise((r) => setTimeout(r, 450));
   }
 
-  journalHtml(state: GameState, rentLine: string): string {
+  journalHtml(state: GameState, rentLine: string, work = ''): string {
     const c = state.character;
     const gender = c.gender === 'man' ? 'Man' : 'Woman';
     const attraction = { men: 'men', women: 'women', both: 'men and women' }[c.attraction];
@@ -163,6 +193,8 @@ export class Hud {
       <table class="sheet">${SKILLS.map((s) => `<tr><td>${SKILL_INFO[s].name}</td><td class="num">${c.skills[s]} / 20</td></tr>`).join('')}</table>
       <h3>Needs</h3>
       <table class="sheet">${NEEDS.map((n) => `<tr><td>${NEED_NAMES[n]}</td><td class="num">${Math.round(state.needs[n])}</td></tr>`).join('')}</table>
+      <h3>Work</h3>
+      <p>${work || 'Unemployed.'}</p>
       <h3>Purse</h3>
       <p>£${state.money.toFixed(2)}. ${rentLine}</p>`;
   }

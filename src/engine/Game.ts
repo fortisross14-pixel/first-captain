@@ -1,7 +1,12 @@
 import * as THREE from 'three';
 import { Player } from '../actors/Player';
 import { createCharacter, type Rig } from '../actors/characterModel';
+import { GRADE_INFO, JOBS, dayIndex, gradeFor, type Grade } from '../game/jobs';
 import { addNeed, simulateNeeds } from '../game/needs';
+import {
+  canStartShift, checkAttendance, completeShift, currentJob, dayStart, hire, isBanned, nextShiftText, promotionText,
+} from '../game/work';
+import { playCargo } from '../minigames/cargo';
 import { loadGame, newGame, saveGame, type Character, type GameState, type LocationId } from '../game/state';
 import { Creator } from '../ui/Creator';
 import { Dialogue, type Line } from '../ui/Dialogue';
@@ -243,8 +248,17 @@ export class Game {
       switch (place.id) {
         case 'hester':
           return [act('Go up to your room', () => this.goTo('hesterRoom', 'door'), { primary: true })];
-        case 'dockoffice':
-          return [act('Ask about work', () => this.askDocks(), { primary: true })];
+        case 'dockoffice': {
+          if (s.job?.jobId !== 'docks') return [act('Ask about work', () => this.askDocks(), { primary: true })];
+          const open = canStartShift(s);
+          const rank = JOBS.docks.ranks[s.job.rank].title;
+          return [
+            act(`Work your shift as ${rank}`, () => this.workShift(true), { primary: true, disabled: !open }),
+            act(s.job.lastGrade ? `Autopilot (${GRADE_INFO[s.job.lastGrade].name} pay, no points)` : 'Autopilot (play one shift first)',
+              () => this.workShift(false), { disabled: !open || !s.job.lastGrade }),
+            act('Quit the job', () => this.quitJob()),
+          ];
+        }
         case 'coppercup':
           return [act('Ask about work', () => this.askCup(), { primary: true })];
         case 'market':
@@ -298,12 +312,104 @@ export class Game {
   }
 
   private async askDocks(): Promise<void> {
-    await this.dialogue.say(
-      { speaker: 'Foreman Rudd', text: "Work? Look at the river. No ships in, no work. Come back when there's a hull at the quay." },
-      { speaker: 'Foreman Rudd', text: "And eat something first. I don't carry fainters." },
-    );
-    this.state!.tutorial.askedDocks = true;
+    const s = this.state!;
+    const R = JOBS.docks.boss;
+    s.tutorial.askedDocks = true;
     this.refreshObjectives();
+    if (s.job) {
+      await this.dialogue.say({ speaker: R, text: 'You\'ve already got work. I don\'t share hands with other masters.' });
+      return;
+    }
+    if (isBanned(s, 'docks') !== null) {
+      await this.dialogue.say({ speaker: R, text: 'You? After last time? Come back in a month, if you\'ve learned to set an alarm.' });
+      return;
+    }
+    const yes = await this.dialogue.ask(
+      { speaker: R, text: 'Work? I need a mudlark: fetching, carrying, stacking what the real men won\'t. Six till two, Monday to Saturday. Eight pence a shift.' },
+      ['I\'ll take it.', 'Not now.'],
+    );
+    if (yes !== 0) return;
+    hire(s, 'docks');
+    await this.dialogue.say(
+      { speaker: R, text: 'Be here at six. Late is the same as absent, and absent three times is gone.' },
+      { speaker: R, text: 'Load the barge level. A barge that lists drops my cargo in the Thames, and then I drop you in after it.' },
+    );
+    this.save();
+  }
+
+  private async quitJob(): Promise<void> {
+    const s = this.state!;
+    const yes = await this.dialogue.ask({ speaker: 'You', text: 'Quit the docks? You will lose your rank and points.' }, ['Quit', 'Stay']);
+    if (yes !== 0) return;
+    s.job = null;
+    await this.dialogue.say({ speaker: JOBS.docks.boss, text: 'Suit yourself. There\'s ten behind you for every one that walks.' });
+    this.save();
+  }
+
+  /** Plays (or skips) a shift, then jumps the clock to the end of the shift and reports. */
+  private async workShift(play: boolean): Promise<void> {
+    const s = this.state!;
+    const job = currentJob(s);
+    if (!job || !s.job || !canStartShift(s) || this.busy) return;
+    this.busy = true;
+    this.player!.stop();
+    let grade: Grade;
+    let lines: string[] = [];
+    if (play) {
+      const r = await playCargo(this.container, {
+        rank: s.job.rank,
+        title: `${job.career} · ${job.ranks[s.job.rank].title}`,
+        main: s.character.skills[job.main],
+        second: s.character.skills[job.second],
+        // Testing aid: ?mgseconds=8 shortens minigames.
+        seconds: Number(new URLSearchParams(location.search).get('mgseconds')) || undefined,
+      });
+      grade = gradeFor(r.percent);
+      lines = r.lines;
+    } else {
+      grade = s.job.lastGrade!;
+    }
+    await this.hud.fade(true);
+    const end = dayStart(dayIndex(s.minutes)) + job.end;
+    const hours = Math.max(0, (end - this.clock.minutes) / 60);
+    simulateNeeds(s.needs, hours, 'awake');
+    addNeed(s.needs, 'hunger', job.strain.hunger);
+    addNeed(s.needs, 'rest', job.strain.rest);
+    addNeed(s.needs, 'social', 6);
+    this.clock.minutes = Math.max(this.clock.minutes, end);
+    const rankBefore = job.ranks[s.job.rank].title;
+    const rep = completeShift(s, grade, play);
+    s.minutes = this.clock.minutes;
+    await this.hud.fade(false);
+    const report = [
+      ...(play ? lines : ['You kept your head down and did the same as last time.']),
+      `Grade: ${GRADE_INFO[grade].name}`,
+      `Pay: £${rep.pay.toFixed(2)}`,
+      `Promotion points: ${rep.points >= 0 ? '+' : ''}${rep.points}`,
+      ...rep.levelUps,
+    ];
+    await this.hud.modal(`Shift over · ${rankBefore}`, report);
+    if (rep.promotedTo) {
+      await this.dialogue.say({ speaker: job.boss, text: `You've a back on you after all. From tomorrow you're ${rep.promotedTo}. More pay, heavier crates, same river.` });
+    }
+    if (rep.fired) {
+      await this.dialogue.say({ speaker: job.boss, text: 'That\'s enough. Collect your pennies and don\'t come back this month.' });
+    }
+    this.busy = false;
+    this.save();
+  }
+
+  /** Penalises missed shifts; called every frame and after sleeping. */
+  private async attendance(): Promise<void> {
+    const s = this.state!;
+    const job = currentJob(s);
+    const { missed, fired } = checkAttendance(s);
+    if (!job || missed === 0) return;
+    if (fired) {
+      await this.dialogue.say({ speaker: job.boss, text: 'You didn\'t turn up. Again. You\'re finished here. Don\'t come back this month.' });
+    } else {
+      this.hud.toast(`You missed ${missed === 1 ? 'a shift' : `${missed} shifts`} at the docks. Promotion points -${missed * 3}.`, 4000);
+    }
   }
 
   private async askCup(): Promise<void> {
@@ -351,7 +457,7 @@ export class Game {
     if (kind === 'morning') {
       const d = this.clock.date;
       const nowMin = d.getHours() * 60 + d.getMinutes();
-      const wake = 6 * 60 + 30;
+      const wake = 6 * 60;
       minutes = nowMin < wake ? wake - nowMin : DAY - nowMin + wake;
     } else if (kind === 'nap') minutes = 120;
     else if (kind === 'collapse') minutes = 6 * 60;
@@ -384,6 +490,7 @@ export class Game {
       await this.dialogue.say({ speaker: P, text: 'A neighbour carried you up the stairs. You were grey as a winding sheet. Eat. Sleep. I would rather not have company in my condition.' });
     }
     if (rentNews) await this.dialogue.say({ speaker: 'Mr. Grubb', text: rentNews });
+    await this.attendance();
 
     if (kind === 'morning' && s.tutorial.step === 'explore') {
       s.tutorial.slept = true;
@@ -512,7 +619,11 @@ export class Game {
     const rentLine = s.rent.graceUntil !== null
       ? `Rent of £${s.rent.amount.toFixed(2)} is overdue.`
       : `Rent of £${s.rent.amount.toFixed(2)} is due ${due}.`;
-    this.hud.setJournal(Hud.titleFor(s), this.hud.journalHtml(s, rentLine));
+    const job = currentJob(s);
+    const work = job && s.job
+      ? `${job.ranks[s.job.rank].title} at the ${job.employer}. ${nextShiftText(s)}. ${promotionText(s)}`
+      : '';
+    this.hud.setJournal(Hud.titleFor(s), this.hud.journalHtml(s, rentLine, work));
   }
 
   // --- Creator preview ------------------------------------------------------
@@ -593,6 +704,7 @@ export class Game {
       const news = this.checkRent();
       if (news) void this.dialogue.say({ speaker: 'Mr. Grubb', text: news });
       this.checkCollapse();
+      void this.attendance();
       if (s.minutes - this.lastSaveMinute >= 60) this.save();
     }
 
@@ -614,7 +726,9 @@ export class Game {
       this.marker.scale.setScalar(1 + (1 - this.markerLife) * 0.5);
     }
 
-    this.hud.update(s, this.location.name, this.clock.formatDate(), this.clock.formatTime(), this.clock.formatShortDate(this.clock.rentDue));
+    const job = currentJob(s);
+    const jobLine = job && s.job ? `${job.ranks[s.job.rank].title} · ${nextShiftText(s)}` : '';
+    this.hud.update(s, this.location.name, this.clock.formatDate(), this.clock.formatTime(), this.clock.formatShortDate(this.clock.rentDue), jobLine);
     this.renderer.render(this.location.scene, this.rig.camera);
   }
 

@@ -120,3 +120,18 @@ button.primary { background: #6a4e22; border-color: var(--brass); color: #fff4d8
 .stepper .val { width: 22px; text-align: center; font-size: 18px; font-variant-numeric: tabular-nums; }
 .creator-actions { display: flex; gap: 10px; justify-content: space-between; margin-top: 18px; }
 .creator-actions .begin { flex: 1; }
+
+.jobline { font-size: 12px; color: var(--brass); }
+.jobline:empty { display: none; }
+.modal { position: absolute; inset: 0; background: rgba(0,0,0,.6); display: grid; place-items: center; z-index: 30; padding: 16px; }
+.modal[hidden] { display: none; }
+.modal-body p { margin: 8px 0; font-size: 16px; }
+.minigame { position: fixed; inset: 0; z-index: 40; background: #101418; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: max(10px, env(safe-area-inset-top)) 10px max(10px, env(safe-area-inset-bottom)); }
+.minigame canvas { width: min(100%, calc((100dvh - 80px) * 360 / 560)); height: auto; aspect-ratio: 360 / 560; touch-action: none; border-radius: 10px; }
+.mg-head { display: flex; gap: 14px; justify-content: space-between; width: min(100%, 480px); padding: 6px 4px; font-size: 16px; }
+.mg-title { color: var(--brass); }
+.mg-intro { position: absolute; inset: 0; display: grid; place-content: center; gap: 4px; padding: 24px; background: rgba(10,12,14,.92); text-align: center; max-width: 100%; }
+.mg-intro[hidden] { display: none; }
+.mg-intro h2 { color: var(--brass); font-weight: normal; margin: 0 0 8px; }
+.mg-intro p { margin: 4px auto; max-width: 380px; line-height: 1.45; }
+.mg-intro button { margin-top: 16px; min-height: 50px; }
