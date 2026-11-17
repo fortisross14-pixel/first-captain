@@ -1,79 +1,178 @@
-import type { Place } from '../world/saltwharf';
+import { NEED_NAMES, SKILL_INFO, SKILLS, fullName, type GameState, type NeedId } from '../game/state';
+import type { Place } from '../world/location';
 
-/** DOM overlay: clock, money, rent, speed toggle, place panel and toasts. */
+export interface Action {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  primary?: boolean;
+}
+
+const NEEDS: NeedId[] = ['hunger', 'rest', 'social', 'health'];
+
+/** In-game overlay: clock, purse, needs, objectives, place panel, journal, toasts and fades. */
 export class Hud {
-  private readonly dateEl: HTMLElement;
-  private readonly timeEl: HTMLElement;
-  private readonly moneyEl: HTMLElement;
-  private readonly rentEl: HTMLElement;
-  private readonly speedBtn: HTMLButtonElement;
-  private readonly panel: HTMLElement;
-  private readonly toastEl: HTMLElement;
+  private readonly el: HTMLElement;
+  private readonly q = <T extends HTMLElement>(sel: string) => this.el.querySelector(sel) as T;
   private toastTimer = 0;
 
-  constructor(root: HTMLElement, onSpeed: () => number) {
+  constructor(root: HTMLElement, onSpeed: () => number, private readonly onSave: () => void, private readonly onQuit: () => void) {
     root.insertAdjacentHTML(
       'beforeend',
-      `<div class="hud">
-        <div class="card clock">
-          <div class="district">Saltwharf Docks</div>
-          <div class="date"></div>
-          <div class="time"></div>
+      `<div class="hud" hidden>
+        <div class="col left">
+          <div class="card clock">
+            <div class="district"></div>
+            <div class="date"></div>
+            <div class="time"></div>
+          </div>
+          <div class="card needs">${NEEDS.map(
+            (n) => `<div class="need" data-need="${n}"><span>${NEED_NAMES[n]}</span><div class="bar"><i></i></div></div>`,
+          ).join('')}</div>
         </div>
-        <div class="card purse">
-          <div class="money"></div>
-          <div class="rent"></div>
+        <div class="col right">
+          <div class="card purse">
+            <div class="money"></div>
+            <div class="rent"></div>
+          </div>
+          <div class="card objectives" hidden><div class="obj-title">To do</div><ul></ul></div>
         </div>
+        <button class="journal-btn" aria-label="Open journal">Journal</button>
         <button class="speed" aria-label="Change time speed">1×</button>
         <div class="toast" role="status"></div>
         <div class="panel" hidden>
           <h2></h2>
           <p></p>
-          <div class="actions">
-            <button class="enter" disabled>Enter · coming soon</button>
-            <button class="close">Close</button>
+          <div class="actions"></div>
+        </div>
+        <div class="journal" hidden>
+          <div class="journal-sheet">
+            <h2></h2>
+            <div class="journal-body"></div>
+            <div class="actions">
+              <button class="quit">Save &amp; quit to title</button>
+              <button class="save">Save</button>
+              <button class="primary close-journal">Close</button>
+            </div>
           </div>
         </div>
-      </div>`,
+      </div>
+      <div class="fade"></div>`,
     );
-    const q = <T extends HTMLElement>(sel: string) => root.querySelector(sel) as T;
-    this.dateEl = q('.date');
-    this.timeEl = q('.time');
-    this.moneyEl = q('.money');
-    this.rentEl = q('.rent');
-    this.speedBtn = q<HTMLButtonElement>('.speed');
-    this.panel = q('.panel');
-    this.toastEl = q('.toast');
-    this.speedBtn.addEventListener('click', () => {
-      this.speedBtn.textContent = `${onSpeed()}×`;
-    });
-    q('.panel .close').addEventListener('click', () => this.hidePlace());
+    this.el = root.querySelector('.hud') as HTMLElement;
+    const speed = this.q<HTMLButtonElement>('.speed');
+    speed.addEventListener('click', () => (speed.textContent = `${onSpeed()}×`));
+    this.q('.journal-btn').addEventListener('click', () => this.journalOpen = true);
+    this.q('.close-journal').addEventListener('click', () => this.journalOpen = false);
+    this.q('.journal .save').addEventListener('click', () => this.onSave());
+    this.q('.journal .quit').addEventListener('click', () => this.onQuit());
   }
 
-  setClock(date: string, time: string): void {
-    if (this.dateEl.textContent !== date) this.dateEl.textContent = date;
-    if (this.timeEl.textContent !== time) this.timeEl.textContent = time;
+  set visible(v: boolean) {
+    this.el.hidden = !v;
   }
 
-  setPurse(money: number, rentDue: string): void {
-    this.moneyEl.textContent = `£${money.toFixed(2)}`;
-    this.rentEl.textContent = `Rent due ${rentDue}`;
+  /** True while a menu covers the world and taps should not reach it. */
+  get blocking(): boolean {
+    return !this.q('.journal').hidden;
   }
 
-  showPlace(place: Place): void {
-    this.panel.querySelector('h2')!.textContent = place.name;
-    this.panel.querySelector('p')!.textContent = place.description;
-    this.panel.hidden = false;
+  set journalOpen(open: boolean) {
+    this.q('.journal').hidden = !open;
+    if (open) this.renderJournal?.();
+  }
+
+  renderJournal: (() => void) | null = null;
+
+  update(state: GameState, district: string, date: string, time: string, rentDue: string): void {
+    const set = (sel: string, text: string) => {
+      const e = this.q(sel);
+      if (e.textContent !== text) e.textContent = text;
+    };
+    set('.district', district);
+    set('.date', date);
+    set('.time', time);
+    set('.money', `£${state.money.toFixed(2)}`);
+    set('.rent', state.rent.graceUntil !== null ? 'Rent overdue!' : `Rent £${state.rent.amount.toFixed(2)} due ${rentDue}`);
+    for (const n of NEEDS) {
+      const v = state.needs[n];
+      const row = this.el.querySelector(`[data-need="${n}"]`) as HTMLElement;
+      (row.querySelector('i') as HTMLElement).style.width = `${v}%`;
+      row.classList.toggle('low', v < 25);
+    }
+  }
+
+  setObjectives(items: { text: string; done: boolean }[]): void {
+    // Only what is left to do, to keep the phone screen clear.
+    const left = items.filter((i) => !i.done);
+    const card = this.q('.objectives');
+    card.hidden = left.length === 0;
+    this.q('.objectives ul').replaceChildren(
+      ...left.map((i) => {
+        const li = document.createElement('li');
+        li.textContent = i.text;
+        return li;
+      }),
+    );
+  }
+
+  showPlace(place: Place, actions: Action[]): void {
+    const panel = this.q('.panel');
+    panel.querySelector('h2')!.textContent = place.name;
+    panel.querySelector('p')!.textContent = place.description;
+    const all: Action[] = [...actions, { label: 'Close', onClick: () => this.hidePlace() }];
+    panel.querySelector('.actions')!.replaceChildren(
+      ...all.map((a) => {
+        const b = document.createElement('button');
+        b.textContent = a.label;
+        b.disabled = !!a.disabled;
+        if (a.primary) b.classList.add('primary');
+        b.addEventListener('click', () => a.onClick());
+        return b;
+      }),
+    );
+    panel.hidden = false;
   }
 
   hidePlace(): void {
-    this.panel.hidden = true;
+    this.q('.panel').hidden = true;
   }
 
-  toast(text: string): void {
-    this.toastEl.textContent = text;
-    this.toastEl.classList.add('show');
+  toast(text: string, ms = 2600): void {
+    const t = this.q('.toast');
+    t.textContent = text;
+    t.classList.add('show');
     window.clearTimeout(this.toastTimer);
-    this.toastTimer = window.setTimeout(() => this.toastEl.classList.remove('show'), 2200);
+    this.toastTimer = window.setTimeout(() => t.classList.remove('show'), ms);
+  }
+
+  /** Fades the screen to black (true) or back (false). */
+  fade(toBlack: boolean): Promise<void> {
+    const f = document.querySelector('.fade') as HTMLElement;
+    f.classList.toggle('on', toBlack);
+    return new Promise((r) => setTimeout(r, 450));
+  }
+
+  journalHtml(state: GameState, rentLine: string): string {
+    const c = state.character;
+    const gender = c.gender === 'man' ? 'Man' : 'Woman';
+    const attraction = { men: 'men', women: 'women', both: 'men and women' }[c.attraction];
+    return `
+      <p class="meta">${gender} · attracted to ${attraction}</p>
+      <h3>Skills</h3>
+      <table class="sheet">${SKILLS.map((s) => `<tr><td>${SKILL_INFO[s].name}</td><td class="num">${c.skills[s]} / 20</td></tr>`).join('')}</table>
+      <h3>Needs</h3>
+      <table class="sheet">${NEEDS.map((n) => `<tr><td>${NEED_NAMES[n]}</td><td class="num">${Math.round(state.needs[n])}</td></tr>`).join('')}</table>
+      <h3>Purse</h3>
+      <p>£${state.money.toFixed(2)}. ${rentLine}</p>`;
+  }
+
+  setJournal(title: string, html: string): void {
+    this.q('.journal h2').textContent = title;
+    this.q('.journal-body').innerHTML = html;
+  }
+
+  static titleFor(state: GameState): string {
+    return fullName(state.character);
   }
 }

@@ -15,10 +15,24 @@ export class Player {
   private stride = 0;
   private onArrive: (() => void) | null = null;
 
-  constructor(private readonly grid: Grid, look: Look, x: number, z: number) {
+  constructor(private grid: Grid, look: Look, x: number, z: number) {
     this.rig = createCharacter(look);
     this.position.set(x, z);
     this.rig.root.position.set(x, 0, z);
+  }
+
+  /** Moves the player into another location's grid, standing at (x, z). */
+  teleport(grid: Grid, x: number, z: number): void {
+    this.grid = grid;
+    this.path = [];
+    this.onArrive = null;
+    this.position.set(x, z);
+    this.rig.root.position.set(x, 0, z);
+  }
+
+  stop(): void {
+    this.path = [];
+    this.onArrive = null;
   }
 
   get moving(): boolean {
@@ -41,8 +55,9 @@ export class Player {
     return true;
   }
 
-  faceToward(p: { x: number; z: number }): void {
+  faceToward(p: { x: number; z: number }, instant = false): void {
     this.heading = Math.atan2(p.x - this.position.x, p.z - this.position.y);
+    if (instant) this.rig.root.rotation.y = this.heading;
   }
 
   private arrive(): void {

@@ -1,43 +1,53 @@
 import * as THREE from 'three';
 import { Player } from '../actors/Player';
-import { animateRig, createCharacter, type Look, type Rig } from '../actors/characterModel';
-import { Hud } from '../ui/Hud';
-import { buildSaltwharf, MAP_H, MAP_W, type District, type Place } from '../world/saltwharf';
+import { createCharacter, type Rig } from '../actors/characterModel';
+import { addNeed, simulateNeeds } from '../game/needs';
+import { loadGame, newGame, saveGame, type Character, type GameState, type LocationId } from '../game/state';
+import { Creator } from '../ui/Creator';
+import { Dialogue, type Line } from '../ui/Dialogue';
+import { Hud, type Action } from '../ui/Hud';
+import { Title } from '../ui/Title';
+import { buildHesterRoom } from '../world/hesterRoom';
+import type { Location, Place } from '../world/location';
+import { buildSaltwharf } from '../world/saltwharf';
 import { CameraRig } from './CameraRig';
 import { Clock } from './Clock';
 import { Input } from './Input';
-import { Lighting } from './Lighting';
 
-const PLAYER_LOOK: Look = {
-  skin: 0xe0b896, hair: 0x3a2618, coat: 0x3c4a3a, trousers: 0x2e2a26, shirt: 0xd8ccb0,
-  boots: 0x1e1a16, scarf: 0x8a2e26, hat: 'cap', hatColor: 0x3a342c,
-};
+type Mode = 'title' | 'create' | 'play';
 
-/** Townsfolk standing about so the district is not empty. They come alive in M5. */
-const EXTRAS: { look: Look; x: number; z: number; face: number }[] = [
-  { look: { skin: 0xc89a78, hair: 0x5a3a22, coat: 0x5a4a3a, trousers: 0x3a3028, shirt: 0xb0a890, boots: 0x201a14, hat: 'cap', build: 1.1 }, x: 7.5, z: 5.5, face: -2.4 },
-  { look: { skin: 0xe8c4a0, hair: 0x9a4a22, coat: 0x6a2e2e, trousers: 0x3a2a2a, shirt: 0xe0d6c0, boots: 0x201a14, hat: 'bonnet', hatColor: 0xd8ccb0, skirt: true, build: 0.92 }, x: 19.5, z: 8.2, face: 0.3 },
-  { look: { skin: 0x8a5a3a, hair: 0x15110e, coat: 0x2e3440, trousers: 0x26262a, shirt: 0xc8c0a8, boots: 0x151210, hat: 'top', scarf: 0x2e4a3a }, x: 11.5, z: 20.0, face: Math.PI },
-];
+const P = 'Mr. Pembleton';
+const DAY = 24 * 60;
+
+/** Months since October 1871, so October 1871 is 0. */
+const monthIndex = (d: Date) => (d.getFullYear() - 1871) * 12 + d.getMonth() - 9;
 
 export class Game {
   private readonly renderer: THREE.WebGLRenderer;
-  private readonly scene = new THREE.Scene();
   private readonly rig: CameraRig;
   private readonly clock = new Clock();
-  private readonly district: District;
-  private readonly player: Player;
-  private readonly lighting: Lighting;
+  private readonly locations: Record<LocationId, Location>;
+  private location: Location;
   private readonly hud: Hud;
+  private readonly dialogue: Dialogue;
   private readonly raycaster = new THREE.Raycaster();
-  private readonly ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  private readonly groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   private readonly marker: THREE.Mesh;
-  private readonly extras: Rig[] = [];
-  private markerLife = 0;
   private readonly faded = new Set<THREE.Object3D>();
   private readonly fadedMats = new Map<THREE.Material, THREE.Material>();
+
+  private mode: Mode = 'title';
+  private state: GameState | null = null;
+  private player: Player | null = null;
+  private title: Title | null = null;
+  private creator: Creator | null = null;
+  private busy = false;
+
+  private readonly preview = { scene: new THREE.Scene(), camera: new THREE.PerspectiveCamera(30, 1, 0.1, 50), rig: null as Rig | null };
+
+  private markerLife = 0;
   private occlusionTimer = 0;
-  private money = 1.0;
+  private lastSaveMinute = 0;
   private last = performance.now();
   private elapsed = 0;
 
@@ -50,24 +60,11 @@ export class Game {
     this.renderer.toneMappingExposure = 1.05;
     container.appendChild(this.renderer.domElement);
 
-    this.district = buildSaltwharf(this.scene);
-    this.rig = new CameraRig({ minX: 5, maxX: MAP_W - 5, minZ: 9, maxZ: MAP_H - 6 });
-    this.lighting = new Lighting(this.scene, new THREE.Vector3(MAP_W / 2, 0, MAP_H / 2), this.district.lamps, this.rig.distance);
-
-    const { spawn } = this.district;
-    this.player = new Player(this.district.grid, PLAYER_LOOK, spawn.x + 0.5, spawn.z + 0.5);
-    this.player.faceToward({ x: spawn.x + 0.5, z: spawn.z - 2 });
-    this.scene.add(this.player.rig.root);
-    this.rig.snap(this.player.position.x, this.player.position.y + 2);
-
-    for (const e of EXTRAS) {
-      const r = createCharacter(e.look);
-      r.root.position.set(e.x, 0, e.z);
-      r.root.rotation.y = e.face;
-      this.scene.add(r.root);
-      this.district.grid.block(Math.floor(e.x), Math.floor(e.z));
-      this.extras.push(r);
-    }
+    this.locations = { saltwharf: buildSaltwharf(), hesterRoom: buildHesterRoom() };
+    this.location = this.locations.saltwharf;
+    this.rig = new CameraRig(this.location.camera.bounds);
+    this.rig.configure(this.location.camera);
+    this.rig.snap(14, 12);
 
     this.marker = new THREE.Mesh(
       new THREE.RingGeometry(0.28, 0.4, 20),
@@ -75,58 +72,149 @@ export class Game {
     );
     this.marker.rotation.x = -Math.PI / 2;
     this.marker.position.y = 0.03;
-    this.scene.add(this.marker);
 
-    // Testing aid: ?hour=21 starts the day at that hour.
-    const startHour = Number(new URLSearchParams(location.search).get('hour'));
-    if (startHour > 0 && startHour < 24) this.clock.minutes = (startHour - 7) * 60 + (startHour < 7 ? 24 * 60 : 0);
+    this.buildPreviewScene();
 
-    this.hud = new Hud(container, () => this.clock.cycleSpeed());
+    this.hud = new Hud(container, () => this.clock.cycleSpeed(), () => this.save(true), () => this.quitToTitle());
+    this.hud.renderJournal = () => this.renderJournal();
+    this.dialogue = new Dialogue(container);
     new Input(this.renderer.domElement, (x, y) => this.tap(x, y), (f) => this.rig.zoomBy(f));
 
     window.addEventListener('resize', () => this.resize());
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) this.save();
+    });
     this.resize();
-    this.hud.toast('Tap the street to walk. Tap a building to visit it.');
+    // Testing aid: ?debug exposes the game object to the console.
+    if (new URLSearchParams(location.search).has('debug')) (window as unknown as { game: Game }).game = this;
+    this.showTitle();
     this.renderer.setAnimationLoop(() => this.frame());
   }
 
-  private resize(): void {
-    const w = this.container.clientWidth;
-    const h = this.container.clientHeight;
-    this.renderer.setSize(w, h);
-    this.rig.resize(w, h);
+  // --- Modes ----------------------------------------------------------------
+
+  private showTitle(): void {
+    this.mode = 'title';
+    this.hud.visible = false;
+    this.title = new Title(
+      this.container,
+      loadGame() !== null,
+      () => {
+        const s = loadGame();
+        if (s) void this.startGame(s);
+      },
+      () => this.showCreator(),
+    );
   }
 
+  private showCreator(): void {
+    this.title?.remove();
+    this.title = null;
+    this.mode = 'create';
+    this.resize();
+    this.creator = new Creator(
+      this.container,
+      (c) => this.updatePreview(c),
+      (c) => void this.beginNewLife(c),
+      () => {
+        this.creator?.remove();
+        this.creator = null;
+        this.showTitle();
+      },
+    );
+  }
+
+  private async beginNewLife(c: Character): Promise<void> {
+    const s = newGame(c);
+    saveGame(s);
+    await this.hud.fade(true);
+    this.creator?.remove();
+    this.creator = null;
+    await this.startGame(s);
+  }
+
+  private async startGame(s: GameState): Promise<void> {
+    await this.hud.fade(true);
+    this.title?.remove();
+    this.title = null;
+    this.state = s;
+    this.clock.minutes = s.minutes;
+    this.lastSaveMinute = s.minutes;
+    this.player?.rig.root.removeFromParent();
+    this.player = new Player(this.locations[s.location].grid, s.character.look, s.pos.x, s.pos.z);
+    this.enterLocation(s.location, s.pos.x, s.pos.z, s.pos.x + 1, s.pos.z - 1);
+    this.mode = 'play';
+    this.hud.visible = true;
+    this.resize();
+    this.refreshObjectives();
+    await this.hud.fade(false);
+    if (s.tutorial.step === 'intro') await this.introScene();
+  }
+
+  private quitToTitle(): void {
+    this.save(true);
+    location.reload();
+  }
+
+  // --- Locations ------------------------------------------------------------
+
+  private enterLocation(id: LocationId, x: number, z: number, faceX: number, faceZ: number): void {
+    for (const o of [...this.faded]) this.setFaded(o, false);
+    this.location = this.locations[id];
+    const player = this.player!;
+    player.teleport(this.location.grid, x, z);
+    player.faceToward({ x: faceX, z: faceZ }, true);
+    this.location.scene.add(player.rig.root, this.marker);
+    this.rig.configure(this.location.camera);
+    this.rig.snap(x, z + this.location.camera.offsetZ);
+    if (this.state) this.state.location = id;
+  }
+
+  private async goTo(id: LocationId, entry: string): Promise<void> {
+    if (this.busy) return;
+    this.busy = true;
+    this.hud.hidePlace();
+    await this.hud.fade(true);
+    const e = this.locations[id].entries[entry];
+    this.enterLocation(id, e.x, e.z, e.faceX, e.faceZ);
+    await this.hud.fade(false);
+    this.busy = false;
+    this.save();
+  }
+
+  // --- Input ----------------------------------------------------------------
+
   private tap(clientX: number, clientY: number): void {
+    if (this.mode !== 'play' || this.busy || this.dialogue.open || this.hud.blocking || !this.player) return;
     const rect = this.renderer.domElement.getBoundingClientRect();
     const ndc = new THREE.Vector2(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
     this.raycaster.setFromCamera(ndc, this.rig.camera);
 
-    const solid = this.district.tappables.filter((o) => !this.faded.has(o));
+    const solid = this.location.tappables.filter((o) => !this.faded.has(o));
     const hit = this.raycaster.intersectObjects(solid, true)[0];
     if (hit) {
       let o: THREE.Object3D | null = hit.object;
       while (o && !o.userData.placeId) o = o.parent;
-      const place = o && this.district.places.find((p) => p.id === o!.userData.placeId);
+      const place = o && this.location.places.find((p) => p.id === o!.userData.placeId);
       if (place) {
         this.goToPlace(place);
         return;
       }
     }
-
     const p = new THREE.Vector3();
-    if (!this.raycaster.ray.intersectPlane(this.ground, p)) return;
-    const cell = this.district.grid.nearestWalkable(Math.floor(p.x), Math.floor(p.z), 3);
+    if (!this.raycaster.ray.intersectPlane(this.groundPlane, p)) return;
+    const cell = this.location.grid.nearestWalkable(Math.floor(p.x), Math.floor(p.z), 3);
     if (!cell) return;
     this.hud.hidePlace();
     if (this.player.walkTo(cell)) this.showMarker(cell.x + 0.5, cell.z + 0.5);
   }
 
   private goToPlace(place: Place): void {
+    const player = this.player!;
     this.hud.hidePlace();
-    const ok = this.player.walkTo(place.door, () => {
-      this.player.faceToward(place.faceTo);
-      this.hud.showPlace(place);
+    const ok = player.walkTo(place.door, () => {
+      player.faceToward(place.faceTo);
+      this.hud.showPlace(place, this.actionsFor(place));
     });
     if (ok) this.showMarker(place.door.x + 0.5, place.door.z + 0.5);
     else this.hud.toast("You can't find a way there.");
@@ -138,24 +226,417 @@ export class Game {
     this.markerLife = 1;
   }
 
+  // --- Places and actions ---------------------------------------------------
+
+  private actionsFor(place: Place): Action[] {
+    const s = this.state!;
+    const act = (label: string, fn: () => void | Promise<void>, opts: Partial<Action> = {}): Action => ({
+      label,
+      onClick: () => {
+        this.hud.hidePlace();
+        void fn();
+      },
+      ...opts,
+    });
+
+    if (this.location.id === 'saltwharf') {
+      switch (place.id) {
+        case 'hester':
+          return [act('Go up to your room', () => this.goTo('hesterRoom', 'door'), { primary: true })];
+        case 'dockoffice':
+          return [act('Ask about work', () => this.askDocks(), { primary: true })];
+        case 'coppercup':
+          return [act('Ask about work', () => this.askCup(), { primary: true })];
+        case 'market':
+          return [
+            act('Hot potato · £0.02', () => this.buyFood('a hot potato', 0.02, 25), { disabled: s.money < 0.02 }),
+            act('Eel pie · £0.06', () => this.buyFood('an eel pie', 0.06, 45), { disabled: s.money < 0.06 }),
+          ];
+        default:
+          return [];
+      }
+    }
+
+    switch (place.id) {
+      case 'bed':
+        return [
+          act('Sleep until morning', () => this.sleep('morning'), { primary: true }),
+          act('Nap for 2 hours', () => this.sleep('nap')),
+        ];
+      case 'larder':
+        return [act(`Eat stale bread (${s.larderBread} left)`, () => this.eatBread(), { disabled: s.larderBread <= 0 })];
+      case 'basin':
+        return [act('Wash your face', () => this.hud.toast('Cold water and carbolic. You feel almost respectable.'))];
+      case 'trunk':
+        return [act('Try the lid', () => this.dialogue.say(
+          { speaker: 'You', text: 'The lid will not move. The lock is old, but well made.' },
+          { speaker: P, text: 'Leave that be. Not yet.' },
+        ))];
+      case 'door':
+        return [act('Go down to Quay Street', () => this.goTo('saltwharf', 'hester'), { primary: true })];
+      case 'pembleton':
+        return [act('Talk', () => this.chatPembleton(), { primary: true })];
+      default:
+        return [];
+    }
+  }
+
+  private buyFood(what: string, price: number, hunger: number): void {
+    const s = this.state!;
+    if (s.money < price) return;
+    s.money = Math.round((s.money - price) * 100) / 100;
+    addNeed(s.needs, 'hunger', hunger);
+    this.hud.toast(`You eat ${what} standing up, like everyone else here.`);
+  }
+
+  private eatBread(): void {
+    const s = this.state!;
+    if (s.larderBread <= 0) return;
+    s.larderBread--;
+    addNeed(s.needs, 'hunger', 30);
+    this.hud.toast(s.larderBread > 0 ? 'Stale, but bread.' : "That was the last of Hester's bread.");
+  }
+
+  private async askDocks(): Promise<void> {
+    await this.dialogue.say(
+      { speaker: 'Foreman Rudd', text: "Work? Look at the river. No ships in, no work. Come back when there's a hull at the quay." },
+      { speaker: 'Foreman Rudd', text: "And eat something first. I don't carry fainters." },
+    );
+    this.state!.tutorial.askedDocks = true;
+    this.refreshObjectives();
+  }
+
+  private async askCup(): Promise<void> {
+    await this.dialogue.say(
+      { speaker: 'Bessa Hartigan', text: 'Short of hands? Always. Short of coin to pay them? Also always.' },
+      { speaker: 'Bessa Hartigan', text: "The brewer gets paid at the end of the week. Come back after that and we'll talk." },
+    );
+    this.state!.tutorial.askedCup = true;
+    this.refreshObjectives();
+  }
+
+  private async chatPembleton(): Promise<void> {
+    const s = this.state!;
+    const lines = [
+      'In my day a gentleman did not live above a chandler. In my day a gentleman did not die on the stairs, either. Times change.',
+      'The fog was never this thick before those white lamps came. I notice these things. I have nothing else to do.',
+      'Your aunt talked to me every evening. I find I miss being interrupted.',
+      'Mr. Grubb, the landlord, has the soul of a damp ledger. Pay him on time and he will forget you exist. That is the best one can hope for.',
+      'Do not trust anyone in Hollow Lane who offers you a bargain. Or anyone anywhere, really.',
+      'I tried to haunt the Copper Cup once. Nobody noticed. It was humbling.',
+    ];
+    await this.dialogue.say({ speaker: P, text: lines[Math.floor(Math.random() * lines.length)] });
+    if (s.minutes - s.lastChatMinute >= 120) {
+      addNeed(s.needs, 'social', 12);
+      s.lastChatMinute = s.minutes;
+      this.hud.toast('Social +12: even dead company is company.');
+    }
+  }
+
+  // --- Sleep, rent and collapse -------------------------------------------
+
+  private async sleep(kind: 'morning' | 'nap' | 'collapse' | 'faint'): Promise<void> {
+    const s = this.state!;
+    if (this.busy) return;
+    if (kind === 'morning' && s.needs.rest > 90) {
+      this.hud.toast("You're not tired enough to sleep.");
+      return;
+    }
+    this.busy = true;
+    this.player!.stop();
+    this.hud.hidePlace();
+    await this.hud.fade(true);
+
+    let minutes: number;
+    if (kind === 'morning') {
+      const d = this.clock.date;
+      const nowMin = d.getHours() * 60 + d.getMinutes();
+      const wake = 6 * 60 + 30;
+      minutes = nowMin < wake ? wake - nowMin : DAY - nowMin + wake;
+    } else if (kind === 'nap') minutes = 120;
+    else if (kind === 'collapse') minutes = 6 * 60;
+    else minutes = 10 * 60;
+
+    const outdoors = this.location.id === 'saltwharf';
+    if (kind === 'faint') {
+      const e = this.locations.hesterRoom.entries.bed;
+      this.enterLocation('hesterRoom', e.x, e.z, e.faceX, e.faceZ);
+    }
+    const mode = kind === 'collapse' && outdoors ? 'roughSleep' : 'asleep';
+    for (let m = 0; m < minutes; m += 10) {
+      simulateNeeds(s.needs, 10 / 60, mode);
+      this.clock.minutes += 10;
+    }
+    s.minutes = this.clock.minutes;
+    if (kind === 'faint') {
+      s.needs.health = Math.max(s.needs.health, 25);
+      s.needs.hunger = Math.max(s.needs.hunger, 15);
+    }
+    if (kind === 'collapse') addNeed(s.needs, 'health', -10);
+    const rentNews = this.checkRent();
+    await this.hud.fade(false);
+    this.busy = false;
+
+    if (kind === 'morning') this.hud.toast(`You wake at ${this.clock.formatTime()}, ${this.clock.formatDate()}.`);
+    if (kind === 'nap') this.hud.toast('You doze for two hours.');
+    if (kind === 'collapse') this.hud.toast('You collapse from exhaustion and wake hours later, aching.', 4000);
+    if (kind === 'faint') {
+      await this.dialogue.say({ speaker: P, text: 'A neighbour carried you up the stairs. You were grey as a winding sheet. Eat. Sleep. I would rather not have company in my condition.' });
+    }
+    if (rentNews) await this.dialogue.say({ speaker: 'Mr. Grubb', text: rentNews });
+
+    if (kind === 'morning' && s.tutorial.step === 'explore') {
+      s.tutorial.slept = true;
+      this.refreshObjectives();
+      if (s.tutorial.askedDocks && s.tutorial.askedCup) await this.firstMorningScene();
+    }
+    this.save();
+  }
+
+  /** Collects rent at the turn of the month; returns a message for the player, if any. */
+  private checkRent(): string | null {
+    const s = this.state!;
+    const now = monthIndex(this.clock.date);
+    const r = s.rent;
+    const pay = () => {
+      s.money = Math.round((s.money - r.amount) * 100) / 100;
+      r.dueMonth++;
+    };
+    if (r.graceUntil === null && now > r.dueMonth) {
+      if (s.money >= r.amount) {
+        pay();
+        return `Rent, £${r.amount.toFixed(2)}. Paid. Pleasure, I'm sure. Same again at the end of the month.`;
+      }
+      r.graceUntil = this.clock.minutes + 7 * DAY;
+      return `£${r.amount.toFixed(2)}, and you haven't got it. Seven days. After that you and your things go in the gutter.`;
+    }
+    if (r.graceUntil !== null) {
+      if (s.money >= r.amount) {
+        pay();
+        r.graceUntil = null;
+        return "Paid at last. Don't make me climb those stairs again.";
+      }
+      if (this.clock.minutes > r.graceUntil) {
+        // Eviction arrives with milestone M7; until then Grubb keeps threatening.
+        r.graceUntil = this.clock.minutes + 3 * DAY;
+        return "I'm out of patience. Three more days, and I'm bringing my brother-in-law.";
+      }
+    }
+    return null;
+  }
+
+  private checkCollapse(): void {
+    const s = this.state!;
+    if (this.busy || this.dialogue.open) return;
+    if (s.needs.health <= 0) void this.sleep('faint');
+    else if (s.needs.rest <= 0) void this.sleep('collapse');
+  }
+
+  // --- Tutorial -------------------------------------------------------------
+
+  private refreshObjectives(): void {
+    const s = this.state;
+    if (!s || s.tutorial.step !== 'explore') {
+      this.hud.setObjectives([]);
+      return;
+    }
+    const t = s.tutorial;
+    this.hud.setObjectives([
+      { text: 'Ask for work at the Dock Hiring Office', done: t.askedDocks },
+      { text: 'Ask for work at the Copper Cup', done: t.askedCup },
+      { text: 'Sleep in your bed tonight', done: t.slept },
+    ]);
+  }
+
+  private async introScene(): Promise<void> {
+    const s = this.state!;
+    const kin = s.character.gender === 'man' ? 'nephew' : 'niece';
+    this.busy = true;
+    await this.dialogue.say(
+      { speaker: '', text: "Hester's room. One window, one bed, one cold stove. Dust on everything except a single chair by the table." },
+      { speaker: P, text: `Ah. You must be the ${kin}. Hester's. You have her chin. Unfortunate.` },
+    );
+    const choice = await this.dialogue.ask(
+      { speaker: P, text: 'Mr. Augustus Pembleton, late of this parish. Very late. Seventeen-ninety, to be precise.' },
+      ["You're a ghost?", 'Get out of my room.', 'Did you know my aunt?'],
+    );
+    const replies: Line[] = [
+      { speaker: P, text: 'An astute observation. I would shake your hand, but it ends badly for everyone.' },
+      { speaker: P, text: 'I have been trying to get out since the Regency. The building disagrees.' },
+      { speaker: P, text: 'Thirty years under the same roof. She talked to me more than to the living. A wise woman. Mostly.' },
+    ];
+    await this.dialogue.say(
+      replies[choice],
+      { speaker: P, text: 'Now. Business. Your aunt left you this room, that bed, and her debts. Mr. Grubb, the landlord, wants £0.60 by the last day of the month.' },
+      { speaker: P, text: 'You have £1.00. In Saltwharf that lasts about as long as a candle in a gale.' },
+      { speaker: P, text: 'Mind yourself. Hunger, Rest, Social, Health. Neglect them and the city will finish what poverty starts.' },
+      { speaker: P, text: 'Hester kept bread in the larder. Stale, but bread. After that, the market sells hot potatoes for a couple of pennies.' },
+      { speaker: P, text: 'You need work. The Dock Hiring Office wants strong backs, and Bessa at the Copper Cup is always short of hands. Go and ask.' },
+      { speaker: P, text: 'And come home before the lamps are lit. Saltwharf after dark is no place for the inexperienced.' },
+    );
+    s.tutorial.step = 'explore';
+    this.busy = false;
+    this.refreshObjectives();
+    this.hud.toast('Tap the floor to walk. Tap things to use them.', 3500);
+    this.save();
+  }
+
+  private async firstMorningScene(): Promise<void> {
+    const s = this.state!;
+    await this.dialogue.say(
+      { speaker: P, text: 'You survived your first night. Most do. It is the thirtieth that gets them.' },
+      { speaker: P, text: 'Keep asking for work. Keep your belly full and your rent paid. The rest of this city you will learn the hard way, as everyone does.' },
+    );
+    s.tutorial.step = 'done';
+    this.refreshObjectives();
+  }
+
+  // --- Saving and journal ---------------------------------------------------
+
+  private save(announce = false): void {
+    const s = this.state;
+    const p = this.player;
+    if (!s || !p || this.mode !== 'play') return;
+    s.minutes = this.clock.minutes;
+    s.pos = { x: p.position.x, z: p.position.y };
+    s.location = this.location.id;
+    this.lastSaveMinute = s.minutes;
+    const ok = saveGame(s);
+    if (announce) this.hud.toast(ok ? 'Saved.' : 'Could not save on this device.');
+  }
+
+  private renderJournal(): void {
+    const s = this.state;
+    if (!s) return;
+    const due = this.clock.formatShortDate(this.clock.rentDue);
+    const rentLine = s.rent.graceUntil !== null
+      ? `Rent of £${s.rent.amount.toFixed(2)} is overdue.`
+      : `Rent of £${s.rent.amount.toFixed(2)} is due ${due}.`;
+    this.hud.setJournal(Hud.titleFor(s), this.hud.journalHtml(s, rentLine));
+  }
+
+  // --- Creator preview ------------------------------------------------------
+
+  private buildPreviewScene(): void {
+    const { scene, camera } = this.preview;
+    scene.background = new THREE.Color(0x14181e);
+    scene.fog = new THREE.Fog(0x14181e, 6, 14);
+    scene.add(new THREE.HemisphereLight(0xc8d0e0, 0x2a2018, 1.4));
+    const key = new THREE.DirectionalLight(0xffe0b0, 2.2);
+    key.position.set(2, 4, 3);
+    scene.add(key);
+    const rim = new THREE.DirectionalLight(0x7fa0d0, 1.4);
+    rim.position.set(-3, 2, -3);
+    scene.add(rim);
+    const floor = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.2, 0.12, 12), new THREE.MeshStandardMaterial({ color: 0x3a342c, flatShading: true }));
+    floor.position.y = -0.06;
+    scene.add(floor);
+    camera.position.set(0, 1.6, 9);
+    camera.lookAt(0, 0.75, 0);
+  }
+
+  private updatePreview(c: Character): void {
+    const old = this.preview.rig;
+    const angle = old ? old.root.rotation.y : 0.4;
+    if (old) {
+      old.root.removeFromParent();
+      old.root.traverse((o) => (o as THREE.Mesh).geometry?.dispose());
+    }
+    const rig = createCharacter(c.look);
+    rig.root.rotation.y = angle;
+    this.preview.scene.add(rig.root);
+    this.preview.rig = rig;
+  }
+
+  // --- Frame ----------------------------------------------------------------
+
+  private resize(): void {
+    const w = this.container.clientWidth;
+    const h = this.container.clientHeight;
+    this.renderer.setSize(w, h);
+    this.rig.resize(w, h);
+    const cam = this.preview.camera;
+    cam.aspect = w / h;
+    // Keep the figure in the part of the screen the creator sheet leaves free.
+    if (w < h) cam.setViewOffset(w, h, 0, h * 0.32, w, h);
+    else cam.setViewOffset(w, h, w * 0.24, 0, w, h);
+    cam.updateProjectionMatrix();
+  }
+
+  private frame(): void {
+    const now = performance.now();
+    const dt = Math.min(0.05, (now - this.last) / 1000);
+    this.last = now;
+    this.elapsed += dt;
+
+    if (this.mode === 'create') {
+      if (this.preview.rig) this.preview.rig.root.rotation.y += dt * 0.5;
+      this.renderer.render(this.preview.scene, this.preview.camera);
+      return;
+    }
+
+    if (this.mode === 'title') {
+      this.location.update(20.8, this.elapsed);
+      this.rig.update(dt, 16 + Math.sin(this.elapsed * 0.08) * 9, 12);
+      this.renderer.render(this.location.scene, this.rig.camera);
+      return;
+    }
+
+    const s = this.state!;
+    const player = this.player!;
+    const paused = this.busy || this.dialogue.open || this.hud.blocking;
+    if (!paused) {
+      const before = this.clock.minutes;
+      this.clock.tick(dt);
+      simulateNeeds(s.needs, (this.clock.minutes - before) / 60, 'awake');
+      s.minutes = this.clock.minutes;
+      const news = this.checkRent();
+      if (news) void this.dialogue.say({ speaker: 'Mr. Grubb', text: news });
+      this.checkCollapse();
+      if (s.minutes - this.lastSaveMinute >= 60) this.save();
+    }
+
+    player.update(dt, this.elapsed);
+    this.location.update(this.clock.hour, this.elapsed);
+    this.rig.update(dt, player.position.x, player.position.y + this.location.camera.offsetZ);
+
+    if (this.location.fadeOccluders) {
+      this.occlusionTimer -= dt;
+      if (this.occlusionTimer <= 0) {
+        this.occlusionTimer = 0.1;
+        this.updateOcclusion();
+      }
+    }
+
+    if (this.markerLife > 0) {
+      this.markerLife = Math.max(0, this.markerLife - dt * 1.2);
+      (this.marker.material as THREE.MeshBasicMaterial).opacity = this.markerLife * 0.9;
+      this.marker.scale.setScalar(1 + (1 - this.markerLife) * 0.5);
+    }
+
+    this.hud.update(s, this.location.name, this.clock.formatDate(), this.clock.formatTime(), this.clock.formatShortDate(this.clock.rentDue));
+    this.renderer.render(this.location.scene, this.rig.camera);
+  }
+
   /** Fades buildings standing between the camera and the player so you never lose sight of yourself. */
   private updateOcclusion(): void {
+    const player = this.player!;
     const cam = this.rig.camera.position;
     const occluders = new Set<THREE.Object3D>();
     for (const h of [0.4, 1.0, 1.5]) {
-      const target = new THREE.Vector3(this.player.position.x, h, this.player.position.y);
+      const target = new THREE.Vector3(player.position.x, h, player.position.y);
       const dir = target.clone().sub(cam);
       const far = dir.length() - 0.4;
       this.raycaster.set(cam, dir.normalize());
       this.raycaster.far = far;
-      for (const hit of this.raycaster.intersectObjects(this.district.tappables, true)) {
+      for (const hit of this.raycaster.intersectObjects(this.location.tappables, true)) {
         let o: THREE.Object3D | null = hit.object;
         while (o && !o.userData.placeId) o = o.parent;
         if (o) occluders.add(o);
       }
     }
     this.raycaster.far = Infinity;
-    for (const o of this.faded) if (!occluders.has(o)) this.setFaded(o, false);
+    for (const o of [...this.faded]) if (!occluders.has(o)) this.setFaded(o, false);
     for (const o of occluders) if (!this.faded.has(o)) this.setFaded(o, true);
   }
 
@@ -183,36 +664,5 @@ export class Game {
         mesh.castShadow = true;
       }
     });
-  }
-
-  private frame(): void {
-    const now = performance.now();
-    const dt = Math.min(0.05, (now - this.last) / 1000);
-    this.last = now;
-    this.elapsed += dt;
-
-    this.clock.tick(dt);
-    this.player.update(dt, this.elapsed);
-    this.extras.forEach((r, i) => animateRig(r, 0, 0, this.elapsed + i * 2));
-    this.district.update(this.elapsed);
-    this.lighting.update(this.clock.hour, this.elapsed);
-    // Look a little south of the player so the screen shows more street than river.
-    this.rig.update(dt, this.player.position.x, this.player.position.y + 2);
-    this.occlusionTimer -= dt;
-    if (this.occlusionTimer <= 0) {
-      this.occlusionTimer = 0.1;
-      this.updateOcclusion();
-    }
-
-    if (this.markerLife > 0) {
-      this.markerLife = Math.max(0, this.markerLife - dt * 1.2);
-      const m = this.marker.material as THREE.MeshBasicMaterial;
-      m.opacity = this.markerLife * 0.9;
-      this.marker.scale.setScalar(1 + (1 - this.markerLife) * 0.5);
-    }
-
-    this.hud.setClock(this.clock.formatDate(), this.clock.formatTime());
-    this.hud.setPurse(this.money, this.clock.formatShortDate(this.clock.rentDue));
-    this.renderer.render(this.scene, this.rig.camera);
   }
 }

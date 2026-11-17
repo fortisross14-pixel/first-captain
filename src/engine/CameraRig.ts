@@ -19,12 +19,19 @@ export class CameraRig {
   view = 14;
   private aspect = 1;
 
-  constructor(private readonly bounds: { minX: number; maxX: number; minZ: number; maxZ: number }) {
+  constructor(private bounds: { minX: number; maxX: number; minZ: number; maxZ: number }) {
     this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 120);
   }
 
   resize(w: number, h: number): void {
     this.aspect = w / h;
+    this.project();
+  }
+
+  /** Adopts a location's camera limits and default zoom. */
+  configure(c: { bounds: { minX: number; maxX: number; minZ: number; maxZ: number }; view: number }): void {
+    this.bounds = c.bounds;
+    this.view = c.view;
     this.project();
   }
 

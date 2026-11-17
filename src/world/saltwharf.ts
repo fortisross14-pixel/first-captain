@@ -1,5 +1,8 @@
 import * as THREE from 'three';
+import { animateRig, createCharacter, type Look, type Rig } from '../actors/characterModel';
+import { Lighting } from '../engine/Lighting';
 import { Grid } from './grid';
+import type { Location, Place } from './location';
 import { C, mat } from './materials';
 import {
   makeBarge, makeBarrel, makeBollard, makeBuilding, makeCrateStack, makeFence, makeLamp,
@@ -12,16 +15,6 @@ export const MAP_H = 26;
 /** Rows 0–3 are the Thames, 4–6 the quay, 7–8 Quay Street, 9–14 the north block, 15–16 Rope Walk, 17–22 the south block. */
 const WATER_ROWS = 4;
 const QUAY_END = 7;
-
-export interface Place {
-  id: string;
-  name: string;
-  description: string;
-  /** Tile the player walks to when the place is tapped. */
-  door: { x: number; z: number };
-  /** World point the player faces on arrival. */
-  faceTo: { x: number; z: number };
-}
 
 interface BuildingDef {
   id: string;
@@ -76,21 +69,21 @@ const BUILDINGS: BuildingDef[] = [
   },
 ];
 
-export interface District {
-  grid: Grid;
-  places: Place[];
-  /** Objects that can be tapped; userData.placeId names the place. */
-  tappables: THREE.Object3D[];
-  lamps: { position: THREE.Vector3; vane: boolean }[];
-  spawn: { x: number; z: number };
-  update(time: number): void;
-}
+/** Townsfolk standing about so the district is not empty. They come alive in M5. */
+const EXTRAS: { look: Look; x: number; z: number; face: number }[] = [
+  { look: { skin: 0xc89a78, hair: 0x5a3a22, coat: 0x5a4a3a, trousers: 0x3a3028, shirt: 0xb0a890, boots: 0x201a14, hat: 'cap', build: 1.1 }, x: 7.5, z: 5.5, face: -2.4 },
+  { look: { skin: 0xe8c4a0, hair: 0x9a4a22, coat: 0x6a2e2e, trousers: 0x3a2a2a, shirt: 0xe0d6c0, boots: 0x201a14, hat: 'bonnet', hatColor: 0xd8ccb0, skirt: true, build: 0.92 }, x: 19.5, z: 8.2, face: 0.3 },
+  { look: { skin: 0x8a5a3a, hair: 0x15110e, coat: 0x2e3440, trousers: 0x26262a, shirt: 0xc8c0a8, boots: 0x151210, hat: 'top', scarf: 0x2e4a3a }, x: 11.5, z: 20.0, face: Math.PI },
+];
 
-export function buildSaltwharf(scene: THREE.Scene): District {
+export const CAMERA_DISTANCE = 40;
+
+export function buildSaltwharf(): Location {
+  const scene = new THREE.Scene();
   const grid = new Grid(MAP_W, MAP_H);
   const places: Place[] = [];
   const tappables: THREE.Object3D[] = [];
-  const lamps: District['lamps'] = [];
+  const lamps: { position: THREE.Vector3; vane: boolean }[] = [];
   const root = new THREE.Group();
   root.name = 'saltwharf';
   scene.add(root);
@@ -281,9 +274,23 @@ export function buildSaltwharf(scene: THREE.Scene): District {
     lamps.push({ position: new THREE.Vector3(x + 0.5, lightY, z + 0.5), vane });
   }
 
+  const lighting = new Lighting(scene, new THREE.Vector3(MAP_W / 2, 0, MAP_H / 2), lamps, CAMERA_DISTANCE);
+
+  const extras: Rig[] = [];
+  for (const e of EXTRAS) {
+    const r = createCharacter(e.look);
+    r.root.position.set(e.x, 0, e.z);
+    r.root.rotation.y = e.face;
+    scene.add(r.root);
+    grid.block(Math.floor(e.x), Math.floor(e.z));
+    extras.push(r);
+  }
+
   // --- Animation ----------------------------------------------------------
   const pos = waterGeo.attributes.position as THREE.BufferAttribute;
-  const update = (t: number) => {
+  const update = (hour: number, t: number) => {
+    lighting.update(hour, t);
+    extras.forEach((r, i) => animateRig(r, 0, 0, t + i * 2));
     for (let i = 0; i < pos.count; i++) {
       const bx = waterBase[i * 3];
       const bz = waterBase[i * 3 + 2];
@@ -296,5 +303,18 @@ export function buildSaltwharf(scene: THREE.Scene): District {
     barge2.position.y = -0.25 + Math.sin(t * 0.7 + 1) * 0.05;
   };
 
-  return { grid, places, tappables, lamps, spawn: { x: 11, z: 8 }, update };
+  return {
+    id: 'saltwharf',
+    name: 'Saltwharf Docks',
+    scene,
+    grid,
+    places,
+    tappables,
+    entries: {
+      hester: { x: 11.5, z: 8.5, faceX: 11.5, faceZ: 6 },
+    },
+    camera: { bounds: { minX: 5, maxX: MAP_W - 5, minZ: 9, maxZ: MAP_H - 6 }, view: 14, offsetZ: 2 },
+    fadeOccluders: true,
+    update,
+  };
 }
