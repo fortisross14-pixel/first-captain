@@ -1,1 +1,1 @@
-{"root":["./src/main.ts","./src/game/iso.ts","./src/game/pathfinding.ts","./src/scenes/BootScene.ts","./src/scenes/InteriorScene.ts","./src/scenes/TownScene.ts"],"version":"5.7.3"}
+{"root":["./src/main.ts","./src/actors/Player.ts","./src/actors/characterModel.ts","./src/engine/CameraRig.ts","./src/engine/Clock.ts","./src/engine/Game.ts","./src/engine/Input.ts","./src/engine/Lighting.ts","./src/ui/Hud.ts","./src/world/grid.ts","./src/world/materials.ts","./src/world/pathfinding.ts","./src/world/props.ts","./src/world/saltwharf.ts"],"version":"5.7.3"}

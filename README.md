@@ -1,20 +1,18 @@
-# The First Captain — v2 Foundation
+# The Pale Lamps
 
-This replaces the old DOM-heavy prototype with a Phaser 3 + TypeScript game foundation.
+A dark gothic life-sim RPG set in a fictional Victorian London (1871): work, rent, needs, relationships, factions and the fog. Low-poly 3D, angled top-down camera, built for phones and tablets.
 
-## Included in this step
+- Build plan and milestones: [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md)
+- Story and world design: the *Pale Lamps Story Bible* (Claude Docs)
 
-- Isometric 22×22 town rendered in Phaser.
-- Mouse click-to-move.
-- Grid pathfinding around obstacles.
-- Buildings, trees, fences, water, lamps, crates and NPCs block movement.
-- Depth sorting so the captain passes behind tall scenery correctly.
-- Four enterable interiors: home, tavern, sheriff and blacksmith.
-- Clickable buildings and NPCs.
-- Keyboard interaction (`E`) and exit (`Esc`).
-- Procedural placeholder pixel textures, isolated behind asset keys so authored sprites can replace them later.
+## Current state: M1, Saltwharf you can walk
 
-This is an engine/level foundation. It intentionally does not yet re-add the entire Phase 2 combat and company systems; those should be ported onto this architecture rather than patched into the old React implementation.
+- Saltwharf Docks: the Thames, the quay and barges, Quay Street, Hester's building, the Copper Cup, the dock hiring office, a warehouse, tenements, the market corner, a pawnbroker, a clothier and the boxing yard
+- Tap the street to walk (A* pathfinding), tap a building or stall to walk to it and read about it
+- Pinch or mouse wheel to zoom
+- Day/night clock from 1 October 1871, gaslight at night, fog, one cold white Vane Lamp
+- Buildings between the camera and you fade out
+- The speed button cycles time 1× / 10× / 60×; `?hour=21` starts the day at that hour (for testing)
 
 ## Run
 
@@ -23,11 +21,7 @@ npm install
 npm run dev
 ```
 
-If npm still points to an internal registry:
-
-```bash
-npm config set registry https://registry.npmjs.org/
-```
+Open the printed URL on your phone (same Wi-Fi) with `npm run dev -- --host`.
 
 ## Build
 
@@ -35,13 +29,4 @@ npm config set registry https://registry.npmjs.org/
 npm run build
 ```
 
-## GitHub
-
-Copy these files into the repository root and commit them on a `v2-phaser` branch:
-
-```bash
-git checkout -b v2-phaser
-git add .
-git commit -m "Build Phaser isometric collision foundation"
-git push -u origin v2-phaser
-```
+Pushing to `main` deploys to GitHub Pages.

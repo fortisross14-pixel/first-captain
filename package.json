@@ -1,18 +1,19 @@
 {
-  "name": "first-captain-v2-foundation",
+  "name": "the-pale-lamps",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview"
   },
-  "dependencies": {
-    "phaser": "3.90.0"
-  },
   "devDependencies": {
+    "@types/three": "0.186.0",
     "typescript": "5.7.3",
     "vite": "6.1.0"
+  },
+  "dependencies": {
+    "three": "0.186.1"
   }
 }
