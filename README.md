@@ -5,7 +5,11 @@ A dark gothic life-sim RPG set in a fictional Victorian London (1871): work, ren
 - Build plan and milestones: [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md)
 - Story and world design: the *Pale Lamps Story Bible* (Claude Docs)
 
-## Current state: M5, The people of Saltwharf
+## Current state: M6, Night in Saltwharf
+
+- Turn-based fights; robberies at night (pay, fight, talk or run); stepping in when a resident is attacked; the London Hospital and its bill
+
+### From M5
 
 - 15 residents with routines, traits and attraction; tap them to chat, joke, flirt, debate, insult and more; the People screen tracks friendship, romance, rivalry and business
 

@@ -27,7 +27,7 @@ The design lives in the Story Bible (Claude Docs). This file tracks how we build
 | M3 ✅ | **First job: the Docks** | Job framework (shifts, grades, pay, promotion points, firing, skipping), job board, Cargo Stacking minigame, ranks 1–3, skills gaining from work | You can get hired, play and skip shifts, and get promoted |
 | M4 ✅ | **The Copper Cup and shopping** | Order Juggling minigame, ranks 1–3, food stalls and a shop, inventory and items, eating, second job with the Rest trade-off | Two jobs work and you can feed yourself |
 | M5 ✅ | **The people of Saltwharf** | About 15 residents with schedules, class, traits and attraction; interaction menu; friendship, romance, rivalry and business meters; contact list | You can befriend, offend and start romancing residents |
-| M6 | **Night in Saltwharf** | Turn-based combat, night robberies, stepping into street fights, pay / fight / talk options by skill and job, hospital and its bill | You can be robbed, fight back or talk your way out |
+| M6 ✅ | **Night in Saltwharf** | Turn-based combat, night robberies, stepping into street fights, pay / fight / talk options by skill and job, hospital and its bill | You can be robbed, fight back or talk your way out |
 | M7 | **Falling and rising** | Eviction, sleeping rough, theft while asleep, balancing pass on money and needs, audio, polish, performance on low-end phones | The slice plays end to end for a full in-game month |
 
 After the slice: more districts, factions, the main story and the Fog Clock, businesses, marriage, children and aging.
@@ -103,3 +103,14 @@ After the slice: more districts, factions, the main story and the Fog Clock, bus
 - [x] Traits are revealed as you get closer (first at friendship 10, second at 30)
 - [x] People screen (contact list): everyone you've met, with their label (Acquaintance, Friend, Courting, Rival, Business partner…), known traits and meters
 - [x] The three standing extras from M1 are replaced by the residents
+
+## M6 checklist
+
+- [x] Turn-based fights (`src/minigames/fight.ts`): Health is your life bar; Strike (Strength), Guard, Fight dirty (Cunning, can daze), Talk them down (Charisma, breaks their nerve), Use item (bandage or tonic), Run (Cunning)
+  - Enemies: Footpad, Dock bruiser, Man with a knife; each has health, damage, accuracy and nerve, and runs when their nerve breaks
+- [x] Night robberies: between 21:00 and 05:00 in the street, at most once a night, likelier with more money on you and less likely once you're known to fight back
+  - Hand over half your money (or an item if you're broke), Fight, Talk your way out (Intimidate with Strength plus your dock rank and fights won, Persuade with Charisma, Bluff with Cunning), or Run
+  - A failed talk or run means they hit first
+- [x] Street violence: in the evenings, a resident is set upon. Step in (a fight; win and they're your friend for it), shout for a constable (coin toss), or walk away (they remember)
+- [x] Winning earns notoriety (fewer robberies, better intimidation), a little loot and skill XP
+- [x] Losing, or Health hitting zero any other way: twelve hours in the London Hospital, a £0.15 bill, and if you were robbed they take 60% of your money and an item. Unpaid bills become debt, taken from your next money

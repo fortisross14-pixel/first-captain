@@ -14,6 +14,7 @@ import {
   promotionText, title,
 } from '../game/work';
 import { playBar } from '../minigames/bar';
+import { ENEMIES, runFight, type Enemy } from '../minigames/fight';
 import { playCargo } from '../minigames/cargo';
 import { loadGame, newGame, saveGame, type Character, type GameState, type LocationId, type NeedId } from '../game/state';
 import { Creator } from '../ui/Creator';
@@ -31,6 +32,7 @@ type Mode = 'title' | 'create' | 'play';
 
 const P = 'Mr. Pembleton';
 const DAY = 24 * 60;
+const HOSPITAL_BILL = 0.15;
 
 /** Months since October 1871, so October 1871 is 0. */
 const monthIndex = (d: Date) => (d.getFullYear() - 1871) * 12 + d.getMonth() - 9;
@@ -627,6 +629,194 @@ export class Game {
     this.hud.showList('People', `${rows.length} known in Saltwharf`, rows);
   }
 
+  // --- Night: robberies, street violence and the hospital -------------------
+
+  private night(gameMinutes: number): void {
+    const s = this.state!;
+    if (this.location.id !== 'saltwharf' || this.busy || this.dialogue.open || gameMinutes <= 0) return;
+    const hour = this.clock.hour;
+    const day = dayIndex(s.minutes);
+    const dark = hour >= 21 || hour < 5;
+    // Robbery: once a night at most; more likely with a fat purse, less if you are known to fight back.
+    if (dark && s.lastRobberyDay !== day) {
+      const rate = 0.003 * (1 + s.money * 0.6) * (s.notoriety >= 3 ? 0.5 : 1);
+      if (Math.random() < rate * gameMinutes) {
+        s.lastRobberyDay = day;
+        void this.robbery();
+        return;
+      }
+    }
+    // Someone else in trouble, evenings.
+    if (hour >= 19 && hour < 23.5 && s.lastWitnessDay !== day && Math.random() < 0.0025 * gameMinutes) {
+      const victims = this.npcs.filter((n) => n.visible && ['tom', 'lizzie', 'jem', 'hannah', 'ruby', 'pell', 'hale'].includes(n.res.id));
+      if (victims.length) {
+        s.lastWitnessDay = day;
+        void this.witness(victims[Math.floor(Math.random() * victims.length)]);
+      }
+    }
+  }
+
+  /** How frightening you are: your dock rank and the fights you've won. */
+  private menace(): number {
+    const s = this.state!;
+    const docks = employment(s, 'docks');
+    return (docks ? docks.rank * 0.08 : 0) + Math.min(5, s.notoriety) * 0.05;
+  }
+
+  private pickEnemy(): Enemy {
+    const keys = Object.keys(ENEMIES);
+    return ENEMIES[keys[Math.floor(Math.random() * keys.length)]];
+  }
+
+  private async robbery(): Promise<void> {
+    const s = this.state!;
+    this.busy = true;
+    this.player!.stop();
+    this.hud.hidePlace();
+    const enemy = this.pickEnemy();
+    const take = Math.round(s.money * 0.5 * 100) / 100;
+    const opts = [s.money > 0 ? `Hand over £${take.toFixed(2)}` : "I've got nothing", 'Fight', 'Talk your way out', 'Run'];
+    const choice = await this.dialogue.ask({ speaker: enemy.name, text: 'A shape steps out of the fog with its hand held out. "Your purse. Now. Quiet-like."' }, opts);
+    let fight = false;
+    let firstStrike = false;
+    if (choice === 0) {
+      if (s.money > 0) {
+        s.money = Math.round((s.money - take) * 100) / 100;
+        await this.dialogue.say({ speaker: enemy.name, text: 'Good. Sleep tight.' });
+      } else if (s.inventory.length) {
+        const it = s.inventory[Math.floor(Math.random() * s.inventory.length)];
+        removeItem(s, it.id);
+        await this.dialogue.say({ speaker: enemy.name, text: `Nothing? Then I'll have this. They take your ${ITEMS[it.id].name.toLowerCase()}.` });
+      } else {
+        await this.dialogue.say({ speaker: enemy.name, text: 'Nothing at all? God help you, then.' });
+      }
+    } else if (choice === 1) {
+      fight = true;
+    } else if (choice === 2) {
+      const how = await this.dialogue.ask({ speaker: 'You', text: 'How do you talk your way out?' }, [
+        `Intimidate (Strength${employment(s, 'docks') ? ', and they know you from the docks' : ''})`,
+        'Persuade (Charisma)',
+        'Bluff (Cunning)',
+      ]);
+      const skill = (['strength', 'charisma', 'cunning'] as const)[how];
+      const chance = 0.25 + s.character.skills[skill] * 0.05 + (how === 0 ? this.menace() : 0);
+      gainXp(s, skill, 8);
+      if (Math.random() < chance) {
+        const lines = [
+          'You square up and say nothing at all. They decide you are not worth it.',
+          'You talk about the gallows, and their mother, and the cold. They go.',
+          'You whistle, as if to a mate behind them. They bolt.',
+        ];
+        await this.dialogue.say({ speaker: '', text: lines[how] });
+      } else {
+        await this.dialogue.say({ speaker: enemy.name, text: 'Nice try.' });
+        fight = true;
+        firstStrike = true;
+      }
+    } else {
+      if (Math.random() < 0.35 + s.character.skills.cunning * 0.05) {
+        this.hud.toast('You duck into an alley and lose them in the fog.');
+      } else {
+        await this.dialogue.say({ speaker: enemy.name, text: 'Not so fast.' });
+        fight = true;
+        firstStrike = true;
+      }
+    }
+    if (fight) await this.fight(enemy, 'They come at you.', firstStrike, true);
+    this.busy = false;
+    this.save();
+  }
+
+  private async witness(npc: Npc): Promise<void> {
+    this.busy = true;
+    this.player!.stop();
+    this.hud.hidePlace();
+    const r = this.rel(npc.res.id);
+    r.met = true;
+    const choice = await this.dialogue.ask(
+      { speaker: '', text: `A cry from the fog: someone has ${npc.res.name} up against a wall, going through their pockets.` },
+      ['Step in', 'Shout for a constable', 'Walk away'],
+    );
+    if (choice === 0) {
+      const won = await this.fight(this.pickEnemy(), `You shove between them. "Leave ${npc.res.name.split(' ')[0]} be."`, false, false);
+      if (won) {
+        r.friendship = Math.min(100, r.friendship + 20);
+        r.rivalry = Math.max(0, r.rivalry - 10);
+        await this.dialogue.say({ speaker: npc.res.name, text: 'I won\'t forget that. Not ever.' });
+      }
+    } else if (choice === 1) {
+      if (Math.random() < 0.5) {
+        r.friendship = Math.min(100, r.friendship + 6);
+        await this.dialogue.say({ speaker: '', text: 'A whistle answers from Quay Street. The attacker runs.' }, { speaker: npc.res.name, text: 'Thank you. I thought that was me finished.' });
+      } else {
+        r.friendship = Math.min(100, r.friendship + 2);
+        await this.dialogue.say({ speaker: '', text: 'No constable comes. The attacker takes what they want and slips away.' });
+      }
+    } else {
+      r.friendship = Math.max(0, r.friendship - 8);
+      r.rivalry = Math.min(100, r.rivalry + 4);
+      this.hud.toast(`You walk on. ${npc.res.name.split(' ')[0]} saw you go.`, 3500);
+    }
+    this.busy = false;
+    this.save();
+  }
+
+  /** Runs a fight; handles winning, losing and the hospital. Returns true if you won or talked them down. */
+  private async fight(enemy: Enemy, intro: string, firstStrike: boolean, robbery: boolean): Promise<boolean> {
+    const s = this.state!;
+    const { outcome, xp } = await runFight(this.container, s, enemy, intro, firstStrike);
+    const ups = [...gainXp(s, 'strength', xp.strength), ...gainXp(s, 'cunning', xp.cunning), ...gainXp(s, 'charisma', xp.charisma)];
+    if (outcome === 'won' || outcome === 'talked') {
+      s.notoriety++;
+      const loot = outcome === 'won' ? Math.round((0.02 + Math.random() * 0.06) * 100) / 100 : 0;
+      s.money = Math.round((s.money + loot) * 100) / 100;
+      this.hud.toast(`${loot ? `You find £${loot.toFixed(2)} where they fell. ` : ''}Word gets round: you fight back.${ups.length ? ` ${ups.join(' ')}` : ''}`, 4000);
+      return true;
+    }
+    if (outcome === 'lost') await this.hospital(robbery);
+    else if (ups.length) this.hud.toast(ups.join(' '));
+    return false;
+  }
+
+  /** Wake in the London Hospital with a bill. If you were robbed, they took more on the way down. */
+  private async hospital(robbed: boolean): Promise<void> {
+    const s = this.state!;
+    const wasBusy = this.busy;
+    this.busy = true;
+    await this.hud.fade(true);
+    const lost: string[] = [];
+    if (robbed) {
+      const take = Math.round(s.money * 0.6 * 100) / 100;
+      s.money = Math.round((s.money - take) * 100) / 100;
+      if (take > 0) lost.push(`£${take.toFixed(2)}`);
+      if (s.inventory.length) {
+        const it = s.inventory[Math.floor(Math.random() * s.inventory.length)];
+        removeItem(s, it.id);
+        lost.push(`your ${ITEMS[it.id].name.toLowerCase()}`);
+      }
+    }
+    // Twelve hours on a ward.
+    for (let m = 0; m < 12 * 60; m += 10) {
+      simulateNeeds(s.needs, 10 / 60, 'asleep');
+      this.clock.minutes += 10;
+    }
+    s.minutes = this.clock.minutes;
+    s.needs.health = Math.max(s.needs.health, 40);
+    s.needs.hunger = Math.max(s.needs.hunger, 25);
+    const paid = Math.min(s.money, HOSPITAL_BILL);
+    s.money = Math.round((s.money - paid) * 100) / 100;
+    s.debt = Math.round((s.debt + HOSPITAL_BILL - paid) * 100) / 100;
+    const e = this.locations.saltwharf.entries.hester;
+    this.enterLocation('saltwharf', e.x, e.z, e.faceX, e.faceZ);
+    await this.hud.fade(false);
+    await this.dialogue.say(
+      { speaker: 'Ward Sister', text: `You were brought in off the street. ${robbed && lost.length ? `Whoever did it took ${lost.join(' and ')}. ` : ''}The London Hospital charges £${HOSPITAL_BILL.toFixed(2)} for the bed and the stitching.` },
+      { speaker: 'Ward Sister', text: s.debt > 0 ? `You paid £${paid.toFixed(2)}. The rest, £${s.debt.toFixed(2)}, comes out of your next wages.` : 'Paid in full. Try to stay upright.' },
+    );
+    this.busy = wasBusy;
+    this.save();
+  }
+
   private async chatPembleton(): Promise<void> {
     const s = this.state!;
     const lines = [
@@ -741,7 +931,7 @@ export class Game {
   private checkCollapse(): void {
     const s = this.state!;
     if (this.busy || this.dialogue.open) return;
-    if (s.needs.health <= 0) void this.sleep('faint');
+    if (s.needs.health <= 0) void this.hospital(false);
     else if (s.needs.rest <= 0) void this.sleep('collapse');
   }
 
@@ -825,10 +1015,11 @@ export class Game {
     const rentLine = s.rent.graceUntil !== null
       ? `Rent of £${s.rent.amount.toFixed(2)} is overdue.`
       : `Rent of £${s.rent.amount.toFixed(2)} is due ${due}.`;
+    const debtLine = s.debt > 0 ? ` You owe the hospital £${s.debt.toFixed(2)}.` : '';
     const work = s.jobs
       .map((e) => `${title(s, e)} at the ${JOBS[e.jobId].employer}: ${nextShiftText(s, e.jobId)}. ${promotionText(s, e.jobId)}`)
       .join('\n');
-    this.hud.setJournal(Hud.titleFor(s), this.hud.journalHtml(s, rentLine, work));
+    this.hud.setJournal(Hud.titleFor(s), this.hud.journalHtml(s, rentLine + debtLine, work));
   }
 
   // --- Creator preview ------------------------------------------------------
@@ -909,6 +1100,14 @@ export class Game {
       const news = this.checkRent();
       if (news) void this.dialogue.say({ speaker: 'Mr. Grubb', text: news });
       this.checkCollapse();
+      this.night(this.clock.minutes - before);
+      // Wages pay off hospital debt first.
+      if (s.debt > 0 && s.money > 0) {
+        const pay = Math.min(s.debt, s.money);
+        s.money = Math.round((s.money - pay) * 100) / 100;
+        s.debt = Math.round((s.debt - pay) * 100) / 100;
+        if (s.debt === 0) this.hud.toast('Your hospital bill is paid off.');
+      }
       void this.attendance();
       if (s.minutes - this.lastSaveMinute >= 60) this.save();
     }

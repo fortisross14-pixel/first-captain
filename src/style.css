@@ -164,3 +164,19 @@ button.primary { background: #6a4e22; border-color: var(--brass); color: #fff4d8
 .lr-sub { white-space: pre-line; }
 .dialogue .text { white-space: pre-line; }
 .panel .actions button { min-height: 40px; padding: 0 12px; }
+.fight { justify-content: space-between; gap: 10px; }
+.fight-card { width: min(100%, 480px); background: #1e1916; border: 1px solid var(--edge); border-radius: 12px; padding: 10px 14px; }
+.fight-card.enemy { border-color: #7a3a2e; }
+.fc-name { font-size: 18px; color: var(--brass); }
+.fc-bar { height: 10px; margin: 6px 0 4px; border-radius: 5px; background: rgba(255,255,255,.08); overflow: hidden; }
+.fc-bar i { display: block; height: 100%; background: #c0503a; transition: width .3s; }
+.you .fc-bar i { background: var(--brass); }
+.fc-sub { font-size: 12.5px; color: var(--muted); }
+.fight-log { flex: 1; width: min(100%, 480px); overflow-y: auto; font-size: 15px; line-height: 1.4; padding: 4px; }
+.fight-log p { margin: 4px 0; }
+.fight-log .good { color: #b8d8a0; }
+.fight-log .hurt { color: #e09a8a; }
+.fight-log .big { font-size: 17px; color: var(--ink); font-style: italic; }
+.fight-actions { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; width: min(100%, 480px); }
+.fight-actions button { min-height: 52px; }
+.fight-actions .fight-done { grid-column: 1 / -1; }

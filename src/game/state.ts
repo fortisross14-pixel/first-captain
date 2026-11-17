@@ -65,6 +65,12 @@ export interface GameState {
   jobs: Employment[];
   inventory: { id: string; qty: number }[];
   relations: Record<string, Relation>;
+  /** Fights won or faced down; robbers think twice. */
+  notoriety: number;
+  lastRobberyDay: number;
+  lastWitnessDay: number;
+  /** Owed to the hospital; taken from your next money. */
+  debt: number;
   /** Progress toward the next level of each skill. */
   skillXp: Record<SkillId, number>;
   /** Employer id → first day they will hire you again. */
@@ -105,6 +111,10 @@ export function newGame(character: Character): GameState {
     jobs: [],
     inventory: [],
     relations: {},
+    notoriety: 0,
+    lastRobberyDay: -1,
+    lastWitnessDay: -1,
+    debt: 0,
     skillXp: zeroSkills(),
     bans: {},
   };
