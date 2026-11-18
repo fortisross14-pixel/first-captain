@@ -116,6 +116,9 @@ export class Hud {
         <div class="floaters" aria-hidden="true"></div>
         <div class="celebrate" aria-live="polite"></div>
         <div class="bubbles"></div>
+        <button class="decor-btn" hidden aria-label="Decor"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4l10-10-4-4L4 16z"/><path d="M13 7l4 4"/></svg><span>Decor</span></button>
+        <div class="decor-bar" hidden><div class="decor-title"></div><div class="decor-acts"></div></div>
+        <div class="swatch-pop" hidden><div class="swatch-sheet"><h3></h3><div class="swatch-opts"></div></div></div>
         <div class="pie" hidden><div class="pie-ring"></div><div class="pie-card"></div></div>
         <div class="panel gs ruled" hidden>
           <h2></h2>
@@ -139,6 +142,7 @@ export class Hud {
               <div class="opt"><span>Sound</span><button class="sound-toggle"></button></div>
               <div class="opt"><span>Graphics</span><button class="quality-toggle"></button></div>
               <div class="opt"><span>Save the game</span><button class="save">Save</button></div>
+              <div class="opt"><span>Install as an app</span><button class="install-btn">Install</button></div>
               <div class="opt"><span>Leave Saltwharf for now</span><button class="quit">Save &amp; quit to title</button></div>
             </div>
             <div class="actions">
@@ -206,7 +210,8 @@ export class Hud {
       sfx('flip');
       window.setTimeout(() => this.onPeople?.(), 220);
     });
-    this.q('.list-close').addEventListener('click', () => (this.q('.listsheet').hidden = true));
+    this.q('.list-close').addEventListener('click', () => this.closeList());
+    this.q('.decor-btn').addEventListener('click', () => this.onDecor?.());
     const mapBtn = this.q('.map-btn');
     mapBtn.addEventListener('click', () => {
       play(mapBtn, 'flip', 800);
@@ -226,6 +231,7 @@ export class Hud {
     this.q('.sound-toggle').addEventListener('click', () => this.onSound && (this.q('.sound-toggle').textContent = this.onSound()));
     this.q('.quality-toggle').addEventListener('click', () => this.onQuality && (this.q('.quality-toggle').textContent = this.onQuality()));
     this.q('.journal .save').addEventListener('click', () => this.onSave());
+    this.q('.install-btn').addEventListener('click', () => this.onInstall?.());
     this.q('.journal .quit').addEventListener('click', () => this.onQuit());
   }
 
@@ -281,6 +287,47 @@ export class Hud {
 
   renderJournal: (() => void) | null = null;
   onBag: (() => void) | null = null;
+  onDecor: (() => void) | null = null;
+
+  set decorButton(v: boolean) {
+    this.q('.decor-btn').hidden = !v;
+  }
+
+  /** The decor bar: a title and buttons; null hides it. */
+  decorBar(title: string | null, actions: Action[] = []): void {
+    const bar = this.q('.decor-bar');
+    bar.hidden = title === null;
+    this.q('.dock').classList.toggle('decor-hide', title !== null);
+    if (title === null) return;
+    bar.querySelector('.decor-title')!.textContent = title;
+    bar.querySelector('.decor-acts')!.replaceChildren(...actions.map((a) => {
+      const b = document.createElement('button');
+      b.textContent = a.label;
+      b.disabled = !!a.disabled;
+      if (a.primary) b.classList.add('primary');
+      b.addEventListener('click', () => a.onClick());
+      return b;
+    }));
+  }
+
+  /** A row of colour swatches; tap one and it closes. */
+  pickColor(title: string, colors: number[], current: number, onPick: (c: number) => void): void {
+    const pop = this.q('.swatch-pop');
+    pop.querySelector('h3')!.textContent = title;
+    pop.querySelector('.swatch-opts')!.replaceChildren(...colors.map((c) => {
+      const b = document.createElement('button');
+      b.className = `swatch${c === current ? ' on' : ''}`;
+      b.style.background = `#${c.toString(16).padStart(6, '0')}`;
+      b.addEventListener('click', () => {
+        pop.hidden = true;
+        onPick(c);
+      });
+      return b;
+    }));
+    pop.onclick = (e) => { if (e.target === pop) pop.hidden = true; };
+    pop.hidden = false;
+  }
+  onInstall: (() => void) | null = null;
   onMap: ((view: 'london' | 'district') => void) | null = null;
 
   /** The map: an SVG, a card for what you tapped, and a button to go there. */
@@ -325,6 +372,7 @@ export class Hud {
 
   closeList(): void {
     this.q('.listsheet').hidden = true;
+    this.onClosed?.();
   }
 
   /** A list of rows with buttons, used for shops and the bag. Calling it again re-renders in place. */
@@ -533,9 +581,14 @@ export class Hud {
     panel.hidden = false;
   }
 
+  /** Something was closed: a good moment to save. */
+  onClosed: (() => void) | null = null;
+
   hidePlace(): void {
+    const was = !this.q('.panel').hidden || !this.q('.pie').hidden;
     this.q('.panel').hidden = true;
     this.q('.pie').hidden = true;
+    if (was) this.onClosed?.();
   }
 
   /**
@@ -613,6 +666,25 @@ export class Hud {
     render(items, null);
     pie.onclick = () => this.hidePlace();
     pie.hidden = false;
+  }
+
+  /** A Sims-style bubble with an icon: what you said, or how they took it. */
+  iconBubble(x: number, y: number, what: string, tone: 'mine' | 'good' | 'bad'): void {
+    const ICON: Record<string, string> = {
+      chat: PIE_ICONS.talk, joke: '<circle cx="12" cy="12" r="8"/><path d="M8 14c1.2 2 6.8 2 8 0M9 10h.01M15 10h.01"/>', gossip: '<path d="M4 7h12v7H9l-3 3v-3H4z"/><path d="M18 9h2v7h-2v3l-3-3"/>',
+      compliment: '<path d="M12 3l2.5 5.5 6 .7-4.5 4 1.3 6-5.3-3-5.3 3 1.3-6-4.5-4 6-.7z"/>', flirt: PIE_ICONS.romance, debate: '<path d="M4 19h16M6 19V9l6-5 6 5v10M10 19v-5h4v5"/>',
+      brag: '<path d="M6 20V10l3-3 3 3 3-3 3 3v10z"/>', confide: '<path d="M12 4a6 6 0 0 0-6 6v3l-2 3h16l-2-3v-3a6 6 0 0 0-6-6zM10 19a2 2 0 0 0 4 0"/>',
+      business: PIE_ICONS.business, gift: PIE_ICONS.favour, insult: PIE_ICONS.mean,
+      love: '<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" fill="currentColor"/>', good: '<path d="M5 12l4.5 4.5L19 7"/>',
+      bad: '<path d="M7 17c1.5-2.5 8.5-2.5 10 0M9 10h.01M15 10h.01"/><circle cx="12" cy="12" r="8"/>', angry: '<path d="M13 3 6 13h5l-1 8 7-10h-5z" fill="currentColor"/>',
+    };
+    const b = document.createElement('div');
+    b.className = `ibubble ${tone}`;
+    b.innerHTML = `<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICON[what] ?? PIE_ICONS.talk}</svg>`;
+    b.style.left = `${Math.max(40, Math.min(window.innerWidth - 40, x))}px`;
+    b.style.top = `${Math.max(90, y)}px`;
+    this.q('.bubbles').appendChild(b);
+    setTimeout(() => b.remove(), 1800);
   }
 
   /** A speech bubble at a screen position, for a passer-by's greeting. */

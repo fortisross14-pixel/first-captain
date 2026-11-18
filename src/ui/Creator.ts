@@ -17,10 +17,11 @@ const NAMES: Record<Gender, string[]> = {
 
 const hex = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
 
-/** Character creation: name, gender, attraction, look and five skill points. */
+/** Character creation in two steps: who you are (rows that open pickers), then five skill points. */
 export class Creator {
   private readonly el: HTMLElement;
   private readonly draft: Character;
+  private step: 1 | 2 = 1;
 
   constructor(root: HTMLElement, private readonly onChange: (c: Character) => void, onDone: (c: Character) => void, onBack: () => void) {
     this.draft = {
@@ -34,45 +35,44 @@ export class Creator {
       },
       skills: { study: 0, strength: 0, arts: 0, charisma: 0, cunning: 0, occult: 0 },
     };
-
-    const swatches = (name: string, colors: number[]) =>
-      `<div class="swatches" data-field="${name}">${colors
-        .map((c) => `<button class="swatch" data-value="${c}" style="background:${hex(c)}" aria-label="${name} ${hex(c)}"></button>`)
-        .join('')}</div>`;
-    const seg = (name: string, opts: [string, string][]) =>
-      `<div class="seg" data-field="${name}">${opts.map(([v, l]) => `<button data-value="${v}">${l}</button>`).join('')}</div>`;
-
+    const row = (field: string, label: string) => `<button class="crow" data-row="${field}"><span class="lbl">${label}</span><span class="val" data-val="${field}"></span><span class="chev">›</span></button>`;
     root.insertAdjacentHTML(
       'beforeend',
       `<div class="creator">
         <div class="creator-sheet">
-          <h2>Who are you?</h2>
-          <p class="lead">You step off the train at London Bridge with one trunk and your late aunt's letter.</p>
-          <div class="row two">
-            <label>First name<input name="first" maxlength="16" autocomplete="off"></label>
-            <label>Surname<input name="last" maxlength="16" autocomplete="off" placeholder="Hester's family name"></label>
+          <div class="step step1">
+            <h2>Who are you?</h2>
+            <p class="lead">You step off the train at London Bridge with one trunk and your late aunt's letter.</p>
+            <div class="row two">
+              <label>First name<input name="first" maxlength="16" autocomplete="off"></label>
+              <label>Surname<input name="last" maxlength="16" autocomplete="off" placeholder="Hester's family name"></label>
+            </div>
+            <div class="crows">
+              ${row('gender', 'Gender')}${row('attraction', 'Attracted to')}${row('skin', 'Skin')}${row('hair', 'Hair colour')}${row('hairStyle', 'Hair')}
+              ${row('coat', 'Coat')}${row('skirt', 'Clothing')}${row('hat', 'Hat')}${row('build', 'Build')}
+            </div>
+            <div class="creator-actions">
+              <button class="back">Back</button>
+              <button class="primary next">Next: your skills</button>
+            </div>
           </div>
-          <div class="row"><span class="lbl">Gender</span>${seg('gender', [['man', 'Man'], ['woman', 'Woman']])}</div>
-          <div class="row"><span class="lbl">Attracted to</span>${seg('attraction', [['men', 'Men'], ['women', 'Women'], ['both', 'Both']])}</div>
-          <div class="row"><span class="lbl">Skin</span>${swatches('skin', SKIN)}</div>
-          <div class="row"><span class="lbl">Hair</span>${swatches('hair', HAIR)}</div>
-          <div class="row"><span class="lbl">Coat</span>${swatches('coat', COAT)}</div>
-          <div class="row"><span class="lbl">Clothing</span>${seg('skirt', [['0', 'Trousers'], ['1', 'Skirt']])}</div>
-          <div class="row"><span class="lbl">Hair</span>${seg('hairStyle', [['short', 'Short'], ['long', 'Long'], ['bun', 'Bun'], ['curls', 'Curls'], ['bald', 'Bald']])}</div>
-          <div class="row"><span class="lbl">Hat</span>${seg('hat', HATS.map((h) => [h, HAT_NAMES[h]] as [string, string]))}</div>
-          <div class="row"><span class="lbl">Build</span>${seg('build', BUILDS.map((b) => [String(b.v), b.name] as [string, string]))}</div>
-          <h3>Skills <span class="points"></span></h3>
-          <div class="skills">${SKILLS.map(
-            (s) => `<div class="skill" data-skill="${s}">
-              <div><div class="sname">${SKILL_INFO[s].name}</div><div class="sblurb">${SKILL_INFO[s].blurb}</div></div>
-              <div class="stepper"><button class="minus" aria-label="Lower ${SKILL_INFO[s].name}">−</button><span class="val">0</span><button class="plus" aria-label="Raise ${SKILL_INFO[s].name}">+</button></div>
-            </div>`,
-          ).join('')}</div>
-          <div class="creator-actions">
-            <button class="back">Back</button>
-            <button class="primary begin" disabled>Begin</button>
+          <div class="step step2" hidden>
+            <h2>What can you do?</h2>
+            <p class="lead">Five points to spend. Skills grow with practice; nothing here locks you into a path.</p>
+            <h3>Skills <span class="points"></span></h3>
+            <div class="skills">${SKILLS.map(
+              (s) => `<div class="skill" data-skill="${s}">
+                <div><div class="sname">${SKILL_INFO[s].name}</div><div class="sblurb">${SKILL_INFO[s].blurb}</div></div>
+                <div class="stepper"><button class="minus" aria-label="Lower ${SKILL_INFO[s].name}">−</button><span class="val">0</span><button class="plus" aria-label="Raise ${SKILL_INFO[s].name}">+</button></div>
+              </div>`,
+            ).join('')}</div>
+            <div class="creator-actions">
+              <button class="back2">Back</button>
+              <button class="primary begin" disabled>Begin</button>
+            </div>
           </div>
         </div>
+        <div class="picker" hidden><div class="picker-sheet"><h3></h3><div class="picker-opts"></div></div></div>
       </div>`,
     );
     this.el = root.querySelector('.creator') as HTMLElement;
@@ -81,40 +81,91 @@ export class Creator {
     first.value = this.draft.first;
     first.addEventListener('input', () => { this.draft.first = first.value.trim(); this.refresh(); });
     last.addEventListener('input', () => { this.draft.last = last.value.trim(); this.refresh(); });
-
-    this.el.querySelectorAll<HTMLElement>('.swatches').forEach((group) => {
-      group.addEventListener('click', (e) => {
-        const b = (e.target as HTMLElement).closest('button');
-        if (!b) return;
-        const field = group.dataset.field as 'skin' | 'hair' | 'coat';
-        this.draft.look[field] = Number(b.dataset.value);
-        this.refresh();
-      });
-    });
-    this.el.querySelectorAll<HTMLElement>('.seg').forEach((group) => {
-      group.addEventListener('click', (e) => {
-        const b = (e.target as HTMLElement).closest('button');
-        if (!b) return;
-        this.setField(group.dataset.field!, b.dataset.value!);
-        this.refresh();
-      });
-    });
-    this.el.querySelectorAll<HTMLElement>('.skill').forEach((row) => {
-      const id = row.dataset.skill as SkillId;
-      row.querySelector('.minus')!.addEventListener('click', () => {
+    this.el.querySelectorAll<HTMLButtonElement>('.crow').forEach((b) => b.addEventListener('click', () => this.openPicker(b.dataset.row!)));
+    const picker = this.el.querySelector('.picker') as HTMLElement;
+    picker.addEventListener('click', (e) => { if (e.target === picker) picker.hidden = true; });
+    this.el.querySelectorAll<HTMLElement>('.skill').forEach((r) => {
+      const id = r.dataset.skill as SkillId;
+      r.querySelector('.minus')!.addEventListener('click', () => {
         if (this.draft.skills[id] > 0) this.draft.skills[id]--;
         this.refresh();
       });
-      row.querySelector('.plus')!.addEventListener('click', () => {
+      r.querySelector('.plus')!.addEventListener('click', () => {
         if (this.pointsLeft > 0 && this.draft.skills[id] < MAX_SKILL) this.draft.skills[id]++;
         this.refresh();
       });
     });
     this.el.querySelector('.back')!.addEventListener('click', onBack);
+    this.el.querySelector('.next')!.addEventListener('click', () => this.goStep(2));
+    this.el.querySelector('.back2')!.addEventListener('click', () => this.goStep(1));
     this.el.querySelector('.begin')!.addEventListener('click', () => {
       if (this.valid) onDone(structuredClone(this.draft));
     });
     this.refresh();
+  }
+
+  private goStep(n: 1 | 2): void {
+    this.step = n;
+    (this.el.querySelector('.step1') as HTMLElement).hidden = n !== 1;
+    (this.el.querySelector('.step2') as HTMLElement).hidden = n !== 2;
+    this.refresh();
+  }
+
+  /** Options for each row: colour swatches or named choices. */
+  private options(field: string): { value: string; label: string; color?: number }[] {
+    const sw = (a: number[]) => a.map((c) => ({ value: String(c), label: '', color: c }));
+    switch (field) {
+      case 'gender': return [{ value: 'man', label: 'Man' }, { value: 'woman', label: 'Woman' }];
+      case 'attraction': return [{ value: 'men', label: 'Men' }, { value: 'women', label: 'Women' }, { value: 'both', label: 'Both' }];
+      case 'skin': return sw(SKIN);
+      case 'hair': return sw(HAIR);
+      case 'coat': return sw(COAT);
+      case 'hairStyle': return [['short', 'Short'], ['long', 'Long'], ['bun', 'Bun'], ['curls', 'Curls'], ['bald', 'Bald']].map(([value, label]) => ({ value, label }));
+      case 'skirt': return [{ value: '0', label: 'Trousers' }, { value: '1', label: 'Skirt' }];
+      case 'hat': return HATS.map((h) => ({ value: h, label: HAT_NAMES[h] }));
+      case 'build': return BUILDS.map((b) => ({ value: String(b.v), label: b.name }));
+      default: return [];
+    }
+  }
+
+  private current(field: string): string {
+    const d = this.draft;
+    switch (field) {
+      case 'gender': return d.gender;
+      case 'attraction': return d.attraction;
+      case 'skin': return String(d.look.skin);
+      case 'hair': return String(d.look.hair);
+      case 'coat': return String(d.look.coat);
+      case 'hairStyle': return d.look.hairStyle ?? (d.look.skirt ? 'bun' : 'short');
+      case 'skirt': return d.look.skirt ? '1' : '0';
+      case 'hat': return d.look.hat;
+      case 'build': return String(d.look.build ?? 1);
+      default: return '';
+    }
+  }
+
+  private openPicker(field: string): void {
+    const picker = this.el.querySelector('.picker') as HTMLElement;
+    const label = (this.el.querySelector(`[data-row="${field}"] .lbl`) as HTMLElement).textContent ?? '';
+    picker.querySelector('h3')!.textContent = label;
+    const box = picker.querySelector('.picker-opts') as HTMLElement;
+    const cur = this.current(field);
+    box.className = `picker-opts${this.options(field)[0]?.color !== undefined ? ' swatches' : ''}`;
+    box.replaceChildren(...this.options(field).map((o) => {
+      const b = document.createElement('button');
+      b.className = `${o.color !== undefined ? 'swatch' : 'choice'}${o.value === cur ? ' on' : ''}`;
+      if (o.color !== undefined) {
+        b.style.background = hex(o.color);
+        b.setAttribute('aria-label', `${label} ${hex(o.color)}`);
+      } else b.textContent = o.label;
+      b.addEventListener('click', () => {
+        this.setField(field, o.value);
+        picker.hidden = true;
+        this.refresh();
+      });
+      return b;
+    }));
+    picker.hidden = false;
   }
 
   private setField(field: string, value: string): void {
@@ -134,6 +185,7 @@ export class Creator {
         }
       }
     } else if (field === 'attraction') d.attraction = value as Attraction;
+    else if (field === 'skin' || field === 'hair' || field === 'coat') d.look[field] = Number(value);
     else if (field === 'skirt') d.look.skirt = value === '1';
     else if (field === 'hat') d.look.hat = value as Look['hat'];
     else if (field === 'build') d.look.build = Number(value);
@@ -150,17 +202,12 @@ export class Creator {
 
   private refresh(): void {
     const d = this.draft;
-    const mark = (field: string, value: string) =>
-      this.el.querySelectorAll<HTMLButtonElement>(`[data-field="${field}"] button`).forEach((b) => b.classList.toggle('on', b.dataset.value === value));
-    mark('gender', d.gender);
-    mark('attraction', d.attraction);
-    mark('skin', String(d.look.skin));
-    mark('hair', String(d.look.hair));
-    mark('coat', String(d.look.coat));
-    mark('skirt', d.look.skirt ? '1' : '0');
-    mark('hat', d.look.hat);
-    mark('build', String(d.look.build ?? 1));
-    mark('hairStyle', d.look.hairStyle ?? (d.look.skirt ? 'bun' : 'short'));
+    for (const el of this.el.querySelectorAll<HTMLElement>('[data-val]')) {
+      const f = el.dataset.val!;
+      const opt = this.options(f).find((o) => o.value === this.current(f));
+      if (opt?.color !== undefined) el.innerHTML = `<i class="dot" style="background:${hex(opt.color)}"></i>`;
+      else el.textContent = opt?.label ?? '';
+    }
     for (const s of SKILLS) {
       const row = this.el.querySelector(`[data-skill="${s}"]`)!;
       row.querySelector('.val')!.textContent = String(d.skills[s]);
@@ -169,9 +216,13 @@ export class Creator {
     }
     const left = this.pointsLeft;
     this.el.querySelector('.points')!.textContent = left > 0 ? `${left} point${left === 1 ? '' : 's'} to place` : 'All points placed';
+    const next = this.el.querySelector('.next') as HTMLButtonElement;
+    next.disabled = !d.first || !d.last;
+    next.textContent = !d.first || !d.last ? 'Name yourself first' : 'Next: your skills';
     const begin = this.el.querySelector('.begin') as HTMLButtonElement;
     begin.disabled = !this.valid;
-    begin.textContent = !d.first || !d.last ? 'Name yourself to begin' : left > 0 ? `Place ${left} more point${left === 1 ? '' : 's'}` : 'Begin';
+    begin.textContent = left > 0 ? `Place ${left} more point${left === 1 ? '' : 's'}` : 'Begin';
+    this.el.classList.toggle('on-step2', this.step === 2);
     this.onChange(d);
   }
 

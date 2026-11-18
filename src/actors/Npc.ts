@@ -90,6 +90,20 @@ export class Npc {
 
   /** Moves toward the current stop. `walk` false snaps there (when the player can't see). */
   follow(stop: Stop | null, walk: boolean): void {
+    // Going inside somewhere (the pub, the chapel): walk to its door and vanish there.
+    if (stop?.inside) {
+      const key = `in:${stop.inside}`;
+      if (key === this.stopKey || this.held || this.visiting) return;
+      this.stopKey = key;
+      this.act = null;
+      const root = this.walker.rig.root;
+      const door = this.grid.nearestWalkable(stop.x, stop.z, 3) ?? { x: stop.x, z: stop.z };
+      if (!walk || !root.visible) {
+        root.visible = false;
+        this.walker.teleport(this.grid, door.x + 0.5, door.z + 0.5);
+      } else this.walker.walkTo(door, () => (root.visible = false));
+      return;
+    }
     this.act = stop?.act ?? null;
     const key = stop ? `${stop.x},${stop.z}` : 'home';
     if (key === this.stopKey || this.held || this.visiting) return;

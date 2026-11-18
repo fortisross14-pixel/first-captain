@@ -1,0 +1,15 @@
+{
+  "name": "The Pale Lamps",
+  "short_name": "Pale Lamps",
+  "description": "A dark life-sim RPG in a fictional Victorian London, 1871.",
+  "start_url": "/first-captain/",
+  "scope": "/first-captain/",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#060a14",
+  "theme_color": "#060a14",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

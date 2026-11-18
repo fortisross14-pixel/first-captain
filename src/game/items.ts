@@ -91,6 +91,13 @@ export const ITEMS: Record<string, ItemDef> = {
   hwatch: { id: 'hwatch', name: 'Hester\'s pocket watch', price: 0, blurb: 'Silver, dented, keeps poor time. It stops ticking near anything unnatural.' },
   jmedal: { id: 'jmedal', name: 'A seaman\'s medal', price: 0.3, blurb: 'Engraved: "J. MERROW, BRIG KITTIWAKE, FOR GALLANTRY". Pawned in 1869 by a widow.' },
   dreadful: { id: 'dreadful', name: 'Penny dreadful', price: 0.01, use: { social: 5 }, verb: 'Read', blurb: '"Varney the Vampyre, part XLI." Lurid, cheap, impossible to put down.' },
+  armchair: { id: 'armchair', name: 'Button-back armchair', price: 0.6, upgrade: true, furniture: true, blurb: 'Comfort; sit an hour for Rest and a little Social.' },
+  wardrobe: { id: 'wardrobe', name: 'Wardrobe', price: 0.8, upgrade: true, furniture: true, blurb: 'Comfort; your clothes wear out more slowly.' },
+  plant: { id: 'plant', name: 'Aspidistra in a pot', price: 0.1, upgrade: true, furniture: true, blurb: 'Comfort, for a penny or two. Unkillable.' },
+  painting: { id: 'painting', name: 'Seascape in a frame', price: 0.35, upgrade: true, furniture: true, blurb: 'Comfort; it makes the room feel bigger.' },
+  clock: { id: 'clock', name: 'Wall clock', price: 0.5, upgrade: true, furniture: true, blurb: 'Comfort, and you wake on time.' },
+  lamp: { id: 'lamp', name: 'Oil lamp', price: 0.4, upgrade: true, furniture: true, blurb: 'Read after dark without candles.' },
+  cradle: { id: 'cradle', name: 'Cradle', price: 0.5, upgrade: true, furniture: true, blurb: 'For a baby; comfort for everyone else.' },
   // Second-hand furniture from Moss, for Hester's room.
   rug: { id: 'rug', name: 'Turkey rug', price: 0.4, upgrade: true, furniture: true, blurb: 'Comfort: the room tops up Social while you are home.' },
   curtains: { id: 'curtains', name: 'Velvet curtains', price: 0.35, upgrade: true, furniture: true, blurb: 'Comfort; and darker nights mean deeper sleep.' },
@@ -111,9 +118,9 @@ export interface Shop {
 
 export const SHOPS: Record<string, Shop> = {
   market: { name: 'Saltwharf Market', keeper: 'the stallholders', stock: ['potato', 'apple', 'bread', 'onion', 'eel', 'mutton', 'eelpie', 'meatpie', 'dreadful'], buys: 0 },
-  hester: { name: "Pell's Chandlery", keeper: 'Mrs. Pell', stock: ['candle', 'candle2', 'coal', 'bandage', 'tonic', 'mattress', 'chest'], buys: 0 },
+  hester: { name: "Pell's Chandlery", keeper: 'Mrs. Pell', stock: ['candle', 'candle2', 'coal', 'bandage', 'tonic', 'plant', 'mattress', 'chest'], buys: 0 },
   clothier: { name: 'Rag & Bone Clothiers', keeper: 'Lizzie Barlow', stock: ['work', 'sunday', 'coat', 'flatcap', 'bowler', 'bonnet', 'tophat', 'oilskin', 'woolcloak', 'cuff', 'bracelet', 'scarf', 'gloves', 'apron', 'boots'], buys: 0 },
-  pawnbroker: { name: 'Moss the Pawnbroker', keeper: 'Moss', stock: ['jmedal', 'stick', 'cudgel', 'knife', 'knuckles', 'locket', 'medal', 'rug', 'curtains', 'mirror', 'bookshelf', 'workbench'], buys: 0.4 },
+  pawnbroker: { name: 'Moss the Pawnbroker', keeper: 'Moss', stock: ['jmedal', 'stick', 'cudgel', 'knife', 'knuckles', 'locket', 'medal', 'rug', 'curtains', 'mirror', 'bookshelf', 'workbench', 'armchair', 'wardrobe', 'painting', 'clock', 'lamp', 'cradle'], buys: 0.4 },
 };
 
 /** Item slots: Strength makes for a bigger load. */

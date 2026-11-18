@@ -106,7 +106,11 @@ export class Dialogue {
     });
   }
 
+  /** Called whenever a conversation ends (the game saves then). */
+  onClose: (() => void) | null = null;
+
   close(): void {
+    if (!this.el.hidden) queueMicrotask(() => this.onClose?.());
     this.el.hidden = true;
     this.catcher.hidden = true;
     this.choicesEl.replaceChildren();

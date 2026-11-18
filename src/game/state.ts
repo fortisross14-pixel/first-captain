@@ -128,6 +128,8 @@ export interface GameState {
     taught: Record<string, Partial<Record<SkillId, number>>>;
     ancestors: { name: string; born: number; died: number; summary: string }[];
   };
+  /** Hester's room: where every piece of furniture stands, and the colours. */
+  home?: import('../world/furniture').HomeLayout;
   /** The main story and the Fog Clock. */
   story: import('./story').StoryState;
   /** Factions: deeds, membership, duty. */
@@ -229,18 +231,42 @@ export function newGame(character: Character): GameState {
   return s;
 }
 
-export function saveGame(state: GameState): boolean {
+/** Three save slots. The slot in play is remembered; old single saves move into slot 1. */
+export const SLOTS = [1, 2, 3] as const;
+const slotKey = (n: number) => `${KEY}-slot${n}`;
+let slot = 1;
+try {
+  const old = localStorage.getItem(KEY);
+  if (old && !localStorage.getItem(slotKey(1))) localStorage.setItem(slotKey(1), old);
+  if (old) localStorage.removeItem(KEY);
+  slot = Number(localStorage.getItem('pale-lamps-slot')) || 1;
+} catch {
+  /* storage unavailable */
+}
+
+export const currentSlot = () => slot;
+export function useSlot(n: number): void {
+  slot = n;
   try {
-    localStorage.setItem(KEY, JSON.stringify(state));
+    localStorage.setItem('pale-lamps-slot', String(n));
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+export function saveGame(state: GameState, n = slot): boolean {
+  try {
+    (state as GameState & { savedAt?: number }).savedAt = Date.now();
+    localStorage.setItem(slotKey(n), JSON.stringify(state));
     return true;
   } catch {
     return false;
   }
 }
 
-export function loadGame(): GameState | null {
+export function loadGame(n = slot): GameState | null {
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = localStorage.getItem(slotKey(n));
     if (!raw) return null;
     const s = JSON.parse(raw) as GameState;
     return s && s.version === 1 && s.character ? upgrade(s) : null;
@@ -249,12 +275,28 @@ export function loadGame(): GameState | null {
   }
 }
 
-export function deleteSave(): void {
+export function deleteSave(n = slot): void {
   try {
-    localStorage.removeItem(KEY);
+    localStorage.removeItem(slotKey(n));
   } catch {
     /* storage unavailable */
   }
+}
+
+/** What's in each slot, for the title screen. */
+export function slotInfo(): ({ slot: number; name: string; day: number; money: number; savedAt: number; age: number } | null)[] {
+  return SLOTS.map((n) => {
+    const s = loadGame(n) as (GameState & { savedAt?: number }) | null;
+    if (!s) return null;
+    const day = Math.floor((s.minutes + 420) / 1440);
+    return { slot: n, name: `${s.character.first} ${s.character.last}`, day, money: s.money, savedAt: s.savedAt ?? 0, age: Math.floor((day - (s.character.birth ?? -504)) / 24) };
+  });
+}
+
+/** The slot saved most recently, for Continue. */
+export function latestSlot(): number | null {
+  const all = slotInfo().filter(Boolean) as NonNullable<ReturnType<typeof slotInfo>[number]>[];
+  return all.length ? all.sort((a, b) => b.savedAt - a.savedAt)[0].slot : null;
 }
 
 export function fullName(c: Character): string {

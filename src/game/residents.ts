@@ -13,6 +13,8 @@ export interface Stop {
   x: number;
   z: number;
   act?: Activity;
+  /** Inside a building (the pub, the chapel): off the street, and shown in there. */
+  inside?: string;
 }
 
 export interface Resident extends Person {

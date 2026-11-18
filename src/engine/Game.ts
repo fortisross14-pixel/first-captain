@@ -37,15 +37,17 @@ import { xpToNext } from '../game/jobs';
 import { playBar } from '../minigames/bar';
 import { ENEMIES, runFight, type Enemy } from '../minigames/fight';
 import { playCargo } from '../minigames/cargo';
-import { NEED_NAMES, SKILLS, SKILL_INFO, deleteSave, loadGame, newGame, saveGame, type Character, type GameState, type LocationId, type NeedId } from '../game/state';
+import { NEED_NAMES, SKILLS, SKILL_INFO, currentSlot, deleteSave, latestSlot, loadGame, newGame, saveGame, slotInfo, useSlot, type Character, type GameState, type LocationId, type NeedId } from '../game/state';
 import { Creator } from '../ui/Creator';
 import { Dialogue, type Line } from '../ui/Dialogue';
 import { Hud, type Action, type ListRow, type PieItem } from '../ui/Hud';
 import { Title } from '../ui/Title';
+import { installPrompt, isIOSInstallable, runInstall } from '../pwa';
 import { buildHesterRoom } from '../world/hesterRoom';
 import type { Location, Place } from '../world/location';
 import { buildSaltwharf } from '../world/saltwharf';
 import { makeDoorIcon } from '../world/doorIcon';
+import { FLOOR_COLORS, FURNITURE, WALL_COLORS, defaultLayout, footprint, type FurnitureType } from '../world/furniture';
 import { INTERIORS, buildInterior, isOpen } from '../world/interior';
 import { OLD_HOMES } from '../world/saltwharfHomes';
 import { Portraits } from '../ui/Portraits';
@@ -93,6 +95,9 @@ export class Game {
   private homeNpcs: Npc[] = [];
   /** Keepers behind their counters, one per interior. */
   private keepers = new Map<string, Npc>();
+  /** The regulars actually in the Copper Cup tonight. */
+  private patrons: Npc[] = [];
+  private patronTimer = 0;
   private readonly portraits: Portraits;
   private readonly doorIcons: { sprite: THREE.Sprite; y: number; loc: LocationId; place: string; to: [LocationId, string] }[] = [];
   private ambientTimer = 4;
@@ -184,6 +189,9 @@ export class Game {
     this.hud.renderJournal = () => this.renderJournal();
     this.hud.onBag = () => this.openBag();
     this.hud.onPeople = () => this.openContacts();
+    this.hud.onDecor = () => this.startDecor();
+    this.hud.onClosed = () => this.save();
+    this.hud.onInstall = () => void runInstall().then(() => { if (!installPrompt && !isIOSInstallable()) this.hud.toast('Use your browser menu: "Install app" or "Add to Home Screen".', 4000); });
     this.hud.onMap = (v) => this.openMap(v);
     const soundLabel = () => `Sound: ${this.sound.enabled ? 'on' : 'off'}`;
     const qualityLabel = (q: string) => `Graphics: ${q}`;
@@ -203,6 +211,8 @@ export class Game {
       return `${qualityLabel(next)} (after reload)`;
     };
     this.dialogue = new Dialogue(container);
+    this.dialogue.onClose = () => this.save();
+    window.setInterval(() => this.save(), 20000);
     this.portraits = new Portraits(this.renderer);
     this.dialogue.portraitFor = (name) => this.portraitOf(name);
     // Ways in and out are marked: the stairs down from Hester's room, and her door from the street.
@@ -235,12 +245,19 @@ export class Game {
     this.hud.visible = false;
     this.title = new Title(
       this.container,
-      loadGame() !== null,
-      () => {
-        const s = loadGame();
+      slotInfo(),
+      latestSlot(),
+      (n) => {
+        useSlot(n);
+        const s = loadGame(n);
         if (s) void this.startGame(s);
       },
-      () => this.showCreator(),
+      (n) => {
+        useSlot(n);
+        this.showCreator();
+      },
+      (n) => deleteSave(n),
+      { can: () => !!installPrompt || isIOSInstallable(), run: () => runInstall() },
     );
   }
 
@@ -312,6 +329,8 @@ export class Game {
     this.rig.configure(this.location.camera);
     this.rig.snap(x, z + this.location.camera.offsetZ);
     if (this.state) this.state.location = id;
+    if (this.decor && id !== 'hesterRoom') this.endDecor();
+    this.hud.decorButton = id === 'hesterRoom';
   }
 
   private async goTo(id: LocationId, entry: string): Promise<void> {
@@ -341,6 +360,7 @@ export class Game {
     const ndc = new THREE.Vector2(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
     this.raycaster.setFromCamera(ndc, this.rig.camera);
 
+    if (this.decorTap()) return;
     for (const n of this.npcs) n.held = false;
     // The door icons: a generous target; tapping one walks you there and through.
     for (const d of this.doorIcons) {
@@ -402,7 +422,7 @@ export class Game {
     }
     if (this.location.id !== 'saltwharf') {
       const keeper = this.location.id.startsWith('int:') ? this.keepers.get(this.location.id.slice(4)) : undefined;
-      const vis = [...this.homeNpcs, ...(keeper ? [keeper] : [])].filter((n) => n.visible && n.walker.rig.root.parent === this.location.scene);
+      const vis = [...this.homeNpcs, ...this.patrons, ...(keeper ? [keeper] : [])].filter((n) => n.visible && n.walker.rig.root.parent === this.location.scene);
       const hit = this.raycaster.intersectObjects(vis.map((n) => n.walker.rig.root), true)[0];
       if (hit) {
         let o: THREE.Object3D | null = hit.object;
@@ -728,7 +748,13 @@ export class Game {
 
   private roomActions(place: Place, act: (label: string, fn: () => void | Promise<void>, opts?: Partial<Action>) => Action): Action[] {
     const s = this.state!;
-    switch (place.id) {
+    switch (place.id.split('#')[0]) {
+      case 'armchair':
+        return [act('Sit by the window (1 hour)', () => { simulateNeeds(s.needs, 1, 'awake'); addNeed(s.needs, 'rest', 8); addNeed(s.needs, 'social', 3); this.clock.minutes += 60; this.hud.toast('An hour in the armchair, watching the river. Rest +8.'); }, { primary: true })];
+      case 'plant':
+        return [act(this.usedToday('plant') ? 'Watered today' : 'Water the aspidistra', () => { this.markUsed('plant'); this.hud.toast('It does not need it, and does not thank you.'); }, { disabled: this.usedToday('plant') })];
+      case 'painting': case 'clock': case 'wardrobe': case 'lamp': case 'cradle': case 'rug': case 'curtains':
+        return [act('Rearrange the room (Decor)', () => this.startDecor(), { primary: true })];
       case 'bed':
         return [
           act('Sleep until morning', () => this.sleep('morning'), { primary: true }),
@@ -742,14 +768,14 @@ export class Game {
       }
       case 'table': {
         const night = this.clock.hour >= 18 || this.clock.hour < 7;
-        const candle = s.inventory.some((i) => i.id === 'candle' || i.id === 'candle2');
+        const candle = s.inventory.some((i) => i.id === 'candle' || i.id === 'candle2') || this.placed('lamp');
         return [
           act(night ? (candle ? 'Read by candlelight (1 hour)' : 'Read (needs a candle after dark)') : 'Read by the window (1 hour)', () => this.read(this.member('lantern')), { primary: true, disabled: night && !candle }),
           ...(this.member('lantern') && !s.factions.dutyDone ? [act('Write your essay for the Lantern Society (1 hour)', () => this.essay(), { primary: true })] : []),
         ];
       }
       case 'bookshelf':
-        return [act('Read from the shelf (1 hour)', () => this.read(true), { primary: true, disabled: (this.clock.hour >= 18 || this.clock.hour < 7) && !s.inventory.some((i) => i.id === 'candle' || i.id === 'candle2') })];
+        return [act('Read from the shelf (1 hour)', () => this.read(true), { primary: true, disabled: (this.clock.hour >= 18 || this.clock.hour < 7) && !s.inventory.some((i) => i.id === 'candle' || i.id === 'candle2') && !this.placed('lamp') })];
       case 'mirror':
         return [act(this.usedToday('mirror') ? 'Tidied for today' : 'Tidy yourself in the glass', () => { this.markUsed('mirror'); this.hud.toast('Hair flattened, collar straightened. You look like someone people might trust.'); }, { primary: true, disabled: this.usedToday('mirror') })];
       case 'workbench':
@@ -973,7 +999,7 @@ export class Game {
     const s = this.state!;
     const hour = this.clock.hour;
     const night = hour >= 18 || hour < 7;
-    if (night) {
+    if (night && !this.placed('lamp')) {
       const c = s.inventory.find((i) => i.id === 'candle') ?? s.inventory.find((i) => i.id === 'candle2');
       if (!c) return;
       if (c.id === 'candle2' && !this.usedToday('wax-half')) this.markUsed('wax-half');
@@ -1316,10 +1342,19 @@ export class Game {
     this.shadowTimer -= dt;
     const recheck = this.shadowTimer <= 0;
     if (recheck) this.shadowTimer = 0.5;
+    // Only so many people are about at once: the rest are at work, at home, or inside somewhere.
+    const STREET_CAP = 16;
+    let out = this.npcs.filter((n) => n.visible && !AUTHORED[n.res.id]).length;
     for (const n of this.npcs) {
-      n.follow(this.stopFor(n.res, hour), outside);
+      let stop = this.stopFor(n.res, hour);
+      if (stop && !stop.inside && !n.visible && !AUTHORED[n.res.id]) {
+        if (out >= STREET_CAP) stop = null;
+        else out++;
+      }
+      n.follow(stop, outside);
       n.update(dt, this.elapsed);
       if (recheck && this.player && n.visible) n.setShadow(this.dist(n) < 9);
+      void stop;
     }
     if (outside && this.mode === 'play' && !this.busy && !this.dialogue.open) {
       this.greetings();
@@ -1382,6 +1417,10 @@ export class Game {
     const st = varied ? null : st0;
     if (st && s.weather === 'rain' && ['grubb', 'hale', 'quill', 'ashby', 'lizzie'].includes(r.id) && st.act !== 'mend') return null;
     if (st && (s.life.confused[r.id] ?? -1) >= day) return { ...st, act: 'confused' };
+    // Most evenings drinkers are inside the Copper Cup, and the chapel-goers inside St. Botolph's.
+    const roll = (Math.sin((day + 3) * 4.17 + r.id.length * 9.3 + r.id.charCodeAt(0) * 0.7) + 1) / 2;
+    if (st && st.act === 'drink' && st.x >= 15 && st.x <= 22 && st.z <= 9 && roll < 0.65) return { ...st, inside: 'coppercup', x: 18, z: 8 };
+    if (st && st.act === 'read' && st.x <= 2 && st.z >= 10 && st.z <= 14) return { ...st, inside: 'church', x: 5, z: 34 };
     return st;
   }
 
@@ -2664,8 +2703,35 @@ export class Game {
     });
   }
 
+  /** Seat whoever is drinking in the Cup right now. */
+  private syncPatrons(): void {
+    const loc = this.locations['int:coppercup'];
+    const h = Math.floor(this.clock.hour);
+    const want = RESIDENTS.filter((r) => this.stopFor(r, h)?.inside === 'coppercup').slice(0, 6);
+    const ids = want.map((r) => r.id).join();
+    if (ids === this.patrons.map((p) => p.res.id).join()) return;
+    for (const p of this.patrons) p.walker.rig.root.removeFromParent();
+    const seats = [{ x: 0, z: 1 }, { x: 2, z: 1 }, { x: 3, z: 1 }, { x: 5, z: 1 }, { x: 6, z: 1 }, { x: 8, z: 2 }];
+    this.patrons = want.map((r, i) => {
+      const at = seats[i];
+      const n = new Npc({ ...r, home: at, schedule: [{ from: 0, to: 24, x: at.x, z: at.z, act: 'drink' }] }, loc.grid);
+      n.follow(n.res.schedule[0], false);
+      n.walker.faceToward({ x: Math.floor(at.x / 3) * 3 + 1.5, z: 1.6 }, true);
+      loc.scene.add(n.walker.rig.root);
+      return n;
+    });
+  }
+
   /** Who of your family is home right now; who is behind the counter. */
   private updateHome(dt: number): void {
+    if (this.location.id === 'int:coppercup' && this.state) {
+      this.patronTimer -= dt;
+      if (this.patronTimer <= 0) {
+        this.patronTimer = 3;
+        this.syncPatrons();
+      }
+      for (const p of this.patrons) p.update(dt, this.elapsed);
+    }
     if (this.location.id.startsWith('int:') && this.state) {
       const id = this.location.id.slice(4);
       const k = this.keepers.get(id);
@@ -3340,7 +3406,7 @@ export class Game {
   private wearOut(amount: number): void {
     const s = this.state!;
     const before = s.wear[s.outfit];
-    s.wear[s.outfit] = Math.max(0, before - amount);
+    s.wear[s.outfit] = Math.max(0, before - amount * (this.placed('wardrobe') ? 0.6 : 1));
     if (before >= 40 && s.wear[s.outfit] < 40) this.hud.toast(`Your ${OUTFIT_NAMES[s.outfit].toLowerCase()} is getting shabby. Lizzie mends clothes at Rag & Bone.`, 3800);
     if (before >= 15 && s.wear[s.outfit] < 15) this.hud.toast('Your clothes are in rags now. People notice, and not kindly.', 3800);
   }
@@ -3414,10 +3480,31 @@ export class Game {
     if (i.id === 'insult' && !out.success) this.note('wronged', npc.res.id);
     addNeed(s.needs, 'social', out.success ? 6 : 3);
     const xp = [...gainXp(s, i.skill, out.success ? 6 : 3)];
+    // Sims-style: icons in bubbles over both heads, then the results float up. No dialogue box.
     const names: Record<string, string> = { friendship: 'Friendship', romance: 'Romance', rivalry: 'Rivalry', business: 'Business' };
-    const delta = Object.entries(out.changes).filter(([, v]) => v).map(([k, v]) => `${names[k]} ${v! > 0 ? '+' : ''}${Math.round(v!)}`).join(' · ');
-    const hint = out.liked ? (out.success ? 'They liked that.' : 'They usually like that, just not today.') : out.disliked ? 'They did not like that.' : '';
-    await this.dialogue.say({ speaker: npc.res.name, text: [out.text, hint, delta, ...xp].filter(Boolean).join('\n') });
+    const head = (w: { position: THREE.Vector2 }, h = 1.95) => {
+      const v = new THREE.Vector3(w.position.x, h, w.position.y).project(this.rig.camera);
+      return { x: (v.x * 0.5 + 0.5) * window.innerWidth, y: (-v.y * 0.5 + 0.5) * window.innerHeight };
+    };
+    const me = head(this.player!);
+    const them = head(npc.walker);
+    this.hud.iconBubble(me.x, me.y, i.id, 'mine');
+    sfx('click');
+    await new Promise((r2) => setTimeout(r2, 650));
+    const mood2 = out.success ? (out.liked ? 'love' : 'good') : out.disliked ? 'angry' : 'bad';
+    this.hud.iconBubble(them.x, them.y, mood2, mood2 === 'love' || mood2 === 'good' ? 'good' : 'bad');
+    sfx(out.success ? 'chime' : 'bad');
+    await new Promise((r2) => setTimeout(r2, 500));
+    let k = 0;
+    for (const [m, v] of Object.entries(out.changes)) {
+      if (!v || Math.abs(v) < 0.5) continue;
+      const good = m === 'rivalry' ? v < 0 : v > 0;
+      this.hud.floater(`${v > 0 ? '+' : '−'}${Math.round(Math.abs(v))} ${names[m]}`, them.x, them.y - 10 - k * 22, good ? 'gain' : 'loss');
+      k++;
+    }
+    if (out.liked || out.disliked) this.hud.floater(out.disliked ? 'They didn\'t like that' : out.success ? 'They liked that' : 'Not today', them.x, them.y - 10 - k * 22, out.disliked || !out.success ? 'loss' : 'gain');
+    if (xp.length) this.hud.toast(xp.join(' '), 2500);
+    await new Promise((r2) => setTimeout(r2, 900));
     if (before.f < 30 && r.friendship >= 30) await this.hud.celebrate('friend', 'A new friend', npc.res.name, VOICES[npc.res.id].perk.replace(/^Friend: /, ''));
     if (before.ro < 30 && r.romance >= 30) await this.hud.celebrate('friend', 'Courting', npc.res.name, 'You can walk by the river together now.');
     if (npc.held) this.showPerson(npc);
@@ -4044,20 +4131,198 @@ export class Game {
   // Home and dress ----------------------------------------------------------
 
   /** Shows owned furniture in Hester's room and blocks the tiles it stands on. */
+  /** Furnish Hester's room from the saved layout; anything bought but not yet placed goes in. */
   private applyFurniture(): void {
     const s = this.state;
     const room = this.locations.hesterRoom;
-    if (!s || !room.extras) return;
-    for (const [id, x] of Object.entries(room.extras)) {
-      const have = owns(s, id);
-      x.obj.visible = have;
-      for (const t of x.tiles) (have ? room.grid.block(t.x, t.z) : room.grid.unblock(t.x, t.z));
+    if (!s || !room.furnish) return;
+    s.home ??= defaultLayout(s.owned);
+    for (const id of s.owned) {
+      const type = id as FurnitureType;
+      if (!FURNITURE[type] || s.home.items.some((i) => i.type === type)) continue;
+      const it = { uid: Math.max(0, ...s.home.items.map((i) => i.uid)) + 1, type, x: 0, z: 0, rot: 0, color: FURNITURE[type].colors[0], stored: true };
+      s.home.items.push(it);
+      const spot = this.freeSpot(it.type, it.rot, it.uid);
+      if (spot) Object.assign(it, spot, { stored: false });
     }
+    room.furnish(s.home, owns(s, 'cat'));
+    if (this.player && this.location === room && !room.grid.isWalkable(this.player.cell.x, this.player.cell.z)) {
+      const c = room.grid.nearestWalkable(this.player.cell.x, this.player.cell.z, 4);
+      if (c) this.player.teleport(room.grid, c.x + 0.5, c.z + 0.5);
+    }
+  }
+
+  // --- Decor: arrange Hester's room --------------------------------------------
+
+  private decor: { sel: number | null; moving: boolean } | null = null;
+  private decorRing: THREE.Mesh | null = null;
+
+  private startDecor(): void {
+    if (this.location.id !== 'hesterRoom' || this.busy) return;
+    this.hud.hidePlace();
+    this.player!.stop();
+    this.decor = { sel: null, moving: false };
+    this.hud.decorButton = false;
+    this.decorMenu();
+  }
+
+  private endDecor(): void {
+    this.decor = null;
+    this.decorRing?.removeFromParent();
+    this.hud.decorBar(null);
+    this.hud.decorButton = this.location.id === 'hesterRoom';
+    this.save();
+  }
+
+  private decorMenu(): void {
+    const s = this.state!;
+    const d = this.decor!;
+    const home = s.home!;
+    const stored = home.items.filter((i) => i.stored);
+    if (d.sel === null) {
+      this.decorRing?.removeFromParent();
+      this.hud.decorBar('Decor: tap a piece of furniture', [
+        { label: 'Wall colour', onClick: () => this.hud.pickColor('Walls', WALL_COLORS, home.wall, (c) => { home.wall = c; this.applyFurniture(); }) },
+        { label: 'Floor', onClick: () => this.hud.pickColor('Floorboards', FLOOR_COLORS, home.floor, (c) => { home.floor = c; this.applyFurniture(); }) },
+        { label: `Stored (${stored.length})`, disabled: !stored.length, onClick: () => this.decorStored() },
+        { label: 'Done', primary: true, onClick: () => this.endDecor() },
+      ]);
+      return;
+    }
+    const it = home.items.find((i) => i.uid === d.sel)!;
+    const def = FURNITURE[it.type];
+    this.showRing(it.uid);
+    this.hud.decorBar(d.moving ? `${def.name}: tap where it should go` : def.name, d.moving ? [
+      { label: 'Cancel', onClick: () => { d.moving = false; this.decorMenu(); } },
+    ] : [
+      { label: 'Move', primary: true, onClick: () => { d.moving = true; this.decorMenu(); } },
+      { label: 'Turn', disabled: def.kind !== 'floor', onClick: () => {
+        for (let k = 1; k <= 3; k++) {
+          const r = (it.rot + k) % 4;
+          if (this.canPlace(it.type, it.x, it.z, r, it.uid)) { it.rot = r; break; }
+        }
+        this.applyFurniture();
+        this.showRing(it.uid);
+      } },
+      { label: 'Colour', disabled: def.colors.length < 2, onClick: () => this.hud.pickColor(def.name, def.colors, it.color, (c) => { it.color = c; this.applyFurniture(); this.showRing(it.uid); }) },
+      { label: 'Put away', disabled: def.keep && it.type !== 'trunk' ? false : !!def.keep, onClick: () => { it.stored = true; d.sel = null; this.applyFurniture(); this.decorMenu(); } },
+      { label: def.keep ? 'Keep' : `Sell to Moss · £${(ITEMS[it.type]?.price ? Math.floor(ITEMS[it.type].price * 40) / 100 : 0).toFixed(2)}`, disabled: !!def.keep, onClick: () => {
+        s.money = Math.round((s.money + Math.floor((ITEMS[it.type]?.price ?? 0) * 40) / 100) * 100) / 100;
+        home.items = home.items.filter((x) => x !== it);
+        s.owned = s.owned.filter((x) => x !== it.type || home.items.some((y) => y.type === it.type));
+        sfx('coin');
+        d.sel = null;
+        this.applyFurniture();
+        this.decorMenu();
+      } },
+      { label: 'Back', onClick: () => { d.sel = null; this.decorMenu(); } },
+    ]);
+  }
+
+  private decorStored(): void {
+    const s = this.state!;
+    const rows: ListRow[] = s.home!.items.filter((i) => i.stored).map((it) => ({
+      label: FURNITURE[it.type].name,
+      sub: FURNITURE[it.type].text,
+      actions: [{ label: 'Place', onClick: () => {
+        const spot = this.freeSpot(it.type, it.rot, it.uid);
+        if (!spot) return this.hud.toast('There is no room for it. Put something else away first.');
+        Object.assign(it, spot, { stored: false });
+        this.hud.closeList();
+        this.applyFurniture();
+        this.decor = { sel: it.uid, moving: false };
+        this.decorMenu();
+      } }],
+    }));
+    this.hud.showList('In storage', 'Under the bed, behind the door, in the trunk\'s shadow', rows);
+  }
+
+  private showRing(uid: number): void {
+    const obj = this.locations.hesterRoom.objectFor?.(uid);
+    if (!obj) return;
+    if (!this.decorRing) {
+      this.decorRing = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.68, 28), new THREE.MeshBasicMaterial({ color: 0xf0d78a, transparent: true, opacity: 0.85, depthWrite: false }));
+      this.decorRing.rotation.x = -Math.PI / 2;
+    }
+    this.decorRing.position.set(obj.position.x, 0.04, obj.position.z);
+    const it = this.state!.home!.items.find((i) => i.uid === uid)!;
+    const def = FURNITURE[it.type];
+    this.decorRing.scale.setScalar(Math.max(def.w, def.d) * 0.85);
+    this.locations.hesterRoom.scene.add(this.decorRing);
+  }
+
+  /** In decor mode, taps select furniture or place the piece being moved. */
+  private decorTap(): boolean {
+    const d = this.decor;
+    if (!d || this.location.id !== 'hesterRoom') return false;
+    const s = this.state!;
+    if (d.moving && d.sel !== null) {
+      const p = new THREE.Vector3();
+      if (!this.raycaster.ray.intersectPlane(this.groundPlane, p)) return true;
+      const it = s.home!.items.find((i) => i.uid === d.sel)!;
+      const def = FURNITURE[it.type];
+      const turned = it.rot % 2 === 1;
+      const w = turned ? def.d : def.w;
+      const dd = turned ? def.w : def.d;
+      const x = Math.round(p.x - w / 2);
+      const z = def.kind === 'wall' ? it.z : Math.round(p.z - dd / 2);
+      if (this.canPlace(it.type, x, z, it.rot, it.uid)) {
+        it.x = x;
+        it.z = z;
+        d.moving = false;
+        sfx('drop');
+        this.applyFurniture();
+        this.decorMenu();
+      } else this.hud.toast('It won\'t fit there.', 1500);
+      return true;
+    }
+    const hits = this.raycaster.intersectObjects(this.location.tappables, true);
+    for (const h of hits) {
+      let o: THREE.Object3D | null = h.object;
+      while (o && o.userData.furniture === undefined) o = o.parent;
+      if (o) {
+        d.sel = o.userData.furniture as number;
+        sfx('click');
+        this.decorMenu();
+        return true;
+      }
+    }
+    return true;
+  }
+
+  private placed(type: FurnitureType): boolean {
+    return !!this.state?.home?.items.some((i) => i.type === type && !i.stored);
+  }
+
+  /** Can this piece stand here? Floor pieces need free tiles; wall pieces need free wall. */
+  private canPlace(type: FurnitureType, x: number, z: number, rot: number, uid: number): boolean {
+    const s = this.state!;
+    const def = FURNITURE[type];
+    const W = 7;
+    const D = 5;
+    const others = s.home!.items.filter((i) => !i.stored && i.uid !== uid);
+    if (def.kind === 'wall') {
+      if (x < 0 || x + def.w > W) return false;
+      return !others.some((o) => FURNITURE[o.type].kind === 'wall' && o.x < x + def.w && x < o.x + FURNITURE[o.type].w);
+    }
+    const tiles = footprint(type, x, z, rot);
+    if (tiles.some((t) => t.x < 0 || t.z < 0 || t.x >= W || t.z >= D)) return false;
+    if (def.kind === 'rug') return true;
+    const taken = new Set(others.filter((o) => FURNITURE[o.type].kind === 'floor').flatMap((o) => footprint(o.type, o.x, o.z, o.rot).map((t) => `${t.x},${t.z}`)));
+    // Keep the doorway, Pembleton's corner and the way to the door clear.
+    for (const k of ['0,1', '1,1', '5,2']) taken.add(k);
+    return !tiles.some((t) => taken.has(`${t.x},${t.z}`));
+  }
+
+  private freeSpot(type: FurnitureType, rot: number, uid: number): { x: number; z: number; rot: number } | null {
+    for (const r of [rot, (rot + 1) % 4]) for (let z = 4; z >= 0; z--) for (let x = 0; x < 7; x++) if (this.canPlace(type, x, z, r, uid)) return { x, z, rot: r };
+    return null;
   }
 
   private comfort(): number {
     const s = this.state!;
-    return ['mattress', 'rug', 'curtains', 'mirror', 'bookshelf', 'cat'].filter((id) => owns(s, id)).length;
+    const items = (s.home?.items ?? []).filter((i) => !i.stored);
+    return (owns(s, 'mattress') ? 1 : 0) + (owns(s, 'cat') ? 1 : 0) + items.reduce((a, i) => a + (FURNITURE[i.type].comfort ?? 0), 0);
   }
 
   /** Pembleton has something to say about each new piece of furniture. */
@@ -4574,7 +4839,7 @@ export class Game {
     s.location = this.location.id;
     this.lastSaveMinute = s.minutes;
     const ok = saveGame(s);
-    if (announce) this.hud.toast(ok ? 'Saved.' : 'Could not save on this device.');
+    if (announce) this.hud.toast(ok ? `Saved in slot ${currentSlot()}.` : 'Could not save on this device.');
   }
 
   private renderJournal(): void {

@@ -292,7 +292,9 @@ export function scheduleFor(p: PersonRec, day: number): Stop[] {
     const at = tileIn(job.area, r);
     out.push({ from: job.from, to: job.to, ...at, act: job.act });
   }
-  const h = p.haunt ? HAUNTS[p.haunt] : null;
+  // The middling sort keep to the chapel and the market, not the pub or the court.
+  const haunt = p.cls !== 'lower' && ['cupfront', 'courtyard', 'yard'].includes(p.haunt ?? '') ? (p.id.charCodeAt(1) % 2 ? 'church' : 'market') : p.haunt;
+  const h = haunt ? HAUNTS[haunt] : null;
   if (h) {
     const at = tileIn(h.area, r);
     const busy = (x: number) => job && x >= job.from && x < job.to;

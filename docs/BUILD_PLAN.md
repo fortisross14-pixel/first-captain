@@ -246,6 +246,16 @@ Renamed in M13 to match the Story Bible (the Dockers' Brotherhood became the Lam
 - [x] **More light**: brighter exposure, sky and moonlight, gentler night fog, stronger lamps, a lighter vignette.
 - [x] **Shorter Standing page**: one line per faction, rules and perks folded away.
 
+## M15 ✅ Saves, a home of your own, quieter streets
+
+- [x] **Sims-style chats**: socialising no longer opens a dialogue box. Your icon bubble pops over you, theirs answers (pleased, warm, put out, angry), and the outcome floats up: friendship or romance change, liked or disliked, XP, items. Only story conversations use the dialogue box. Bubbles sit above the people and no longer cover the text below.
+- [x] **Three save slots**: begin a new life in any slot, continue the latest, load or delete from "Saved lives". The game saves after every conversation, closed panel or menu, change of place, each game hour and every 20 seconds.
+- [x] **Install as an app (PWA)**: manifest, icons and an offline-capable service worker. "Install on this device" on the title screen and in Journal → Options (on iPhone: Share → Add to Home Screen).
+- [x] **Title fix**: "Lamps" no longer breaks across lines.
+- [x] **Two-step character creation**: step one lists what is chosen (gender, attraction, skin, hair colour, hair, coat, skirt, hat, build); tap a row and a picker opens, tap a choice and it closes. Step two is the skills.
+- [x] **Fewer people in the street**: at most 16 townsfolk outside at once; everyone else is at work, at home, or inside their haunt. Drinkers go inside the Copper Cup (and sit as patrons you can talk to), chapel-goers go into St. Botolph's, and the better-off don't frequent the low haunts.
+- [x] **Decor**: at home, a Decor button lets you pick any piece and move, turn, recolour, put away or sell it to Moss; change the wall colour and floor; bring stored pieces back. New furniture (armchair, wardrobe, plant, painting, clock, lamp, cradle) is sold at Moss's and Pell's, and most of it does something (rest, comfort, less wear, light to read by).
+
 ## Next
 
 The next districts (Lantern Market, then Mayfield) and Act II, "The Social Season"; businesses.

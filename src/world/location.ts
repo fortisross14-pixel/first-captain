@@ -41,6 +41,9 @@ export interface Location {
   /** Optional objects shown only once owned (furniture), with the tiles they block. */
   extras?: Record<string, { obj: THREE.Object3D; tiles: { x: number; z: number }[] }>;
   update(hour: number, t: number): void;
+  /** Hester's room: rebuild the furniture from a layout; find a placed piece's object. */
+  furnish?: (layout: import('./furniture').HomeLayout, cat: boolean) => void;
+  objectFor?: (uid: number) => THREE.Object3D | null;
   /** The district map: buildings and street names. */
   map?: { w: number; h: number; rects: MapRect[]; streets: { x: number; z: number; label: string }[] };
   /** Today's weather, for the light and the fog. */
