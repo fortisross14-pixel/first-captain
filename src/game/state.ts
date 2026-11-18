@@ -113,6 +113,21 @@ export interface GameState {
   people: import('./population').PersonRec[];
   /** What you have learned about each person's life. */
   known: Record<string, { home?: boolean; work?: boolean; haunt?: boolean }>;
+  /** Your own family: a spouse, children, an engagement, and those who came before. */
+  family: {
+    spouse?: string;
+    engaged?: { with: string; day: number };
+    children: string[];
+    /** Trying for a baby; the day one is due. */
+    trying?: boolean;
+    due?: number;
+    lastEvening?: number;
+    /** Marital strain from neglect; at 12 with little love left, they leave. */
+    strain: number;
+    /** What you've taught each child: skill points they will inherit if they carry on. */
+    taught: Record<string, Partial<Record<SkillId, number>>>;
+    ancestors: { name: string; born: number; died: number; summary: string }[];
+  };
   /** Weddings and funerals to come: who, and the day (at 11:00). */
   ceremonies: { kind: 'wedding' | 'funeral'; ids: string[]; names: string; day: number; attended?: boolean }[];
   /** A word put in for you with an employer: who, and when. */
@@ -155,6 +170,7 @@ function fillLives(s: GameState): void {
   s.known ??= {};
   s.recommend ??= {};
   s.ceremonies ??= [];
+  s.family ??= { children: [], strain: 0, taught: {}, ancestors: [] };
   s.character.birth ??= -21 * 24;
   s.equip ??= {};
   s.weather ??= 'clear';

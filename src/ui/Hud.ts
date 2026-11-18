@@ -18,7 +18,7 @@ export interface Action {
 const NEEDS: NeedId[] = ['hunger', 'rest', 'social', 'health'];
 
 /** A bubble in the interaction pie; one with children opens a ring of its own. */
-export type PieIcon = 'talk' | 'kind' | 'romance' | 'business' | 'mean' | 'ask' | 'favour';
+export type PieIcon = 'talk' | 'kind' | 'romance' | 'business' | 'mean' | 'ask' | 'favour' | 'family';
 export interface PieItem {
   label: string;
   sub?: string;
@@ -36,6 +36,7 @@ const PIE_ICONS: Record<PieIcon, string> = {
   business: '<circle cx="12" cy="12" r="8"/><path d="M14.5 9c-.5-1-1.5-1.5-2.5-1.5-1.5 0-2.5.8-2.5 2s1 1.7 2.5 2 2.5.9 2.5 2.1-1 2-2.5 2-2.2-.6-2.6-1.5M12 6v1.5M12 16.5V18"/>',
   mean: '<path d="M13 3 6 13h5l-1 8 7-10h-5z"/>',
   ask: '<path d="M9 9a3 3 0 1 1 4 2.8c-.7.3-1 .9-1 1.7V15"/><circle cx="12" cy="18.5" r=".6"/><circle cx="12" cy="12" r="9"/>',
+  family: '<path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/><circle cx="10" cy="14" r="1.6"/><circle cx="14.5" cy="15" r="1.2"/><path d="M8 20c0-2 1-3 2-3s2 1 2 3M13 20c0-1.5.7-2.5 1.5-2.5S16 18.5 16 20"/>',
   favour: '<path d="M4 10h16v10H4zM3 7h18v3H3zM12 7v13"/><path d="M12 7c-1.5-3-5-3-5-1s3 1 5 1c2 0 5 1 5-1s-3.5-2-5 1"/>',
 };
 const pieIcon = (i: PieIcon) => `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${PIE_ICONS[i]}</svg>`;

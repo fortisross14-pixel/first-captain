@@ -6,7 +6,7 @@ import { GRADE_INFO, JOBS, autopilotGrade, dayIndex, gradeFor, minuteOfDay, week
 import { addNeed, simulateNeeds } from '../game/needs';
 import { AUTHORED_RESIDENTS, RESIDENTS, stopAt, type Resident, type Stop } from '../game/residents';
 import {
-  AUTHORED, HAUNTS, HOMES, JOB_KINDS, ageOf, authoredRecords, fullNameOf, generatePopulation, roleOf, scheduleFor, simulateNight, voiceFor,
+  AUTHORED, HAUNTS, HOMES, JOB_KINDS, ageOf, authoredRecords, babyNames, childRecord, fullNameOf, generatePopulation, roleOf, scheduleFor, simulateNight, voiceFor,
   type LifeEvent, type PersonRec,
 } from '../game/population';
 import { RECIPES, cookMult, ingredients, missing as recipeMissing } from '../game/food';
@@ -19,7 +19,7 @@ import { ASKS, LOST_ZONES, PLACE_NAMES, READ_LETTERS, type Quest } from '../game
 import { ACTIVITY_TEXT, AMBIENT, CONFUSED_LINES, GENERIC, SICK_LINES, conversation } from '../game/talk';
 import { EVICTION_DAY, FUNERAL_DAY, Life, VANE_DONE, VANE_START } from './Life';
 import {
-  DAILY_LIMIT, INTERACTIONS, interact, knownTraits, newRelation, relationLabel, type Interaction, type Relation,
+  DAILY_LIMIT, INTERACTIONS, canRomance, interact, knownTraits, newRelation, relationLabel, type Interaction, type Relation,
 } from '../game/social';
 import { HOT_ZONES, NOTORIOUS, ZONES, dangerAt, zoneAt } from '../game/danger';
 import { CHAMPION_TITLE, FIGHT_NIGHT, LADDER, type Bout } from '../game/fightnight';
@@ -35,7 +35,7 @@ import { xpToNext } from '../game/jobs';
 import { playBar } from '../minigames/bar';
 import { ENEMIES, runFight, type Enemy } from '../minigames/fight';
 import { playCargo } from '../minigames/cargo';
-import { NEED_NAMES, SKILLS, SKILL_INFO, loadGame, newGame, saveGame, type Character, type GameState, type LocationId, type NeedId } from '../game/state';
+import { NEED_NAMES, SKILLS, SKILL_INFO, deleteSave, loadGame, newGame, saveGame, type Character, type GameState, type LocationId, type NeedId } from '../game/state';
 import { Creator } from '../ui/Creator';
 import { Dialogue, type Line } from '../ui/Dialogue';
 import { Hud, type Action, type ListRow, type PieItem } from '../ui/Hud';
@@ -85,6 +85,8 @@ export class Game {
   private readonly tully: Player;
   private dangerTimer = 0;
   private readonly life: Life;
+  /** Your family at home in Hester's room, in the evenings. */
+  private homeNpcs: Npc[] = [];
   private readonly portraits: Portraits;
   private readonly doorIcons: { sprite: THREE.Sprite; y: number }[] = [];
   private ambientTimer = 4;
@@ -257,6 +259,7 @@ export class Game {
     this.state = s;
     this.prevSkills = null;
     this.syncPopulation();
+    this.syncHome();
     this.clock.minutes = s.minutes;
     this.lastSaveMinute = s.minutes;
     this.player?.rig.root.removeFromParent();
@@ -357,6 +360,19 @@ export class Game {
         const q = this.state!.quests.find((x) => x.kind === 'lost' && !x.found && x.at && Math.hypot(x.at.x + 0.5 - ground.x, x.at.z + 0.5 - ground.z) < 1.0);
         if (q) {
           this.pickUpLost(q.id);
+          return;
+        }
+      }
+    }
+    if (this.location.id === 'hesterRoom') {
+      const vis = this.homeNpcs.filter((n) => n.visible);
+      const hit = this.raycaster.intersectObjects(vis.map((n) => n.walker.rig.root), true)[0];
+      if (hit) {
+        let o: THREE.Object3D | null = hit.object;
+        while (o && !o.userData.npcId) o = o.parent;
+        const npc = vis.find((n) => n.res.id === o?.userData.npcId);
+        if (npc) {
+          this.approach(npc);
           return;
         }
       }
@@ -1373,6 +1389,7 @@ export class Game {
     const s = this.state!;
     const lines: string[] = [];
     const courting = new Set(Object.entries(s.relations ?? {}).filter(([, r]) => r.romance >= 30).map(([id]) => id));
+    for (const id of [s.family.spouse, s.family.engaged?.with]) if (id) courting.add(id);
     const events = simulateNight(s.people, day, courting);
     const name = (id: string) => { const p = this.rec(id); return p ? fullNameOf(p) : this.nameOf(id); };
     const known = (id: string) => !!s.relations?.[id]?.met;
@@ -1434,6 +1451,23 @@ export class Game {
   private checkCeremonies(): void {
     const s = this.state!;
     const day = dayIndex(s.minutes);
+    // Leaving someone at the altar.
+    for (const c of s.ceremonies) {
+      if (c.ids.includes('you') && !c.attended && (c.day < day || (c.day === day && this.clock.hour > 12.5))) {
+        c.attended = true;
+        const id = c.ids.find((x) => x !== 'you')!;
+        const r = this.rel(id);
+        r.romance = 0;
+        r.friendship = Math.max(0, r.friendship - 30);
+        r.rivalry = Math.min(100, r.rivalry + 40);
+        const p = this.rec(id);
+        if (p) delete p.courting;
+        delete s.family.engaged;
+        addFact(s, 'wronged', [id, 'hale', 'ruby', 'mag', 'pell'], id);
+        sendLetter(s, this.nameOf(id), 'The market cross', `I stood there in my best, in front of all of Saltwharf, until Father Hale sent them home.\n\nDon't.`);
+        this.hud.toast(`You never came to your own wedding. ${this.first(id)} waited at the market cross until noon.`, 5000);
+      }
+    }
     s.ceremonies = s.ceremonies.filter((c) => c.day >= day - 1);
     if (this.busy || this.dialogue.open || this.hud.blocking || this.location.id !== 'saltwharf') return;
     const h = this.clock.hour;
@@ -1444,7 +1478,8 @@ export class Game {
       const near = c.kind === 'wedding' ? Math.hypot(p.x - 12.5, p.y - 20.5) < 4.5 : !!mourner && Math.hypot(p.x - mourner.x - 0.5, p.y - mourner.z - 0.5) < 4;
       if (!near) continue;
       c.attended = true;
-      void this.attendCeremony(c);
+      if (c.ids.includes('you')) void this.ownWedding(c);
+      else void this.attendCeremony(c);
     }
   }
 
@@ -1492,9 +1527,10 @@ export class Game {
     const work = a?.work ?? (p?.work ? JOB_KINDS[p.work].place : ageOf(p ?? { birth: 0 }, day) < 9 ? 'too young to work' : 'no work');
     const haunt = a?.haunt ?? (p?.haunt ? HAUNTS[p.haunt].name : '');
     const family: string[] = [];
-    if (p?.spouse) family.push(`married to ${fullNameOf(this.rec(p.spouse)!)}`);
+    const who = (x: string) => (x === 'you' ? 'you' : this.rec(x) ? fullNameOf(this.rec(x)!) : this.nameOf(x));
+    if (p?.spouse) family.push(`married to ${who(p.spouse)}`);
     else if (p?.widowed) family.push('widowed');
-    if (p?.courting) family.push(`walking out with ${fullNameOf(this.rec(p.courting.with)!)}`);
+    if (p?.courting) family.push(`${p.courting.wedding !== undefined ? 'engaged to' : 'walking out with'} ${who(p.courting.with)}`);
     const kids = (p?.children ?? []).map((c) => this.rec(c)).filter((c) => c?.alive);
     if (kids.length) family.push(`${kids.length === 1 ? 'a child' : `${kids.length} children`}: ${kids.map((c) => `${c!.first} (${ageOf(c!, day)})`).join(', ')}`);
     // Where they are likely to be right now.
@@ -1560,6 +1596,374 @@ export class Game {
         void this.dialogue.say({ speaker: npc.res.name, text: `"I'll tell ${job.boss.split(' ').pop()} you're all right. Go and ask in the next few days, and don't make a liar of me."\nStart as ${job.ranks[1]?.title ?? 'a hand'} instead of at the bottom.` }).then(() => npc.held && this.showPerson(npc));
       },
     }];
+  }
+
+  // --- A family of your own --------------------------------------------------
+
+  private playerAge(day = dayIndex(this.state!.minutes)): number {
+    return ageOf({ birth: this.state!.character.birth ?? -504 }, day);
+  }
+
+  /** Proposing, and the things only a spouse or a child of yours can do. */
+  private familyActions(npc: Npc): Action[] {
+    const s = this.state!;
+    const id = npc.res.id;
+    const r = this.rel(id);
+    const p = this.rec(id);
+    const day = dayIndex(s.minutes);
+    const out: Action[] = [];
+    const f = s.family;
+    const adult = p ? ageOf(p, day) >= 18 : true;
+    if (!f.spouse && !f.engaged && adult && p?.alive && !p.spouse && canRomance(s, npc.res) && r.romance >= 45) {
+      out.push({
+        label: r.romance >= 60 && r.friendship >= 40 ? 'Ask for their hand' : 'Ask for their hand (needs Romance 60, Friendship 40)',
+        primary: r.romance >= 60 && r.friendship >= 40,
+        disabled: r.romance < 60 || r.friendship < 40 || !s.housed,
+        onClick: () => { this.hud.hidePlace(); void this.propose(npc); },
+      });
+    }
+    if (f.spouse === id) {
+      out.push({
+        label: this.usedToday('evening') ? 'An evening together (tomorrow)' : 'Spend the evening together (1 hour)',
+        primary: !this.usedToday('evening'),
+        disabled: this.usedToday('evening'),
+        onClick: () => {
+          this.markUsed('evening');
+          f.lastEvening = day;
+          f.strain = Math.max(0, f.strain - 6);
+          r.romance = Math.min(100, r.romance + 4);
+          r.friendship = Math.min(100, r.friendship + 2);
+          r.seen = day;
+          addNeed(s.needs, 'social', 22);
+          addNeed(s.needs, 'rest', 4);
+          this.clock.minutes += 60;
+          this.hud.hidePlace();
+          const lines = ['You talk about nothing for an hour, and it is the best hour of the day.', 'Bread, dripping, the last of the candle, and their feet in your lap.', 'They read you the Gazette in silly voices. Even the obituaries.', 'You sit by the window and count the lamps along the quay together.'];
+          this.hud.toast(`${lines[Math.floor(Math.random() * lines.length)]} Social +22, Romance +4.`, 4000);
+        },
+      });
+      const canBear = this.canHaveBaby(id);
+      if (canBear) {
+        out.push({
+          label: f.due ? `A baby is coming (${Math.max(0, f.due - day)} days)` : f.trying ? 'Stop trying for a baby' : 'Talk about having a baby',
+          disabled: !!f.due,
+          onClick: () => {
+            f.trying = !f.trying;
+            this.hud.hidePlace();
+            void this.dialogue.say({ speaker: npc.res.name, text: f.trying ? '"A baby." They say it as if trying the word for size. Then they smile. "Yes. Yes, all right."' : '"Not yet, then." They squeeze your hand. "When we\'re steadier."' });
+          },
+        });
+      }
+    }
+    // Your children: play with them; teach them what you know.
+    if (f.children.includes(id) && p) {
+      const age = ageOf(p, day);
+      out.push({
+        label: this.usedToday(`play:${id}`) ? 'Played today' : age < 9 ? 'Play with them' : 'Walk along the quay together',
+        disabled: this.usedToday(`play:${id}`),
+        onClick: () => {
+          this.markUsed(`play:${id}`);
+          r.friendship = Math.min(100, r.friendship + 6);
+          r.seen = day;
+          addNeed(s.needs, 'social', 14);
+          this.hud.hidePlace();
+          this.hud.toast(age < 9 ? `Hide and seek round the table. ${p.first} cheats. Social +14.` : `${p.first} tells you everything, then nothing, then everything again. Social +14.`, 3500);
+        },
+      });
+      if (age >= 5) {
+        const best = SKILLS.slice().sort((a, b) => s.character.skills[b] - s.character.skills[a])[0];
+        out.push({
+          label: this.usedToday(`teach:${id}`) ? 'Taught today' : `Teach them ${SKILL_INFO[best].name} (1 hour)`,
+          disabled: this.usedToday(`teach:${id}`) || s.character.skills[best] < 1,
+          onClick: () => {
+            this.markUsed(`teach:${id}`);
+            const t = (f.taught[id] ??= {});
+            t[best] = Math.min(10, (t[best] ?? 0) + 0.5);
+            this.clock.minutes += 60;
+            r.friendship = Math.min(100, r.friendship + 3);
+            this.hud.hidePlace();
+            this.hud.toast(`An hour of ${SKILL_INFO[best].name.toLowerCase()} with ${p.first}. They have it now to ${Math.floor(t[best] ?? 0)}.`, 3500);
+          },
+        });
+      }
+    }
+    if (id === 'hale' && f.spouse && !this.canHaveBaby(f.spouse) && f.children.length < 4) {
+      out.push({ label: 'Ask about a foundling to take in', onClick: () => { this.hud.hidePlace(); void this.foundling(); } });
+    }
+    return out;
+  }
+
+  private canHaveBaby(spouse: string): boolean {
+    const s = this.state!;
+    const p = this.rec(spouse);
+    if (!p) return false;
+    const day = dayIndex(s.minutes);
+    const me = { g: s.character.gender, age: this.playerAge(day) };
+    const them = { g: p.gender, age: ageOf(p, day) };
+    if (me.g === them.g) return false;
+    const mother = me.g === 'woman' ? me : them;
+    return mother.age >= 18 && mother.age <= 44 && s.family.children.length < 6;
+  }
+
+  private async propose(npc: Npc): Promise<void> {
+    const s = this.state!;
+    const id = npc.res.id;
+    const r = this.rel(id);
+    const p = this.rec(id)!;
+    const day = dayIndex(s.minutes);
+    const ok = await this.dialogue.ask({ speaker: 'You', text: `You take ${this.first(id)}'s hand. The street goes quiet, or seems to.` }, ['Will you marry me?', 'Not here. Another time.']);
+    if (ok !== 0) return;
+    const chance = 0.35 + (r.romance - 60) / 80 + s.character.skills.charisma * 0.02 + this.dressBonus(id) - (p.courting && p.courting.with !== 'you' ? 0.35 : 0);
+    if (Math.random() < chance) {
+      if (p.courting && p.courting.with !== 'you') {
+        const o = this.rec(p.courting.with);
+        if (o) delete o.courting;
+      }
+      const wedding = day + 3;
+      p.courting = { with: 'you', since: day, wedding };
+      s.family.engaged = { with: id, day: wedding };
+      s.ceremonies.push({ kind: 'wedding', ids: [id, 'you'], names: `${npc.res.name} and you`, day: wedding });
+      this.note('courting', id, undefined, [id]);
+      r.romance = Math.min(100, r.romance + 10);
+      await this.dialogue.say({ speaker: npc.res.name, text: '"Yes." Then, louder, so the whole street can hear: "YES."' });
+      await this.hud.celebrate('friend', 'Engaged', npc.res.name, `The wedding is in three days, at eleven, at the market cross. Don't be late.`);
+    } else {
+      r.romance = Math.max(0, r.romance - 10);
+      await this.dialogue.say({ speaker: npc.res.name, text: p.courting && p.courting.with !== 'you' ? `"I'm promised to ${this.first(p.courting.with)}. I thought you knew."` : '"I... not yet. Ask me again, when I\'m sure of you."' });
+    }
+    this.refreshObjectives();
+  }
+
+  /** Your own wedding at the market cross. */
+  private async ownWedding(c: GameState['ceremonies'][number]): Promise<void> {
+    const s = this.state!;
+    const id = c.ids.find((x) => x !== 'you')!;
+    const p = this.rec(id)!;
+    const day = dayIndex(s.minutes);
+    this.busy = true;
+    this.player!.stop();
+    await this.dialogue.say(
+      { speaker: 'Father Ambrose Hale', text: `"Dearly beloved, we are gathered here in the sight of God, and of most of Saltwharf..."` },
+      { speaker: 'Father Ambrose Hale', text: `"...I now pronounce you married. You may, ah. Yes. Quite."` },
+    );
+    p.spouse = 'you';
+    delete p.courting;
+    delete p.widowed;
+    p.home = 'hester';
+    s.family.spouse = id;
+    delete s.family.engaged;
+    s.family.lastEvening = day;
+    s.family.strain = 0;
+    const r = this.rel(id);
+    r.romance = Math.min(100, r.romance + 15);
+    r.friendship = Math.min(100, r.friendship + 10);
+    r.seen = day;
+    addNeed(s.needs, 'social', 35);
+    this.clock.minutes += 60;
+    // Crossing classes is talked about.
+    const mine = s.parish.rank > 0 || s.outfit === 'coat' || s.outfit === 'sunday' ? 'middle' : 'lower';
+    if (p.cls !== mine) addFact(s, 'courting', ['ruby', 'mag', 'pell'], id, 'scandal');
+    this.busy = false;
+    this.syncPopulation();
+    this.syncHome();
+    await this.hud.celebrate('promotion', 'Married', `${this.first(id)} and you`, `${this.first(id)} moves into Hester's room tonight. Pembleton will have opinions.`);
+  }
+
+  /** Overnight for your family: neglect, a baby on the way, a baby born, wages. */
+  private nightlyFamily(day: number): string[] {
+    const s = this.state!;
+    const f = s.family;
+    const lines: string[] = [];
+    const id = f.spouse;
+    if (id) {
+      const p = this.rec(id);
+      if (!p?.alive) {
+        lines.push(`You are a ${s.character.gender === 'man' ? 'widower' : 'widow'}. The bed is too big.`);
+        delete f.spouse;
+        f.trying = false;
+        delete f.due;
+      } else {
+        const r = this.rel(id);
+        if (day - (f.lastEvening ?? day) > 4) {
+          f.strain += 1;
+          r.romance = Math.max(0, r.romance - 2);
+          if (f.strain === 6) sendLetter(s, this.nameOf(id), 'On the table', `You come in late and leave early. I married you, not your shadow on the stairs.\n\n${this.first(id)}`);
+        }
+        if (f.strain >= 12 && r.romance < 20) {
+          lines.push(`${this.first(id)} has gone back to ${p.gender === 'man' ? 'his' : 'her'} mother's. The note says only: "You were never here."`);
+          delete p.spouse;
+          p.widowed = true;
+          p.home = AUTHORED[id]?.home ?? 'court';
+          delete f.spouse;
+          f.trying = false;
+          r.romance = 0;
+          r.rivalry = Math.min(100, r.rivalry + 30);
+          addFact(s, 'wronged', [id, 'ruby', 'mag'], id);
+        }
+        // Their wages, on Mondays.
+        if (f.spouse && weekday(day) === 1 && (p.work || AUTHORED[id]?.employer)) {
+          s.money = Math.round((s.money + 0.08) * 100) / 100;
+          lines.push(`${this.first(id)} puts their week's wages on the table: £0.08.`);
+        }
+        if (f.spouse && f.trying && !f.due && this.canHaveBaby(id) && Math.random() < 0.06) {
+          f.due = day + 14;
+          lines.push(`${s.character.gender === 'woman' ? 'You are' : `${this.first(id)} is`} expecting. A baby, in about two weeks of days.`);
+        }
+      }
+    }
+    if (f.due !== undefined && day >= f.due) this.pendingBirth = true;
+    return lines;
+  }
+
+  private pendingBirth = false;
+  private pendingDeath = false;
+
+  /** A baby is born: you name them. */
+  private async birth(): Promise<void> {
+    const s = this.state!;
+    const f = s.family;
+    this.pendingBirth = false;
+    delete f.due;
+    const day = dayIndex(s.minutes);
+    const g = Math.random() < 0.5 ? 'man' : 'woman';
+    const names = babyNames(g);
+    const spouse = f.spouse ? this.rec(f.spouse) : undefined;
+    const pick = await this.dialogue.ask({ speaker: spouse ? spouse.first : 'Mrs. Pell', text: `${g === 'man' ? 'A boy' : 'A girl'}! Small, red and furious, with your chin. What shall we call ${g === 'man' ? 'him' : 'her'}?` }, names);
+    const child = childRecord({ first: names[pick], last: s.character.last, gender: g, parents: ['you', ...(f.spouse ? [f.spouse] : [])], home: 'hester', birth: day, day, cls: 'lower' });
+    s.people.push(child);
+    f.children.push(child.id);
+    if (spouse) spouse.children.push(child.id);
+    const r = this.rel(child.id);
+    r.met = true;
+    r.friendship = 50;
+    r.seen = day;
+    if (s.character.gender === 'woman') {
+      addNeed(s.needs, 'health', -20);
+      addNeed(s.needs, 'rest', -30);
+    }
+    for (const id of ['pell', 'mag', 'hannah']) sendLetter(s, this.nameOf(id), 'For the baby', `A little something for ${child.first}. Every child in Saltwharf should have one good thing.\n\n${this.first(id)}`);
+    this.syncPopulation();
+    this.syncHome();
+    await this.hud.celebrate('friend', 'Born today', `${child.first} ${child.last}`, 'Mrs. Pell, Old Mag and Hannah have sent things for the baby.');
+  }
+
+  /** Father Hale finds you a foundling to take in. */
+  private async foundling(): Promise<void> {
+    const s = this.state!;
+    const day = dayIndex(s.minutes);
+    const g = Math.random() < 0.5 ? 'man' : 'woman';
+    const names = babyNames(g);
+    const age = 3 + Math.floor(Math.random() * 4);
+    const yes = await this.dialogue.ask({ speaker: 'Father Ambrose Hale', text: `"There is a ${g === 'man' ? 'boy' : 'girl'} at the Foundling Hospital, ${age} years old, who has stopped asking when ${g === 'man' ? 'his' : 'her'} mother is coming. ${names[0]}, they call ${g === 'man' ? 'him' : 'her'}."` }, [`Bring ${names[0]} home`, 'Not yet']);
+    if (yes !== 0) return;
+    const f = s.family;
+    const child = childRecord({ first: names[0], last: s.character.last, gender: g, parents: ['you', ...(f.spouse ? [f.spouse] : [])], home: 'hester', birth: day - age * 24, day, cls: 'lower' });
+    s.people.push(child);
+    f.children.push(child.id);
+    const r = this.rel(child.id);
+    r.met = true;
+    r.friendship = 25;
+    r.seen = day;
+    this.syncPopulation();
+    this.syncHome();
+    await this.hud.celebrate('friend', 'Home at last', `${child.first} ${child.last}`, 'Small, wary, and already eating your bread.');
+  }
+
+  /** Your family in Hester's room: the spouse in the evenings, the children when they're home. */
+  private syncHome(): void {
+    const s = this.state!;
+    const room = this.locations.hesterRoom;
+    for (const n of this.homeNpcs) n.walker.rig.root.removeFromParent();
+    this.homeNpcs = [];
+    const spots = [{ x: 2, z: 2 }, { x: 4, z: 1 }, { x: 1, z: 2 }, { x: 6, z: 2 }, { x: 5, z: 3 }, { x: 2, z: 1 }];
+    const ids = [s.family.spouse, ...s.family.children].filter((x): x is string => !!x);
+    ids.forEach((id, i) => {
+      const res = RESIDENTS.find((r) => r.id === id);
+      const p = this.rec(id);
+      if (!res && !(p?.look && p.alive)) return;
+      const base: Resident = res ?? { id, name: fullNameOf(p!), gender: p!.gender, attraction: p!.attraction, cls: p!.cls, traits: p!.traits, role: 'Your baby', look: p!.look!, home: spots[i], schedule: [] };
+      const at = spots[i % spots.length];
+      const npc = new Npc({ ...base, home: at, schedule: [{ from: 0, to: 24, x: at.x, z: at.z, act: i === 0 && s.family.spouse ? 'watch' : 'play' }] }, room.grid);
+      room.scene.add(npc.walker.rig.root);
+      this.homeNpcs.push(npc);
+    });
+  }
+
+  /** Who of your family is home right now. */
+  private updateHome(dt: number): void {
+    if (this.location.id !== 'hesterRoom' || !this.state) return;
+    const h = Math.floor(this.clock.hour);
+    for (const n of this.homeNpcs) {
+      const street = this.npcs.find((x) => x.res.id === n.res.id);
+      const p = this.rec(n.res.id);
+      const baby = p && ageOf(p, dayIndex(this.state.minutes)) < 3;
+      const out = street ? this.stopFor(street.res, h) !== null : false;
+      const home = baby || (!out && (h >= 17 || h < 9));
+      n.follow(home ? n.res.schedule[0] : null, false);
+      n.update(dt, this.elapsed);
+    }
+  }
+
+  /** You die, in your sleep, an old soul. The epilogue, and who carries on. */
+  private async playerDies(): Promise<void> {
+    const s = this.state!;
+    this.busy = true;
+    const day = dayIndex(s.minutes);
+    const c = s.character;
+    const age = this.playerAge(day);
+    const friends = Object.values(s.relations ?? {}).filter((r) => r.friendship >= 30).length;
+    const kids = s.family.children.map((id) => this.rec(id)).filter((p) => p?.alive) as PersonRec[];
+    const spouse = s.family.spouse ? this.nameOf(s.family.spouse) : null;
+    const summary = [
+      `${c.first} ${c.last} died in ${c.gender === 'man' ? 'his' : 'her'} sleep in Hester's room, aged ${age}, after ${Math.max(1, Math.floor(day / 24))} year${Math.floor(day / 24) > 1 ? 's' : ''} in Saltwharf.`,
+      spouse ? `Survived by ${spouse}.` : `${c.gender === 'man' ? 'He' : 'She'} never married, or outlived the one ${c.gender === 'man' ? 'he' : 'she'} did.`,
+      kids.length ? `Children: ${kids.map((k) => `${k.first} (${ageOf(k, day)})`).join(', ')}.` : 'No children of their own.',
+      `${friends} friends walked behind the coffin. They left £${s.money.toFixed(2)}.`,
+      s.parish.rank ? `${officeTitle(s, c.gender === 'woman')} of the parish.` : '',
+      s.champion ? `Remembered as ${CHAMPION_TITLE}.` : '',
+    ].filter(Boolean);
+    this.busy = false;
+    await this.hud.modal('In Memoriam', summary, 'R.I.P.', 'letter', `${c.first} ${c.last}`);
+    const heirs = kids.filter((k) => ageOf(k, day) >= 16);
+    const choice = await this.dialogue.ask({ speaker: P, text: heirs.length ? '"So. That is that." The ghost is quiet a long while. "The room does not stay empty. It never has. Who carries on?"' : '"So. That is that. The room will be let again, I suppose." He sounds, for once, sorry.' }, [...heirs.map((h) => `Carry on as ${h.first} (${ageOf(h, day)})`), 'Begin a new life']);
+    if (choice < heirs.length) this.carryOn(heirs[choice], summary.join(' '));
+    else {
+      deleteSave();
+      location.reload();
+    }
+  }
+
+  /** Your eldest carries on: the room, the purse, the friendships (somewhat), and what you taught them. */
+  private carryOn(heir: PersonRec, summary: string): void {
+    const s = this.state!;
+    const day = dayIndex(s.minutes);
+    const old = s.character;
+    s.family.ancestors.push({ name: `${old.first} ${old.last}`, born: old.birth ?? -504, died: day, summary });
+    const taught = s.family.taught[heir.id] ?? {};
+    const skills = Object.fromEntries(SKILLS.map((k) => [k, Math.min(20, Math.floor(old.skills[k] * 0.3 + (taught[k] ?? 0)))])) as typeof old.skills;
+    s.character = {
+      first: heir.first, last: heir.last, gender: heir.gender, attraction: heir.attraction, birth: heir.birth, skills,
+      look: { ...(heir.look ?? old.look), age: undefined },
+    };
+    for (const r of Object.values(s.relations ?? {})) {
+      r.friendship *= 0.6;
+      r.romance = 0;
+      r.business *= 0.5;
+      r.rivalry *= 0.5;
+    }
+    delete s.relations[heir.id];
+    s.people = s.people.filter((p) => p.id !== heir.id);
+    s.family = { children: [], strain: 0, taught: {}, ancestors: s.family.ancestors };
+    s.jobs = [];
+    s.parish = { rank: 0, standing: null, pledges: [], crowd: 0, lastSpeech: -1 };
+    s.champion = false;
+    s.ladder = 0;
+    s.needs = { hunger: 70, rest: 90, social: 50, health: 95 };
+    this.syncPopulation();
+    this.syncHome();
+    this.refreshLook();
+    this.hud.toast(`You are ${heir.first} ${heir.last} now. The room, the purse and some of the friendships are yours.`, 5000);
+    this.save();
   }
 
   // --- Favours: neighbours come to you -------------------------------------
@@ -1861,6 +2265,11 @@ export class Game {
     const ask = [...this.recommendActions(npc), ...this.lessonActions(npc), ...this.parishActions(npc), ...askExtra].map(asPie);
     if (seesAll) ask.unshift({ label: 'Where is everyone?', sub: 'they know', onClick: () => { this.hud.hidePlace(); this.whereIs(npc); } });
     const favours = this.favourActions(npc).map((a) => ({ ...asPie(a), icon: 'favour' as const, primary: !a.disabled }));
+    const fam = this.familyActions(npc);
+    const propose = fam.filter((a) => a.label.startsWith('Ask for their hand')).map(asPie);
+    const foundling = fam.filter((a) => a.label.startsWith('Ask about a foundling')).map(asPie);
+    const family = fam.filter((a) => !a.label.startsWith('Ask for their hand') && !a.label.startsWith('Ask about a foundling')).map(asPie);
+    ask.push(...foundling);
     const items: PieItem[] = [
       ...favours,
       { label: 'Talk', icon: 'talk', children: [...['chat', 'joke', 'gossip', 'debate', 'brag'].map(say), {
@@ -1868,7 +2277,8 @@ export class Game {
         onClick: () => { this.hud.hidePlace(); void this.askAboutLife(npc); },
       }] },
       { label: 'Kind', icon: 'kind', children: ['compliment', 'confide', 'gift'].map(say) },
-      { label: 'Romance', icon: 'romance', children: [say('flirt'), ...romanceExtra.map(asPie)] },
+      ...(family.length ? [{ label: 'Family', icon: 'family' as const, children: family }] : []),
+      { label: 'Romance', icon: 'romance', children: [say('flirt'), ...romanceExtra.map(asPie), ...propose] },
       { label: 'Business', icon: 'business', children: [say('business'), ...businessExtra.map(asPie)] },
       { label: 'Mean', icon: 'mean', children: [say('insult')] },
       ...(ask.length ? [{ label: 'Ask', icon: 'ask' as const, children: ask }] : []),
@@ -2521,7 +2931,9 @@ export class Game {
       this.applyFurniture();
       lines.push('A thin grey cat has moved in. She sleeps on the end of your bed and has decided you may stay.');
     }
-    lines.push(...this.nightlyLives(day), ...this.nightlyLivesOfAll(day));
+    lines.push(...this.nightlyLives(day), ...this.nightlyLivesOfAll(day), ...this.nightlyFamily(day));
+    const myAge = this.playerAge(day);
+    if (myAge >= 60 && Math.random() < 0.0004 * Math.pow(myAge - 57, 1.3) + (myAge >= 92 ? 1 : 0)) this.pendingDeath = true;
     s.hotZone = HOT_ZONES[Math.floor(Math.random() * HOT_ZONES.length)];
     const after = s.letters.filter((l) => !l.read).length;
     if (after > before) lines.push(`${after - before} new letter${after - before === 1 ? '' : 's'} by your door.`);
@@ -2866,6 +3278,11 @@ export class Game {
 
   private outfitLook(o: Outfit): Look {
     const look = this.clothesLook(o);
+    const age = this.playerAge();
+    if (age >= 58) {
+      look.age = 2;
+      look.hair = age >= 66 ? 0xd0d0d0 : 0xa0a0a0;
+    }
     const e = this.state!.equip;
     const hat = e.hat ? ITEMS[e.hat].gear : undefined;
     if (hat?.hat) {
@@ -3069,6 +3486,12 @@ export class Game {
       if (s.tutorial.askedDocks && s.tutorial.askedCup) await this.firstMorningScene();
     }
     if (kind === 'morning' || kind === 'rough') await this.morningSummary(this.nightlyWorld());
+    if (this.pendingDeath) {
+      this.pendingDeath = false;
+      await this.playerDies();
+      return;
+    }
+    if (this.pendingBirth) await this.birth();
     this.save();
   }
 
@@ -3367,6 +3790,17 @@ export class Game {
     const office = officeTitle(s, c.gender === 'woman');
     const missionsHtml = `
       <h3>The story</h3><p>${esc(story)}</p>
+      <h3>Family</h3><ul class="perks">${(() => {
+        const f = s.family;
+        const items: string[] = [];
+        if (f.spouse) items.push(`Married to ${esc(this.nameOf(f.spouse))}${f.strain >= 6 ? ' (things are strained: spend an evening together)' : ''}`);
+        else if (f.engaged) items.push(`Engaged to ${esc(this.nameOf(f.engaged.with))}: the wedding is on ${this.clock.formatShortDate(new Date(1871, 9, 1 + f.engaged.day))} at eleven, at the market cross`);
+        else items.push('Unmarried. Court someone to Romance 60 and Friendship 40, then ask for their hand.');
+        for (const id of f.children) { const p = this.rec(id); if (p?.alive) items.push(`${esc(p.first)}, ${ageOf(p, day)}`); }
+        if (f.due) items.push(`A baby due in ${f.due - day} days`);
+        for (const a of f.ancestors) items.push(`<em>${esc(a.name)} (died aged ${ageOf({ birth: a.born }, a.died)})</em>`);
+        return items.map((x) => `<li>${x}</li>`).join('');
+      })()}</ul>
       <h3>Favours</h3><ul class="perks">${favours}</ul>
       <h3>Goals</h3><ul class="perks">${goals}</ul>
       <h3>Work</h3><ul class="perks">${work}</ul>
@@ -3489,6 +3923,7 @@ export class Game {
 
     player.update(dt, this.elapsed);
     this.updateNpcs(dt);
+    this.updateHome(dt);
     this.updateStalker(dt);
     this.updateTully(dt);
     if (this.location.id === 'saltwharf') {

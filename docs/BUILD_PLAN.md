@@ -199,6 +199,16 @@ The Animal Crossing feeling, darker: residents have their own lives and you walk
 - [x] **Your age**: you start at 21; the journal shows your age and your year in Saltwharf.
 - [x] Performance: coat tails and cloaks now merge with the body (six draw calls a person); only people near you cast shadows. The busiest morning view is about 200 draw calls.
 
+## M11 ✅ A family of your own
+
+- [x] **Proposal**: court someone to Romance 60 and Friendship 40, then Romance → "Ask for their hand" in the pie. They may say no (or that they're promised to someone else). Engaged, the wedding is in three days at eleven at the market cross, with Father Hale and half of Saltwharf; stand them up and everyone hears of it.
+- [x] **Married life**: your spouse moves into Hester's room and is home in the evenings; spend the evening together (Social, Romance); neglect them and the marriage strains, then sours, then they leave. Working spouses bring home weekly wages. Marrying across classes is talked about.
+- [x] **Children**: talk about having a baby; a pregnancy takes 14 days; you name the baby from three names; neighbours send gifts. Couples who can't have children can take in a foundling through Father Hale. Children grow up in the room and the street, play with you, and learn the skill you're best at.
+- [x] **Old age**: your hair greys from 58; from 60 you may die in your sleep. An "In Memoriam" sums up the life, and Pembleton asks who carries on.
+- [x] **Carrying on**: continue as a child of 16 or more: they inherit the room, the purse, the things, some of the friendships, a little of your skills and everything you taught them. The journal keeps the family line.
+
+## Next: M12 Factions, then M13 the Fog Clock and the main story
+
 ## After the slice
 
 More districts, factions, the main story and the Fog Clock, businesses, marriage, children and aging.

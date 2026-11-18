@@ -717,3 +717,9 @@ button:disabled { cursor: default; }
   .pie-hub { width: 70px; height: 70px; }
   .pie-b { min-height: 40px; padding: 6px 12px; }
 }
+/* Letters: ivory notepaper with a gilt rule; the Gazette keeps its newsprint. */
+.journal-sheet.letter { color: var(--ink) !important; background: var(--hatch-ink), repeating-linear-gradient(180deg, transparent 0 27px, rgba(122, 90, 30, .18) 27px 28px), linear-gradient(180deg, #f7f0df, var(--ivory)) !important;
+  border: 1px solid var(--gilt); box-shadow: 0 0 0 5px var(--sheet), 0 0 0 6px var(--gilt), 0 14px 30px rgba(0, 0, 0, .7) !important; }
+.journal-sheet.letter h2 { color: var(--sheet) !important; font-family: var(--f-sc) !important; text-shadow: none !important; }
+.journal-sheet.letter .meta { color: #6a4e1a !important; font-family: var(--f-script) !important; font-size: 20px !important; }
+.journal-sheet.letter .modal-body p { color: #2a2620 !important; font-family: var(--f-body) !important; font-style: italic; }

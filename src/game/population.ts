@@ -486,3 +486,31 @@ export function simulateNight(people: PersonRec[], day: number, protectedIds: Se
 export function needsPopulation(s: GameState): boolean {
   return !s.people || s.people.length === 0;
 }
+
+const FAMILY_NAMES = { man: MEN, woman: WOMEN };
+
+/** Names to suggest for a new baby. */
+export function babyNames(g: Gender, rand = Math.random): string[] {
+  const pool = [...FAMILY_NAMES[g]];
+  const out: string[] = [];
+  while (out.length < 3) {
+    const n = pool.splice(Math.floor(rand() * pool.length), 1)[0];
+    out.push(n);
+  }
+  return out;
+}
+
+/** A child born (or taken in) to a family in Saltwharf. */
+export function childRecord(o: { first: string; last: string; gender: Gender; parents: string[]; home: string; birth: number; day: number; cls: SocialClass }): PersonRec {
+  const r = rng(o.birth * 131 + o.first.length * 17 + o.parents.length);
+  const p: PersonRec = {
+    id: `c${o.day.toString(36)}${Math.floor(r() * 1e6).toString(36)}`, first: o.first, last: o.last, gender: o.gender,
+    attraction: o.gender === 'man' ? 'women' : 'men', cls: o.cls, traits: [TRAITS[Math.floor(r() * 12)]], district: 'Saltwharf',
+    birth: o.birth, home: o.home, work: null, haunt: 'courtyard', parents: o.parents, children: [], alive: true,
+  };
+  let t2 = TRAITS[Math.floor(r() * 12)];
+  while (t2 === p.traits[0]) t2 = TRAITS[Math.floor(r() * 12)];
+  p.traits.push(t2);
+  p.look = makeLook(p, r, ageOf(p, o.day));
+  return p;
+}
