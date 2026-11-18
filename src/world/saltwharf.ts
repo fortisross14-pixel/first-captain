@@ -362,11 +362,11 @@ export function buildSaltwharf(): Location {
       rects: [
         ...mapRectsLater, ...mapRects,
         { x: 8, z: 17, w: 9, d: 6, label: 'Market', kind: 'open', placeId: 'market' },
-        { x: 27, z: 16, w: 4, d: 7, label: 'Boxing yard', kind: 'open', placeId: 'boxing' },
+        { x: 27, z: 16, w: 4, d: 7, label: 'Yard', kind: 'open', placeId: 'boxing' },
       ],
       streets: [
-        { x: 1, z: 5, label: 'The quay' }, { x: 2, z: 7.6, label: 'Quay Street' }, { x: 2, z: 15.6, label: 'Rope Walk' },
-        { x: 2, z: 24.6, label: 'Back Lane' }, { x: 13, z: 33.6, label: 'Church Street' }, { x: 43.6, z: 12.4, label: '‹ Hollow Lane' },
+        { x: 1, z: 5.2, label: 'The quay' }, { x: 1, z: 7.6, label: 'Quay Street' }, { x: 1, z: 15.6, label: 'Rope Walk' },
+        { x: 1, z: 24.6, label: 'Back Lane' }, { x: 13, z: 33.6, label: 'Church Street' }, { x: 43.6, z: 12.4, label: '‹ Hollow Lane' },
       ],
     },
     fadeOccluders: true,

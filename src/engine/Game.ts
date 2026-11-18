@@ -491,36 +491,64 @@ export class Game {
 
   private openMap(view: 'london' | 'district'): void {
     if (!this.state) return;
+    const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+    // Shared engraving: dark paper, hatching, waves, fog, a compass rose.
+    const defs = `<defs>
+      <radialGradient id="mp-paper" cx="50%" cy="45%" r="75%"><stop offset="0" stop-color="#4a3f2e"/><stop offset=".6" stop-color="#2e271d"/><stop offset="1" stop-color="#14110c"/></radialGradient>
+      <pattern id="mp-hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="5" height="5" fill="#2a231a"/><line x1="0" y1="0" x2="0" y2="5" stroke="#cdb88a" stroke-opacity=".38" stroke-width="1"/></pattern>
+      <pattern id="mp-hatch2" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)"><rect width="4" height="4" fill="#3a2e1c"/><line x1="0" y1="0" x2="0" y2="4" stroke="#e8c66a" stroke-opacity=".55" stroke-width="1"/></pattern>
+      <pattern id="mp-cross" width="6" height="6" patternUnits="userSpaceOnUse"><rect width="6" height="6" fill="#262019"/><path d="M0 0L6 6M6 0L0 6" stroke="#cdb88a" stroke-opacity=".3" stroke-width=".8"/></pattern>
+      <pattern id="mp-waves" width="24" height="8" patternUnits="userSpaceOnUse"><rect width="24" height="8" fill="#141a22"/><path d="M0 5 Q6 1 12 5 T24 5" fill="none" stroke="#8aa0b0" stroke-opacity=".45" stroke-width=".9"/></pattern>
+      <radialGradient id="mp-glow"><stop offset="0" stop-color="#ffd27a" stop-opacity=".85"/><stop offset="1" stop-color="#ffd27a" stop-opacity="0"/></radialGradient>
+      <radialGradient id="mp-vane"><stop offset="0" stop-color="#e8f4ff" stop-opacity=".95"/><stop offset="1" stop-color="#e8f4ff" stop-opacity="0"/></radialGradient>
+      <radialGradient id="mp-vign" cx="50%" cy="50%" r="72%"><stop offset=".55" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".85"/></radialGradient>
+      <filter id="mp-fog" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".009 .016" numOctaves="3" seed="7"/><feColorMatrix values="0 0 0 0 .82  0 0 0 0 .85  0 0 0 0 .88  0 0 0 1.25 -.5"/></filter>
+      <filter id="mp-fogheavy" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".012 .02" numOctaves="4" seed="11"/><feColorMatrix values="0 0 0 0 .7  0 0 0 0 .73  0 0 0 0 .76  0 0 0 2.2 -.55"/></filter>
+    </defs>`;
+    const rose = (x: number, y: number, r: number, north: 'up' | 'down') => `<g transform="translate(${x} ${y}) rotate(${north === 'down' ? 180 : 0})" class="mp-rose">
+      <circle r="${r}" fill="none" stroke="#cdb88a" stroke-opacity=".6"/><circle r="${r * 0.78}" fill="none" stroke="#cdb88a" stroke-opacity=".35" stroke-dasharray="2 2"/>
+      ${[0, 90, 180, 270].map((a) => `<path transform="rotate(${a})" d="M0 ${-r * 1.05} L${r * 0.16} 0 L0 ${r * 0.12} L${-r * 0.16} 0 Z" fill="${a === 0 ? '#e8c66a' : '#cdb88a'}" fill-opacity="${a === 0 ? 1 : 0.55}"/>`).join('')}
+      ${[45, 135, 225, 315].map((a) => `<path transform="rotate(${a})" d="M0 ${-r * 0.65} L${r * 0.1} 0 L${-r * 0.1} 0 Z" fill="#cdb88a" fill-opacity=".4"/>`).join('')}
+      <text y="${-r * 1.18}" transform="rotate(${north === 'down' ? 180 : 0} 0 ${-r * 1.25})" class="mp-n">N</text></g>`;
+    const cartouche = (x: number, y: number, w: number, title: string, sub: string) => `<g class="mp-cart" transform="translate(${x} ${y})">
+      <rect x="${-w / 2}" y="-22" width="${w}" height="44" fill="#1b1610" stroke="#c9a24a" stroke-width="1.2"/><rect x="${-w / 2 + 4}" y="-18" width="${w - 8}" height="36" fill="none" stroke="#c9a24a" stroke-opacity=".5"/>
+      <text y="-2" class="mp-title">${title}</text><text y="12" class="mp-sub">${sub}</text></g>`;
+    const fogLayer = (w: number, h: number, heavy = false) => `<rect width="${w}" height="${h}" filter="url(#${heavy ? 'mp-fogheavy' : 'mp-fog'})" class="mp-fogrect"/>`;
+
     if (view === 'london') {
-      const D: [string, string, number, number, string, boolean][] = [
-        ['inkwell', 'Inkwell Row', 175, 70, 'North. Clerks, presses, scholars: the newspaper office, the library, the Society for Psychical Inquiry.', false],
-        ['greymourne', 'Greymourne Necropolis', 292, 62, 'North, on the hill. A gothic cemetery; undertakers and stonemasons. The dead do not all stay put.', false],
-        ['mayfield', 'Mayfield', 62, 140, 'West. Elite, glittering, cruel: tailors, jewellers, salons, the Velvet Court, and Vane House.', false],
-        ['market', 'Lantern Market', 185, 178, 'Centre. The busy hub: grocers, the music hall, the theatre and the omnibus depot.', false],
-        ['saltwharf', 'Saltwharf Docks', 292, 250, 'East, on the river. Poor, foggy and honest. You live here.', true],
-        ['hollow', 'Hollow Lane', 300, 330, 'East. The rookery: fences, fight pits, black markets, and the Kin\'s tunnels.', false],
-        ['ironmonger', 'Ironmonger\'s Cross', 145, 322, 'South. Smoke, steel and factories; the Lamplighters\' Guild hall.', false],
-        ['undercroft', 'The Undercroft', 190, 395, 'Beneath. The drowned streets of older Londons. Nothing for sale; things that want out.', false],
+      const D: [string, string, string, number, number, string, boolean][] = [
+        ['inkwell', 'INKWELL ROW', 'M120 40 L235 32 L250 100 L140 108 Z', 185, 72, 'North. Clerks, presses, scholars: the newspaper office, the library, the Society for Psychical Inquiry.', false],
+        ['greymourne', 'GREYMOURNE', 'M255 28 L345 40 L340 112 L262 104 Z', 300, 70, 'North, on the hill. A gothic cemetery; undertakers and stonemasons. The dead do not all stay put.', false],
+        ['mayfield', 'MAYFIELD', 'M12 90 L118 82 L128 190 L16 200 Z', 68, 142, 'West. Elite, glittering, cruel: tailors, jewellers, salons, the Velvet Court, and Vane House.', false],
+        ['market', 'LANTERN MARKET', 'M132 116 L252 108 L262 196 L140 206 Z', 196, 160, 'Centre. The busy hub: grocers, the music hall, the theatre and the omnibus depot.', false],
+        ['saltwharf', 'SALTWHARF', 'M262 262 L350 250 L352 318 L266 322 Z', 304, 288, 'East, on the river. Poor, foggy and honest. You live here.', true],
+        ['hollow', 'HOLLOW LANE', 'M240 330 L352 326 L348 390 L246 392 Z', 296, 360, 'East. The rookery: fences, fight pits, black markets, and the Kin\'s tunnels.', false],
+        ['ironmonger', 'IRONMONGER\'S CROSS', 'M40 296 L232 300 L236 380 L48 384 Z', 140, 340, 'South. Smoke, steel and factories; the Lamplighters\' Guild hall.', false],
+        ['undercroft', 'THE UNDERCROFT', 'M90 396 L290 396 L280 436 L100 436 Z', 190, 418, 'Beneath. The drowned streets of older Londons. Nothing for sale; things that want out.', false],
       ];
-      const svg = `<svg viewBox="0 0 360 420" class="map-london">
-        <defs><pattern id="mh" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="rgba(201,162,74,.12)" stroke-width="1"/></pattern></defs>
-        <rect width="360" height="420" fill="#efe6d2"/><rect width="360" height="420" fill="url(#mh)"/>
-        <path d="M-10 215 C 60 190, 110 250, 180 225 S 300 200, 370 240 L 370 270 C 300 232, 250 262, 180 255 S 60 222, -10 245 Z" fill="#9fb0bc" stroke="#5a6a7a" stroke-width="1.2"/>
-        <text x="40" y="236" class="river">The Thames</text>
-        <path d="M120 375 Q190 350 260 375 Q 230 410 190 412 Q 140 410 120 375 Z" fill="none" stroke="#6a5a48" stroke-dasharray="4 4"/>
-        ${D.map(([id, name, x, y, , open]) => `<g data-id="${id}" class="dist${open ? ' open' : ''}"><rect x="${x - 52}" y="${y - 17}" width="104" height="34" rx="5"/><text x="${x}" y="${y + 1}">${name}</text>${open ? `<text x="${x}" y="${y + 13}" class="here">you are here</text>` : `<text x="${x}" y="${y + 13}" class="here">not yet open</text>`}</g>`).join('')}
-        <text x="180" y="24" class="title">London, 1871</text>
+      const svg = `<svg viewBox="0 0 360 450" class="map-london">${defs}
+        <rect width="360" height="450" fill="url(#mp-paper)"/>
+        <path d="M-10 222 C 60 196, 110 262, 182 236 S 300 206, 370 248 L 370 278 C 300 238, 250 272, 182 266 S 60 230, -10 252 Z" fill="url(#mp-waves)" stroke="#8aa0b0" stroke-opacity=".6"/>
+        <text x="34" y="244" class="mp-river">The River Thames</text>
+        ${D.map(([id, name, path, x, y, , open]) => `<g data-id="${id}" class="mp-dist${open ? ' open' : ''}"><path d="${path}" fill="url(#${open ? 'mp-hatch2' : id === 'undercroft' ? 'mp-cross' : 'mp-hatch'})" stroke="${open ? '#e8c66a' : '#cdb88a'}" stroke-opacity="${open ? 1 : 0.5}" stroke-width="${open ? 1.6 : 1}" ${id === 'undercroft' ? 'stroke-dasharray="4 3"' : ''}/><text x="${x}" y="${y}">${name}</text>${open ? `<text x="${x}" y="${y + 13}" class="mp-here">— you are here —</text>` : ''}</g>`).join('')}
+        <g class="mp-shroud" pointer-events="none">${fogLayer(360, 450, true)}</g>
+        <ellipse cx="306" cy="288" rx="62" ry="44" fill="url(#mp-glow)" opacity=".25" pointer-events="none"/>
+        <rect width="360" height="450" fill="url(#mp-vign)" pointer-events="none"/>
+        ${cartouche(180, 30, 230, 'A PLAN OF LONDON', 'with its Districts · 1871')}
+        ${rose(34, 420, 16, 'up')}
       </svg>`;
       this.hud.showMap('london', svg, (id) => {
         const d = D.find((x) => x[0] === id);
         if (!d) return null;
-        return { title: d[1], text: d[4] + (d[5] ? '' : ' (Coming in a later district.)'), go: d[5] ? () => this.openMap('district') : undefined };
+        return { title: d[1].toLowerCase().replace(/(^|\s)\S/g, (m) => m.toUpperCase()), text: d[5] + (d[6] ? '' : ' Lost in the fog, for now: it opens in a later district.'), go: d[6] ? () => this.openMap('district') : undefined };
       });
       return;
     }
     const loc = this.locations.saltwharf;
     const m = loc.map!;
     const K = 10;
+    const W = m.w * K;
+    const H = m.h * K;
     const X = (x: number) => (m.w - x) * K;
     const Y = (z: number) => (m.h - z) * K;
     const where = (() => {
@@ -529,17 +557,23 @@ export class Game {
       const pl = loc.places.find((p) => p.id === id);
       return pl ? new THREE.Vector2(pl.door.x + 0.5, pl.door.z + 0.5) : this.player!.position;
     })();
-    const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
-    const rects = m.rects.map((r) => `<g data-id="${r.placeId}" class="b ${r.kind}"><rect x="${X(r.x + r.w)}" y="${Y(r.z + r.d)}" width="${r.w * K}" height="${r.d * K}"/><text x="${X(r.x + r.w / 2)}" y="${Y(r.z + r.d / 2) + 3}">${esc(r.label)}</text></g>`).join('');
-    const svg = `<svg viewBox="0 0 ${m.w * K} ${m.h * K}" class="map-district">
-      <rect width="${m.w * K}" height="${m.h * K}" fill="#d8cfb8"/>
-      <rect x="0" y="${Y(4)}" width="${m.w * K}" height="${4 * K}" fill="#9fb0bc"/>
-      <rect x="0" y="${Y(7)}" width="${m.w * K}" height="${3 * K}" fill="#c8bca0"/>
-      <text x="${m.w * K / 2}" y="${Y(1.6)}" class="river">The Thames</text>
+    const fill = (k: string) => (k === 'shop' ? 'url(#mp-hatch2)' : k === 'church' ? 'url(#mp-cross)' : k === 'open' ? 'none' : 'url(#mp-hatch)');
+    const rects = m.rects.map((r) => `<g data-id="${r.placeId}" class="mp-b ${r.kind}"><rect x="${X(r.x + r.w)}" y="${Y(r.z + r.d)}" width="${r.w * K}" height="${r.d * K}" fill="${fill(r.kind)}"/>${r.kind === 'church' ? `<path d="M${X(r.x + r.w / 2)} ${Y(r.z + r.d / 2) - 12} v14 M${X(r.x + r.w / 2) - 5} ${Y(r.z + r.d / 2) - 7} h10" class="mp-crossmark"/>` : ''}<text x="${X(r.x + r.w / 2)}" y="${Y(r.z + r.d / 2) + (r.kind === 'church' ? 14 : 4)}">${esc(r.label)}</text></g>`).join('');
+    const lamps = (loc.lamps ?? []).map((l) => `<circle cx="${X(l.x)}" cy="${Y(l.z)}" r="9" fill="url(#mp-glow)"/><circle cx="${X(l.x)}" cy="${Y(l.z)}" r="1.6" fill="#ffd27a"/>`).join('') + `<circle cx="${X(27.5)}" cy="${Y(15.5)}" r="13" fill="url(#mp-vane)"/><circle cx="${X(27.5)}" cy="${Y(15.5)}" r="2" fill="#fff"/>`;
+    const svg = `<svg viewBox="0 0 ${W} ${H + 40}" class="map-district">${defs}
+      <rect width="${W}" height="${H + 40}" fill="url(#mp-paper)"/>
+      <rect x="0" y="${Y(4)}" width="${W}" height="${4 * K + 40}" fill="url(#mp-waves)"/>
+      <line x1="0" y1="${Y(4)}" x2="${W}" y2="${Y(4)}" stroke="#cdb88a" stroke-opacity=".6" stroke-width="1.5"/>
+      <text x="${W / 2}" y="${Y(1.5) + 8}" class="mp-river">The River Thames</text>
       ${rects}
-      ${m.streets.map((t) => `<text x="${X(t.x) - (t.label.length * 2.6)}" y="${Y(t.z)}" class="street">${esc(t.label)}</text>`).join('')}
-      <circle cx="${X(where.x)}" cy="${Y(where.y)}" r="7" class="you"/><circle cx="${X(where.x)}" cy="${Y(where.y)}" r="13" class="you-ring"/>
-      <g class="compass" transform="translate(${m.w * K - 26} 30)"><circle r="16"/><path d="M0 12 L5 -2 L0 2 L-5 -2 Z"/><text y="-5">N</text></g>
+      ${lamps}
+      ${m.streets.map((t) => `<text x="${X(t.x)}" y="${Y(t.z)}" class="mp-street" style="text-anchor:${X(t.x) > W / 2 ? 'end' : 'start'}">${esc(t.label)}</text>`).join('')}
+      <g pointer-events="none">${fogLayer(W, H + 40)}</g>
+      <rect width="${W}" height="${H + 40}" fill="url(#mp-vign)" pointer-events="none"/>
+      <g class="mp-you" pointer-events="none"><circle cx="${X(where.x)}" cy="${Y(where.y)}" r="16" fill="url(#mp-glow)"/><circle cx="${X(where.x)}" cy="${Y(where.y)}" r="5.5" class="you"/><circle cx="${X(where.x)}" cy="${Y(where.y)}" r="12" class="you-ring"/></g>
+      ${cartouche(W / 2, 30, 270, 'SALTWHARF DOCKS', 'in the Parish of St. Botolph · 1871')}
+      ${rose(W - 34, 82, 18, 'down')}
+      <g class="mp-scale" transform="translate(18 ${H - 14})"><path d="M0 0 h60 M0 -4 v8 M30 -3 v6 M60 -4 v8"/><text x="30" y="-8">one furlong</text></g>
     </svg>`;
     this.hud.showMap('district', svg, (id) => {
       const pl = loc.places.find((p) => p.id === id);

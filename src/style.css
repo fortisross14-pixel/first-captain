@@ -738,38 +738,43 @@ button:disabled { cursor: default; }
 .topbar { gap: 6px; }
 @media (max-width: 380px) { .topbar .tok.watch .lab { display: none; } }
 .mapview { position: absolute; inset: 0; z-index: 30; display: grid; place-items: center; padding: 14px; background: radial-gradient(ellipse at center, rgba(4, 7, 14, .55), rgba(4, 7, 14, .88)); animation: fadein .25s ease-out both; }
-.map-sheet { width: min(100%, 520px); max-height: 100%; overflow: auto; padding: 14px 14px 12px; color: var(--ink); background: var(--hatch-ink), linear-gradient(180deg, #f7f0df, var(--ivory));
-  box-shadow: inset 0 0 0 1px rgba(122, 90, 30, .5), 0 0 0 8px var(--sheet), 0 0 0 9px var(--gilt), 0 0 0 12px var(--sheet-lo), 0 18px 40px rgba(0, 0, 0, .7); border-radius: 3px; animation: paste .35s ease-out both; }
+.map-sheet { width: min(100%, 540px); max-height: 100%; overflow: auto; padding: 12px 12px 10px; color: var(--pale);
+  background: var(--corners), var(--hatch), linear-gradient(180deg, var(--sheet-hi), var(--sheet) 75%); border: 1.5px solid var(--gilt);
+  box-shadow: 0 0 0 3px var(--sheet-lo), 0 0 0 4px rgba(201, 162, 74, .35), 0 18px 40px rgba(0, 0, 0, .75); border-radius: 2px; animation: paste .35s ease-out both; }
 .map-tabs { margin-top: 0; }
-.map-body svg { display: block; width: 100%; height: auto; max-height: 62vh; margin-top: 8px; border: 1px solid rgba(122, 90, 30, .6); }
-.map-body text { font-family: var(--f-display); text-anchor: middle; fill: #2a2620; pointer-events: none; }
-.map-body .title { font: 400 22px var(--f-script); fill: #1a2a52; }
-.map-body .river { font-style: italic; font-size: 13px; fill: #3a4a5a; text-anchor: start; }
-.map-body .dist rect { fill: #e4d9c0; stroke: #8a7a5a; stroke-width: 1; }
-.map-body .dist text { font-size: 11px; }
-.map-body .dist .here { font-size: 8.5px; font-style: italic; fill: #7a6a4a; }
-.map-body .dist.open rect { fill: #17264a; stroke: var(--gilt); stroke-width: 2; filter: drop-shadow(0 0 6px rgba(201, 162, 74, .7)); }
-.map-body .dist.open text { fill: var(--gilt-hi); }
-.map-body .dist.open .here { fill: #e8d6a8; }
+.map-body { position: relative; margin-top: 8px; box-shadow: 0 0 0 1px #c9a24a, 0 0 0 4px #0a1226, 0 0 0 5px rgba(201, 162, 74, .5); overflow: hidden; }
+.map-body svg { display: block; width: 100%; height: auto; max-height: 64vh; }
+.map-body text { font-family: var(--f-display); text-anchor: middle; fill: #e8d9b0; pointer-events: none; }
+.mp-title { font: 400 17px var(--f-sc); letter-spacing: .12em; fill: #f0d78a !important; }
+.mp-sub { font: italic 400 10.5px var(--f-display); fill: #cdb88a !important; }
+.mp-river { font: italic 400 15px var(--f-display); letter-spacing: .2em; fill: #a8bccb !important; }
+.mp-street { font: italic 400 11.5px var(--f-display); fill: #d8c8a0 !important; letter-spacing: .06em; paint-order: stroke; stroke: #1b1610; stroke-width: 3px; }
+.mp-n { font: 400 11px var(--f-sc); fill: #e8c66a !important; }
+.mp-rose { pointer-events: none; }
+.mp-scale path { stroke: #cdb88a; fill: none; stroke-width: 1.2; }
+.mp-scale text { font: italic 400 9px var(--f-display); fill: #cdb88a !important; }
+.mp-b rect { stroke: #cdb88a; stroke-opacity: .75; stroke-width: .9; }
+.mp-b.shop rect { stroke: #e8c66a; stroke-opacity: 1; stroke-width: 1.2; }
+.mp-b.open rect { stroke-dasharray: 5 3; stroke-opacity: .6; }
+.mp-b text { font-size: 10.5px; paint-order: stroke; stroke: #1b1610; stroke-width: 3px; }
+.mp-b.shop text { fill: #f0d78a; font-size: 11px; }
+.mp-b.house text { font-size: 9.5px; fill: #d8c8a0; }
+.mp-crossmark { stroke: #e8d9b0; stroke-width: 1.6; fill: none; }
 .map-body [data-id] { cursor: pointer; }
-.map-body .picked rect { stroke: #a2261c !important; stroke-width: 3 !important; }
-.map-body .b rect { stroke: #3a2e22; stroke-width: 1; }
-.map-body .b.shop rect { fill: #c9a24a; }
-.map-body .b.house rect { fill: #9a7a5a; }
-.map-body .b.church rect { fill: #a9b3c6; }
-.map-body .b.open rect { fill: rgba(122, 90, 30, .15); stroke-dasharray: 4 3; }
-.map-body .b text { font-size: 10px; fill: #1b1a24; }
-.map-body .b.house text { font-size: 9px; fill: #f0e6d0; }
-.map-body .street { font-size: 11px; font-style: italic; fill: #5a4a32; text-anchor: start; }
-.map-body .you { fill: #a2261c; stroke: #fff; stroke-width: 2; }
-.map-body .you-ring { fill: none; stroke: #a2261c; stroke-width: 2; animation: youpulse 1.6s ease-out infinite; transform-box: fill-box; transform-origin: center; }
-@keyframes youpulse { from { opacity: 1; transform: scale(.6); } to { opacity: 0; transform: scale(1.6); } }
-.map-body .compass circle { fill: rgba(239, 230, 210, .9); stroke: #8a6a2a; }
-.map-body .compass path { fill: #1a2a52; }
-.map-body .compass text { font-size: 9px; fill: #1a2a52; }
-.map-card { display: grid; gap: 4px; margin-top: 10px; padding: 8px 2px 2px; border-top: 1px solid rgba(201, 162, 74, .6); }
-.map-card b { font: 400 20px var(--f-sc); color: var(--sheet); }
-.map-card span { font: italic 400 14.5px/1.35 var(--f-body); color: #3a3428; }
+.map-body [data-id]:hover rect, .map-body [data-id]:hover path { filter: brightness(1.3); }
+.map-body .picked rect, .map-body .picked path { stroke: #e8473a !important; stroke-width: 2.4 !important; stroke-opacity: 1 !important; }
+.mp-dist text { font: 400 10.5px var(--f-sc); letter-spacing: .08em; paint-order: stroke; stroke: #14110c; stroke-width: 3px; }
+.mp-dist.open text { fill: #f0d78a; font-size: 11.5px; }
+.mp-here { font: italic 400 8.5px var(--f-display) !important; fill: #e8d6a8 !important; letter-spacing: 0 !important; }
+.mp-fogrect { opacity: .42; animation: mpfog 26s ease-in-out infinite alternate; }
+.mp-shroud .mp-fogrect { opacity: .78; }
+@keyframes mpfog { from { transform: translateX(-14px); } to { transform: translateX(14px); } }
+.map-body .you { fill: #e8473a; stroke: #ffe8c0; stroke-width: 1.6; }
+.map-body .you-ring { fill: none; stroke: #ffb07a; stroke-width: 1.6; animation: youpulse 1.6s ease-out infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes youpulse { from { opacity: 1; transform: scale(.6); } to { opacity: 0; transform: scale(1.7); } }
+.map-card { display: grid; gap: 4px; margin-top: 10px; padding: 8px 2px 2px; border-top: 1px solid rgba(201, 162, 74, .5); }
+.map-card b { font: 400 20px var(--f-sc); color: var(--gilt-hi); }
+.map-card span { font: italic 400 14.5px/1.35 var(--f-body); color: #cdc3ad; }
 .map-card button { justify-self: start; margin-top: 4px; }
 .mapview .actions { display: flex; justify-content: flex-end; margin-top: 10px; }
 @media (min-aspect-ratio: 5/4) {
