@@ -25,6 +25,7 @@ export const ACTIVITY_TEXT: Record<Activity, string> = {
   sick: 'wrapped in a blanket, coughing',
   confused: 'staring at nothing',
   lean: 'leaning in a doorway',
+  play: 'playing in the street',
 };
 
 /** Ambient lines, by person then activity; `*` is any activity. */
@@ -45,6 +46,23 @@ export const AMBIENT: Record<string, Partial<Record<Activity | '*', string[]>>> 
   silas: { lean: ['Lovely evening for it.', 'Nothing to see here.'], smoke: ['Mm.'] },
   grubb: { watch: ['Rent day\'s coming. Rent day\'s always coming.', 'Damp? That\'s character, that is.'] },
   ashby: { watch: ['Have you seen him? Tall. Grey coat.', 'The fog took him. I know it did.'] },
+};
+
+/** What anyone says while doing something, when they have no lines of their own. */
+export const GENERIC: Partial<Record<Activity, string[]>> = {
+  play: ['Tag! You\'re it!', 'Can\'t catch me!', 'One, two, three...', 'Mam says come in!'],
+  haul: ['Heave!', 'Mind your backs!', 'Easy... easy...'],
+  sell: ['Fresh today!', 'Ha\'penny a bunch!'],
+  wash: ['My poor hands.', 'Another tub, another penny.'],
+  sweep: ['Sweep your crossing, sir? A farthing!'],
+  flowers: ['Matches! Lucifers, a ha\'penny!', 'Buy a box, mister?'],
+  drink: ['Your health!', 'Another, Bessa!'],
+  watch: ['Mornin\'.', 'Cold, ain\'t it.', 'Fog\'s coming.'],
+  lean: ['Evenin\'.', 'Heard the news?'],
+  mend: ['Over, under, through...'],
+  smoke: ['Sailed from Calcutta, I did.'],
+  read: ['Hm.'],
+  box: ['Hup!'],
 };
 
 export const SICK_LINES = ['*cough*', 'Don\'t come close, love.', 'It\'s nothing. *cough* Nothing.'];

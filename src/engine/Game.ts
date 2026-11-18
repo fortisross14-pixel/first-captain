@@ -4,7 +4,11 @@ import { Player } from '../actors/Player';
 import { createCharacter, type Look, type Rig } from '../actors/characterModel';
 import { GRADE_INFO, JOBS, autopilotGrade, dayIndex, gradeFor, minuteOfDay, weekday, type Grade } from '../game/jobs';
 import { addNeed, simulateNeeds } from '../game/needs';
-import { RESIDENTS, stopAt, type Resident, type Stop } from '../game/residents';
+import { AUTHORED_RESIDENTS, RESIDENTS, stopAt, type Resident, type Stop } from '../game/residents';
+import {
+  AUTHORED, HAUNTS, HOMES, JOB_KINDS, ageOf, authoredRecords, fullNameOf, generatePopulation, roleOf, scheduleFor, simulateNight, voiceFor,
+  type LifeEvent, type PersonRec,
+} from '../game/population';
 import { RECIPES, cookMult, ingredients, missing as recipeMissing } from '../game/food';
 import { LESSON_XP, MENTORS, PERKS, hasPerk, nextPerk, perkAt } from '../game/skills';
 
@@ -12,7 +16,7 @@ const PERKS_OWNED = (s: GameState) => PERKS.filter((p) => s.character.skills[p.s
 import { HOLIDAYS, MOOD_PAY, MOOD_TEXT, WEATHER_TEXT, bossMood, holidayOn, isSunday, rollWeather, strikeStarts } from '../game/calendar';
 import { FUTURE_OFFICES, OFFICES, count as countVotes, officeTitle, pledgeChance, voters } from '../game/parish';
 import { ASKS, LOST_ZONES, PLACE_NAMES, READ_LETTERS, type Quest } from '../game/quests';
-import { ACTIVITY_TEXT, AMBIENT, CONFUSED_LINES, SICK_LINES, conversation } from '../game/talk';
+import { ACTIVITY_TEXT, AMBIENT, CONFUSED_LINES, GENERIC, SICK_LINES, conversation } from '../game/talk';
 import { EVICTION_DAY, FUNERAL_DAY, Life, VANE_DONE, VANE_START } from './Life';
 import {
   DAILY_LIMIT, INTERACTIONS, interact, knownTraits, newRelation, relationLabel, type Interaction, type Relation,
@@ -87,6 +91,7 @@ export class Game {
   private chatTimer = 12;
   private chat: { a: Npc; b: Npc; lines: [string, string][]; i: number; t: number; spread: import('../game/world').Fact | null } | null = null;
   private askTimer = 20;
+  private shadowTimer = 0;
   private headline: string | null = null;
   private headlineDay = -1;
   private asking: { npc: Npc; t: number; retarget: number } | null = null;
@@ -251,6 +256,7 @@ export class Game {
     this.title = null;
     this.state = s;
     this.prevSkills = null;
+    this.syncPopulation();
     this.clock.minutes = s.minutes;
     this.lastSaveMinute = s.minutes;
     this.player?.rig.root.removeFromParent();
@@ -834,9 +840,19 @@ export class Game {
     if (blocker === 'full') return this.dialogue.say({ speaker: B, text: 'You\'ve two masters already. Nobody has the hours for three.' });
     if (blocker === 'clash') return this.dialogue.say({ speaker: B, text: 'Those hours clash with your other work. Choose one.' });
     if (blocker) return;
-    const yes = await this.dialogue.ask({ speaker: B, text: job.lines.offer }, ["I'll take it.", 'Not now.']);
-    if (yes !== 0) return;
+    const rec = s.recommend[jobId];
+    const recOk = rec && dayIndex(s.minutes) - rec.day <= 5 && (s.relations?.[rec.by]?.friendship ?? 0) >= 30;
+    const opts = recOk ? [`${this.first(rec.by)} sent me. (Start as ${job.ranks[1].title})`, "I'll take it.", 'Not now.'] : ["I'll take it.", 'Not now.'];
+    const yes = await this.dialogue.ask({ speaker: B, text: job.lines.offer }, opts);
+    if (yes === opts.length - 1) return;
     hire(s, jobId);
+    if (recOk && yes === 0) {
+      const e = employment(s, jobId)!;
+      e.rank = 1;
+      e.recommendedBy = rec.by;
+      delete s.recommend[jobId];
+      await this.dialogue.say({ speaker: B, text: `"${this.first(rec.by)} vouched for you. That's worth a rung. You start as ${job.ranks[1].title}. Don't shame them."` });
+    }
     await this.dialogue.say(...job.lines.hired.map((text) => ({ speaker: B, text })));
     if (s.jobs.length === 2) this.hud.toast('Two jobs: mind your Rest. Sleep is the first thing you will run short of.', 4000);
     this.save();
@@ -946,7 +962,10 @@ export class Game {
       await this.hud.celebrate('promotion', 'Promoted', rep.promotedTo, `${job.career}: £${e2 ? job.ranks[e2.rank].pay.toFixed(2) : '?'} a shift`);
       await this.dialogue.say({ speaker: job.boss, text: job.lines.promoted.replace('{rank}', rep.promotedTo) });
     }
-    if (rep.fired) await this.dialogue.say({ speaker: job.boss, text: job.lines.fired });
+    if (rep.fired) {
+      this.shame(e);
+      await this.dialogue.say({ speaker: job.boss, text: job.lines.fired });
+    }
     this.busy = false;
     this.save();
   }
@@ -968,6 +987,15 @@ export class Game {
     this.hud.toast('Two hours at the gate in the cold, shouting at carts. Nell shares her tea. Dockers\' friendship +5, Social +14. Rudd is writing names down.', 4500);
   }
 
+  /** Fired soon after someone vouched for you: they lose face, and lose patience with you. */
+  private shame(e: { recommendedBy?: string; hiredDay: number }): void {
+    if (!e.recommendedBy || dayIndex(this.state!.minutes) - e.hiredDay > 10) return;
+    const r = this.rel(e.recommendedBy);
+    r.friendship = Math.max(0, r.friendship - 15);
+    r.rivalry = Math.min(100, r.rivalry + 5);
+    this.hud.toast(`${this.first(e.recommendedBy)} vouched for you. Now they look a fool. Friendship −15.`, 4000);
+  }
+
   /** A nudge half an hour before each shift. */
   private remindShifts(): void {
     const s = this.state!;
@@ -987,8 +1015,13 @@ export class Game {
 
   /** Penalises missed shifts; called every frame and after sleeping. */
   private async attendance(): Promise<void> {
+    const before = this.state!.jobs.map((e) => ({ ...e }));
     for (const r of checkAttendance(this.state!)) {
-      if (r.fired) await this.dialogue.say({ speaker: r.job.boss, text: r.job.lines.absentFired });
+      if (r.fired) {
+        const e = before.find((x) => x.jobId === r.job.id);
+        if (e) this.shame(e);
+        await this.dialogue.say({ speaker: r.job.boss, text: r.job.lines.absentFired });
+      }
       else this.hud.toast(`You missed ${r.missed === 1 ? 'a shift' : `${r.missed} shifts`} at ${r.job.career === 'Docks' ? 'the docks' : r.job.career}. Promotion points −${r.missed * 3}.`, 4000);
     }
   }
@@ -1004,9 +1037,13 @@ export class Game {
   private updateNpcs(dt: number): void {
     const hour = Math.floor(this.clock.hour);
     const outside = this.location.id === 'saltwharf';
+    this.shadowTimer -= dt;
+    const recheck = this.shadowTimer <= 0;
+    if (recheck) this.shadowTimer = 0.5;
     for (const n of this.npcs) {
       n.follow(this.stopFor(n.res, hour), outside);
       n.update(dt, this.elapsed);
+      if (recheck && this.player && n.visible) n.setShadow(this.dist(n) < 9);
     }
     if (outside && this.mode === 'play' && !this.busy && !this.dialogue.open) {
       this.greetings();
@@ -1036,6 +1073,19 @@ export class Game {
       const pl = this.locations.saltwharf.places.find((p) => p.id === inv.place);
       if (pl) return { from: 0, to: 24, x: pl.door.x + 1, z: pl.door.z, act: 'watch' };
     }
+    // Weddings at the market cross at eleven; the supper outside the Copper Cup at seven.
+    const wed = s.ceremonies.find((c) => c.kind === 'wedding' && c.day === day);
+    if (wed) {
+      const i = wed.ids.indexOf(r.id);
+      const guest = i < 0 && (r.id === 'hale' || wed.ids.some((w) => Object.values(CIRCLES).some((cl) => cl.includes(w) && cl.includes(r.id))));
+      if ((i >= 0 || guest) && hour >= 10 && hour < 12) {
+        if (r.id === 'hale') return { from: 10, to: 12, x: 12, z: 19, act: 'preach' };
+        if (i >= 0) return { from: 10, to: 12, x: 12 + i, z: 21, act: 'watch' };
+        const k = RESIDENTS.indexOf(r);
+        return { from: 10, to: 12, x: 10 + (k % 6), z: 22 + (k % 2), act: 'watch' };
+      }
+      if (i >= 0 && hour >= 19 && hour < 22) return { from: 19, to: 22, x: 18 + i, z: 8, act: 'drink' };
+    }
     const hol = holidayOn(day);
     if (hol?.id === 'bonfire' && hour >= 18 && hour < 23 && !['quill', 'silas'].includes(r.id)) {
       const i = RESIDENTS.indexOf(r);
@@ -1049,7 +1099,11 @@ export class Game {
     if (s.strike && day >= s.strike.day && day <= s.strike.until && hour >= 6 && hour < 15 && ['nell', 'tom'].includes(r.id)) {
       return { from: 6, to: 15, x: r.id === 'nell' ? 25 : 27, z: 8, act: 'preach' };
     }
-    const st = stopAt(r, hour);
+    const st0 = stopAt(r, hour);
+    // Generated people don't go out every evening.
+    const rec = this.rec(r.id);
+    const varied = rec && !rec.authored && st0 && st0.from >= 15 && (Math.sin((day + 1) * 7.13 + r.id.length * 3.7 + r.id.charCodeAt(1)) + 1) / 2 < 0.3;
+    const st = varied ? null : st0;
     if (st && s.weather === 'rain' && ['grubb', 'hale', 'quill', 'ashby', 'lizzie'].includes(r.id) && st.act !== 'mend') return null;
     if (st && (s.life.confused[r.id] ?? -1) >= day) return { ...st, act: 'confused' };
     return st;
@@ -1092,7 +1146,7 @@ export class Game {
     if (!near.length) return;
     const n = near[Math.floor(Math.random() * near.length)];
     const act = n.act!;
-    const pool = act === 'sick' ? SICK_LINES : act === 'confused' ? CONFUSED_LINES : act === 'preach' && this.state!.strike ? ['Fair pay for fair work!', 'Don\'t cross the line, mate!', 'Out! Out! All out!'] : AMBIENT[n.res.id]?.[act] ?? AMBIENT[n.res.id]?.['*'];
+    const pool = act === 'sick' ? SICK_LINES : act === 'confused' ? CONFUSED_LINES : act === 'preach' && this.state!.strike ? ['Fair pay for fair work!', 'Don\'t cross the line, mate!', 'Out! Out! All out!'] : AMBIENT[n.res.id]?.[act] ?? AMBIENT[n.res.id]?.['*'] ?? GENERIC[act];
     if (!pool?.length) return;
     const met = this.state!.relations?.[n.res.id]?.met;
     this.bubbleAt(n.walker.position.x, n.walker.position.y, met ? this.short(n.res.id) : '', pool[Math.floor(Math.random() * pool.length)]);
@@ -1266,6 +1320,248 @@ export class Game {
     }
   }
 
+  // --- A city of lives -------------------------------------------------------
+
+  private rec(id: string): PersonRec | undefined {
+    return this.state?.people.find((p) => p.id === id);
+  }
+
+  /** Builds the population for a new life, and the street's cast from it. */
+  private syncPopulation(): void {
+    const s = this.state!;
+    if (!s.people.length) s.people = [...authoredRecords(AUTHORED_RESIDENTS), ...generatePopulation(Math.floor(Math.random() * 1e9))];
+    const day = dayIndex(s.minutes);
+    const cast: Resident[] = [];
+    for (const res of AUTHORED_RESIDENTS) {
+      const p = this.rec(res.id);
+      if (p && !p.alive) continue;
+      if (p && p.home !== (AUTHORED[res.id]?.home ?? p.home)) res.home = HOMES[p.home]?.door ?? res.home;
+      cast.push(res);
+    }
+    for (const p of s.people) {
+      if (p.authored || !p.alive || p.district !== 'Saltwharf' || !p.look || ageOf(p, day) < 3) continue;
+      VOICES[p.id] ??= voiceFor(p);
+      const circle = p.work && JOB_KINDS[p.work]?.employer === 'docks' ? 'docks' : p.haunt === 'cupfront' ? 'cup' : p.haunt === 'church' ? 'church' : 'street';
+      if (!CIRCLES[circle].includes(p.id)) CIRCLES[circle].push(p.id);
+      cast.push({
+        id: p.id, name: fullNameOf(p), gender: p.gender, attraction: p.attraction, cls: p.cls, traits: p.traits, role: roleOf(p, day),
+        look: p.look, home: HOMES[p.home]?.door ?? HOMES.court.door, schedule: scheduleFor(p, day),
+      });
+    }
+    RESIDENTS.splice(0, RESIDENTS.length, ...cast);
+    // The street's figures follow the cast: the dead leave, the new arrive.
+    const scene = this.locations.saltwharf.scene;
+    for (const n of [...this.npcs]) {
+      const now = cast.find((r) => r.id === n.res.id);
+      if (now && JSON.stringify(now.look) === JSON.stringify(n.res.look)) {
+        Object.assign(n.res, now);
+        continue;
+      }
+      n.walker.rig.root.removeFromParent();
+      this.npcs.splice(this.npcs.indexOf(n), 1);
+    }
+    for (const r of cast) {
+      if (this.npcs.some((n) => n.res.id === r.id)) continue;
+      const npc = new Npc(r, this.locations.saltwharf.grid);
+      scene.add(npc.walker.rig.root);
+      this.npcs.push(npc);
+    }
+  }
+
+  /** Overnight, for everyone in London: courtships, weddings, births, deaths. Lines for the morning. */
+  private nightlyLivesOfAll(day: number): string[] {
+    const s = this.state!;
+    const lines: string[] = [];
+    const courting = new Set(Object.entries(s.relations ?? {}).filter(([, r]) => r.romance >= 30).map(([id]) => id));
+    const events = simulateNight(s.people, day, courting);
+    const name = (id: string) => { const p = this.rec(id); return p ? fullNameOf(p) : this.nameOf(id); };
+    const known = (id: string) => !!s.relations?.[id]?.met;
+    const friendOf = (ids: string[]) => ids.find((id) => (s.relations?.[id]?.friendship ?? 0) >= 30);
+    const local = (id: string) => this.rec(id)?.district === 'Saltwharf';
+    for (const e of events) this.lifeEvent(e, lines, name, known, friendOf, local);
+    // Friendships fade when you don't see people.
+    for (const [id, r] of Object.entries(s.relations ?? {})) {
+      if (!r.met) continue;
+      r.seen ??= day;
+      const gap = day - r.seen;
+      if (gap <= 3) continue;
+      const was = r.friendship;
+      r.friendship = Math.max(0, r.friendship - 1.5);
+      r.romance = Math.max(0, r.romance - 2);
+      r.business = Math.max(0, r.business - 0.5);
+      r.rivalry = Math.max(0, r.rivalry - 1);
+      if (was >= 30 && r.friendship < 30) sendLetter(s, name(id), 'Haven\'t seen you', `${s.character.first},\n\nIt's been ${gap} days. I thought we were friends. Come and find me, if you remember where.\n\n${this.first(id)}`);
+    }
+    this.syncPopulation();
+    return lines;
+  }
+
+  private lifeEvent(e: LifeEvent, lines: string[], name: (id: string) => string, known: (id: string) => boolean, friendOf: (ids: string[]) => string | undefined, local: (id: string) => boolean): void {
+    const s = this.state!;
+    const [a, b] = e.ids;
+    if (e.kind === 'death') {
+      const p = this.rec(a)!;
+      const age = ageOf(p, e.day);
+      if (local(a) || known(a)) lines.push(`${name(a)} died in the night, aged ${age}.${local(a) ? ' The funeral is tomorrow at eleven.' : ''}`);
+      if (local(a)) s.ceremonies.push({ kind: 'funeral', ids: [a], names: name(a), day: e.day + 1 });
+      if ((s.relations?.[a]?.friendship ?? 0) >= 30 || friendOf([...p.children, p.spouse ?? ''])) {
+        const writer = friendOf([...p.children, p.spouse ?? '']);
+        sendLetter(s, writer ? name(writer) : 'The parish of St. Botolph', `${p.first} ${p.last}`, `${p.first} has gone, at ${age}, in their sleep. ${local(a) ? 'We bury them tomorrow at eleven. Walk with us, if you can.' : 'They spoke of you.'}\n\n${writer ? this.first(writer) : 'A. Hale, curate'}`);
+      }
+      this.portraits.forget(a);
+    } else if (e.kind === 'engaged') {
+      const wedding = this.rec(a)?.courting?.wedding ?? e.day + 4;
+      if (known(a) || known(b)) lines.push(`${name(a)} and ${name(b)} are to be married, ${wedding - e.day} days from now.`);
+      const f = friendOf([a, b]);
+      if (f && (local(a) || local(b))) sendLetter(s, `${name(a)} & ${name(b)}`, 'An invitation', `${s.character.first},\n\nWe are to be married on ${this.clock.formatShortDate(new Date(1871, 9, 1 + wedding))}, at eleven, at the market cross; Father Hale will do it, and there's a supper at the Copper Cup after. Come. It wouldn't be right without you.\n\n${this.first(f)}`);
+    } else if (e.kind === 'wedding') {
+      if (local(a) || local(b)) s.ceremonies.push({ kind: 'wedding', ids: [a, b], names: `${name(a)} and ${name(b)}`, day: e.day });
+      if (known(a) || known(b)) lines.push(`Today ${name(a)} marries ${name(b)}, at eleven at the market cross.`);
+      // Someone you were courting marrying someone else stings.
+      for (const id of [a, b]) if ((s.relations?.[id]?.romance ?? 0) >= 15) lines.push(`${this.first(id)} is marrying someone else. You hear it like a door closing.`);
+    } else if (e.kind === 'birth') {
+      if (known(b) || known(e.ids[2])) lines.push(`${name(b)} has had a baby: ${this.rec(a)?.gender === 'man' ? 'a son' : 'a daughter'}, ${this.rec(a)?.first}.`);
+      const f = friendOf([b, e.ids[2]]);
+      if (f) sendLetter(s, name(f), 'A new arrival', `${s.character.first},\n\n${this.rec(a)?.gender === 'man' ? 'A boy' : 'A girl'}! ${this.rec(a)?.first}, we've called ${this.rec(a)?.gender === 'man' ? 'him' : 'her'}. Loud as the river and twice as wet. Come and see.\n\n${this.first(f)}`);
+    } else if (e.kind === 'courting') {
+      if ((known(a) || known(b)) && Math.random() < 0.5) lines.push(`Word is ${name(a)} is walking out with ${name(b)}.`);
+    } else if (e.kind === 'grownup') {
+      if (known(a)) lines.push(`${name(a)} has started work, at twelve: ${JOB_KINDS[this.rec(a)!.work!].name.toLowerCase()}.`);
+    }
+  }
+
+  /** A wedding or funeral at eleven: be at the market cross (or on Quay Street) to attend. */
+  private checkCeremonies(): void {
+    const s = this.state!;
+    const day = dayIndex(s.minutes);
+    s.ceremonies = s.ceremonies.filter((c) => c.day >= day - 1);
+    if (this.busy || this.dialogue.open || this.hud.blocking || this.location.id !== 'saltwharf') return;
+    const h = this.clock.hour;
+    for (const c of s.ceremonies) {
+      if (c.day !== day || c.attended || h < 11 || h > 12.4) continue;
+      const p = this.player!.position;
+      const mourner = c.kind === 'funeral' ? this.life.where('funeral') : null;
+      const near = c.kind === 'wedding' ? Math.hypot(p.x - 12.5, p.y - 20.5) < 4.5 : !!mourner && Math.hypot(p.x - mourner.x - 0.5, p.y - mourner.z - 0.5) < 4;
+      if (!near) continue;
+      c.attended = true;
+      void this.attendCeremony(c);
+    }
+  }
+
+  private async attendCeremony(c: GameState['ceremonies'][number]): Promise<void> {
+    const s = this.state!;
+    this.busy = true;
+    this.player!.stop();
+    const day = dayIndex(s.minutes);
+    if (c.kind === 'wedding') {
+      const choice = await this.dialogue.ask({ speaker: 'Father Ambrose Hale', text: `"Dearly beloved..." A crowd in its Sunday best round the market cross: ${c.names}. Someone has tied ribbons to Jem's barrow.` }, ['Give them a gift (from your bag)', 'Throw rice and cheer', 'Watch from the back']);
+      let gain = choice === 2 ? 2 : 6;
+      if (choice === 0 && s.inventory.length) {
+        const it = [...s.inventory].sort((x, y) => ITEMS[y.id].price - ITEMS[x.id].price)[0];
+        removeItem(s, it.id);
+        gain = 12;
+        this.hud.toast(`You give them your ${ITEMS[it.id].name.toLowerCase()}.`, 3000);
+      }
+      for (const id of c.ids) {
+        const r = this.rel(id);
+        r.met = true;
+        r.friendship = Math.min(100, r.friendship + gain);
+        r.seen = day;
+      }
+      addNeed(s.needs, 'social', 20);
+      this.clock.minutes += 60;
+      this.busy = false;
+      await this.hud.celebrate('friend', 'A wedding', c.names, 'Social +20. There\'s a supper at the Copper Cup tonight.');
+    } else {
+      await this.dialogue.say({ speaker: '', text: `The coffin of ${c.names} goes by on four shoulders. Father Hale reads the words. A woman you don't know takes your arm for a moment, then lets go.` });
+      addNeed(s.needs, 'social', 8);
+      for (const p of this.npcs) if (p.visible && this.dist(p) < 8 && s.relations?.[p.res.id]?.met) this.rel(p.res.id).friendship = Math.min(100, this.rel(p.res.id).friendship + 2);
+      this.clock.minutes += 30;
+      this.busy = false;
+    }
+  }
+
+  /** What you know of someone's life, for their card. */
+  private lifeOf(id: string): { age: number | null; home: string; work: string; haunt: string; family: string[]; now: string } {
+    const s = this.state!;
+    const p = this.rec(id);
+    const k = s.known[id] ?? {};
+    const day = dayIndex(s.minutes);
+    const a = AUTHORED[id];
+    const home = p ? HOMES[p.home]?.name ?? p.home : a?.home ?? '';
+    const work = a?.work ?? (p?.work ? JOB_KINDS[p.work].place : ageOf(p ?? { birth: 0 }, day) < 9 ? 'too young to work' : 'no work');
+    const haunt = a?.haunt ?? (p?.haunt ? HAUNTS[p.haunt].name : '');
+    const family: string[] = [];
+    if (p?.spouse) family.push(`married to ${fullNameOf(this.rec(p.spouse)!)}`);
+    else if (p?.widowed) family.push('widowed');
+    if (p?.courting) family.push(`walking out with ${fullNameOf(this.rec(p.courting.with)!)}`);
+    const kids = (p?.children ?? []).map((c) => this.rec(c)).filter((c) => c?.alive);
+    if (kids.length) family.push(`${kids.length === 1 ? 'a child' : `${kids.length} children`}: ${kids.map((c) => `${c!.first} (${ageOf(c!, day)})`).join(', ')}`);
+    // Where they are likely to be right now.
+    const npc = this.npcs.find((n) => n.res.id === id);
+    const h = Math.floor(this.clock.hour);
+    const st = npc ? this.stopFor(npc.res, h) : null;
+    const job = p?.work ? JOB_KINDS[p.work] : null;
+    const atWork = job ? (job.from <= h && h < job.to) : false;
+    const now = !p?.alive ? 'Dead.' : p.district !== 'Saltwharf' ? `Lives in ${p.district}.` : st ? (k.haunt || k.work ? `Out: ${st.act ? ACTIVITY_TEXT[st.act] : 'about'}` : 'Out somewhere in Saltwharf') : atWork && k.work ? `At work, ${job!.place}` : k.home ? `At home, ${home}` : 'Indoors somewhere';
+    return { age: p ? ageOf(p, day) : null, home: k.home ? home : '?', work: k.work ? work : '?', haunt: k.haunt ? haunt : '?', family, now };
+  }
+
+  /** "Tell me about yourself": they tell you where they live, work and drink. */
+  private async askAboutLife(npc: Npc): Promise<void> {
+    const s = this.state!;
+    const id = npc.res.id;
+    const r = this.rel(id);
+    const k = (s.known[id] ??= {});
+    k.home = k.home || r.friendship >= 5 || Math.random() < 0.6;
+    k.work = true;
+    k.haunt = k.haunt || r.friendship >= 10 || Math.random() < 0.5;
+    const l = this.lifeOf(id);
+    r.seen = dayIndex(s.minutes);
+    r.today++;
+    this.markUsed(`life:${id}`);
+    const fam = l.family.length ? ` ${l.family[0][0].toUpperCase()}${l.family[0].slice(1)}.` : '';
+    await this.dialogue.say({ speaker: npc.res.name, text: `"${l.age !== null ? `${l.age} years, and ` : ''}${l.work === '?' ? 'I get by' : `I work at ${l.work}`}. ${l.home === '?' ? 'Where I live is my business.' : `I live in ${l.home}.`}${l.haunt === '?' ? '' : ` Most evenings you'll find me ${/^(by|wherever|outside|in|on|at) /.test(l.haunt) ? l.haunt : `at ${l.haunt}`}.`}"${fam}\nAdded to their card in People.` });
+    if (npc.held) this.showPerson(npc);
+  }
+
+  /** A friend tells you where someone is right now. */
+  private whereIs(npc: Npc): void {
+    const s = this.state!;
+    const rows: ListRow[] = RESIDENTS.filter((p) => p.id !== npc.res.id && s.relations?.[p.id]?.met).map((p) => {
+      const n = this.npcs.find((x) => x.res.id === p.id);
+      const st = n ? this.stopFor(p, Math.floor(this.clock.hour)) : null;
+      const zn = st ? zoneAt(st.x, st.z) : null;
+      return {
+        label: p.name,
+        sub: st ? `"${this.first(p.id)}? ${st.act ? ACTIVITY_TEXT[st.act] : 'about'}, ${zn?.name ?? 'round here'}."` : '"Indoors, I\'d say. Home or at work."',
+        actions: [],
+      };
+    });
+    if (!rows.length) rows.push({ label: 'You know nobody else yet.', sub: '', actions: [] });
+    this.hud.showList(`${this.first(npc.res.id)} knows where everyone is`, 'Right now', rows);
+  }
+
+  /** Friends who work somewhere can recommend you there: you start at the second rank. */
+  private recommendActions(npc: Npc): Action[] {
+    const s = this.state!;
+    const id = npc.res.id;
+    const p = this.rec(id);
+    const employer = AUTHORED[id]?.employer ?? (p?.work ? JOB_KINDS[p.work].employer : undefined);
+    if (!employer || employment(s, employer) || (s.relations?.[id]?.friendship ?? 0) < 30) return [];
+    const job = JOBS[employer];
+    const has = s.recommend[employer]?.by === id && dayIndex(s.minutes) - s.recommend[employer].day <= 5;
+    return [{
+      label: has ? `${this.first(id)} has put in a word (${job.employer})` : `Ask for a word at ${job.career === 'Docks' ? 'the docks' : job.employer}`,
+      disabled: has,
+      onClick: () => {
+        s.recommend[employer] = { by: id, day: dayIndex(s.minutes) };
+        this.hud.hidePlace();
+        void this.dialogue.say({ speaker: npc.res.name, text: `"I'll tell ${job.boss.split(' ').pop()} you're all right. Go and ask in the next few days, and don't make a liar of me."\nStart as ${job.ranks[1]?.title ?? 'a hand'} instead of at the bottom.` }).then(() => npc.held && this.showPerson(npc));
+      },
+    }];
+  }
+
   // --- Favours: neighbours come to you -------------------------------------
 
   private async request(npc: Npc): Promise<void> {
@@ -1343,6 +1639,7 @@ export class Game {
     q.done = true;
     s.quests = s.quests.filter((x) => x !== q);
     const r = this.rel(q.who);
+    r.seen = dayIndex(s.minutes);
     const before = r.friendship;
     r.friendship = Math.min(100, r.friendship + 9);
     if (pay > 0) s.money = Math.round((s.money + pay) * 100) / 100;
@@ -1560,11 +1857,16 @@ export class Game {
     const romanceExtra = perks.filter((a) => a.label.startsWith('Walk by the river'));
     const businessExtra = perks.filter((a) => a.label.startsWith('Sell to Silas'));
     const askExtra = perks.filter((a) => !romanceExtra.includes(a) && !businessExtra.includes(a));
-    const ask = [...this.lessonActions(npc), ...this.parishActions(npc), ...askExtra].map(asPie);
+    const seesAll = r.friendship >= 30 && (p.id === 'mag' || p.id === 'ruby' || !AUTHORED[p.id]);
+    const ask = [...this.recommendActions(npc), ...this.lessonActions(npc), ...this.parishActions(npc), ...askExtra].map(asPie);
+    if (seesAll) ask.unshift({ label: 'Where is everyone?', sub: 'they know', onClick: () => { this.hud.hidePlace(); this.whereIs(npc); } });
     const favours = this.favourActions(npc).map((a) => ({ ...asPie(a), icon: 'favour' as const, primary: !a.disabled }));
     const items: PieItem[] = [
       ...favours,
-      { label: 'Talk', icon: 'talk', children: ['chat', 'joke', 'gossip', 'debate', 'brag'].map(say) },
+      { label: 'Talk', icon: 'talk', children: [...['chat', 'joke', 'gossip', 'debate', 'brag'].map(say), {
+        label: 'About their life', sub: 'home, work, evenings', disabled: tired || this.usedToday(`life:${p.id}`),
+        onClick: () => { this.hud.hidePlace(); void this.askAboutLife(npc); },
+      }] },
       { label: 'Kind', icon: 'kind', children: ['compliment', 'confide', 'gift'].map(say) },
       { label: 'Romance', icon: 'romance', children: [say('flirt'), ...romanceExtra.map(asPie)] },
       { label: 'Business', icon: 'business', children: [say('business'), ...businessExtra.map(asPie)] },
@@ -1572,9 +1874,10 @@ export class Game {
       ...(ask.length ? [{ label: 'Ask', icon: 'ask' as const, children: ask }] : []),
     ];
     const head = new THREE.Vector3(npc.walker.position.x, 1.5, npc.walker.position.y).project(this.rig.camera);
+    const life = this.lifeOf(p.id);
     this.hud.showPie({
       name: p.name,
-      relation: relationLabel(r),
+      relation: `${relationLabel(r)}${life.age !== null ? ` · ${life.age}` : ''}`,
       note: tired ? `${p.role}.${doing} They've had enough of you for today.` : `${p.role}.${doing}${traits.length ? ` ${traits.join(', ')}.` : ` ${v.hint}`}`,
       portrait: this.portraitOf(p.name),
       x: (head.x * 0.5 + 0.5) * window.innerWidth,
@@ -1899,6 +2202,7 @@ export class Game {
     const dress = this.dressBonus(npc.res.id) + (this.friend('hannah') ? 0.04 : 0) + (this.usedToday('mirror') ? 0.06 : 0);
     const mood = ((seed - Math.floor(seed)) - 0.5) * 0.2 + dress;
     const out = interact(s, npc.res, r, i, mood);
+    r.seen = dayIndex(s.minutes);
     if (out.success && i.id === 'chat') out.text = VOICES[npc.res.id].chat;
     // What people see becomes what people know.
     if (out.success && (i.id === 'flirt' || i.id === 'compliment') && r.romance >= 30) this.note('courting', npc.res.id);
@@ -1917,17 +2221,28 @@ export class Game {
   private openContacts(): void {
     const s = this.state!;
     s.relations ??= {};
-    const rows: ListRow[] = RESIDENTS.filter((p) => s.relations[p.id]?.met).map((p) => {
+    const met = RESIDENTS.filter((p) => s.relations[p.id]?.met);
+    const order = (id: string) => { const r = s.relations[id]; return -(r.friendship + r.romance * 1.2 + r.business * 0.5); };
+    const rows: ListRow[] = met.sort((x, y) => order(x.id) - order(y.id)).map((p) => {
       const r = s.relations[p.id];
       const traits = knownTraits(p, r);
-      return {
-        label: `${p.name} · ${relationLabel(r)}`,
-        sub: `${p.role}${traits.length ? ` · ${traits.join(', ')}` : ''}${(() => { const k = knowledgeOf(s, p.id, (id) => this.nameOf(id)); return k.length ? `\nThey ${k.slice(0, 2).join('; ')}` : ''; })()}\nFriendship ${Math.round(r.friendship)} · Romance ${Math.round(r.romance)} · Rivalry ${Math.round(r.rivalry)} · Business ${Math.round(r.business)}\n${r.friendship >= 30 ? VOICES[p.id].perk : `At Friend (30): ${VOICES[p.id].perk.replace(/^Friend: /, '')}`}`,
-        actions: [],
-      };
+      const l = this.lifeOf(p.id);
+      const heard = knowledgeOf(s, p.id, (id) => this.nameOf(id));
+      const lines = [
+        `${p.role}${l.age !== null ? ` · ${l.age}` : ''}${traits.length ? ` · ${traits.join(', ')}` : ''}`,
+        `Works: ${l.work} · Lives: ${l.home} · Usually: ${l.haunt}`,
+        `Now: ${l.now}`,
+        ...(l.family.length ? [l.family.join('; ')] : []),
+        `Friendship ${Math.round(r.friendship)} · Romance ${Math.round(r.romance)} · Rivalry ${Math.round(r.rivalry)} · Business ${Math.round(r.business)}${r.seen !== undefined && dayIndex(s.minutes) - r.seen > 3 ? ' · fading, go and see them' : ''}`,
+        ...(heard.length ? [`They ${heard.slice(0, 2).join('; ')}`] : []),
+        r.friendship >= 30 ? VOICES[p.id].perk : `At Friend (30): ${VOICES[p.id].perk.replace(/^Friend: /, '')}`,
+      ];
+      return { label: `${p.name} · ${relationLabel(r)}`, sub: lines.join('\n'), actions: [] };
     });
-    if (rows.length === 0) rows.push({ label: 'You know nobody yet.', sub: 'Tap people in the street to talk to them.', actions: [] });
-    this.hud.showList('People', `${rows.length} known in Saltwharf`, rows);
+    if (rows.length === 0) rows.push({ label: 'You know nobody yet.', sub: 'Tap people in the street to talk to them. Ask about their life to learn where to find them.', actions: [] });
+    const total = s.people.filter((p) => p.alive).length;
+    const here = RESIDENTS.length;
+    this.hud.showList('People', `${rows.length} known · ${here} live in Saltwharf · ${total} souls in this London`, rows);
   }
 
   // --- Night: robberies, street violence and the hospital -------------------
@@ -2206,7 +2521,7 @@ export class Game {
       this.applyFurniture();
       lines.push('A thin grey cat has moved in. She sleeps on the end of your bed and has decided you may stay.');
     }
-    lines.push(...this.nightlyLives(day));
+    lines.push(...this.nightlyLives(day), ...this.nightlyLivesOfAll(day));
     s.hotZone = HOT_ZONES[Math.floor(Math.random() * HOT_ZONES.length)];
     const after = s.letters.filter((l) => !l.read).length;
     if (after > before) lines.push(`${after - before} new letter${after - before === 1 ? '' : 's'} by your door.`);
@@ -3034,7 +3349,10 @@ export class Game {
     }).join('');
     const perks = PERKS_OWNED(s).map((p) => `<li><b>${esc(p.name)}</b>: ${esc(p.text)}</li>`).join('');
     const needs = (['hunger', 'rest', 'social', 'health'] as NeedId[]).map((n) => `<div class="needrow"><span>${NEED_NAMES[n]}</span><div class="sk-bar"><i style="width:${Math.round(s.needs[n])}%"></i></div><b>${Math.round(s.needs[n])}</b></div>`).join('');
-    const skillsHtml = `<p class="meta">${c.gender === 'man' ? 'Man' : 'Woman'} · attracted to ${attraction}</p>
+    const day = dayIndex(s.minutes);
+    const age = ageOf({ birth: c.birth ?? -504 }, day);
+    const years = Math.floor(day / 24) + 1;
+    const skillsHtml = `<p class="meta">${c.gender === 'man' ? 'Man' : 'Woman'} · ${age} years old · attracted to ${attraction} · year ${years} in Saltwharf</p>
       ${skills}
       <h3>Perks</h3><ul class="perks">${perks || '<li>None yet: they come at levels 3, 6 and 10.</li>'}</ul>
       <h3>How you are</h3>${needs}`;
@@ -3164,6 +3482,7 @@ export class Game {
         this.wearOut((2 * mins) / 60);
       }
       this.checkQuests();
+      this.checkCeremonies();
       if (s.parish.standing !== null && today >= s.parish.standing && this.clock.hour >= 12 && !this.busy && !this.dialogue.open && !this.hud.blocking) void this.election();
       if (s.minutes - this.lastSaveMinute >= 60) this.save();
     }
@@ -3180,6 +3499,7 @@ export class Game {
         sight: s.character.skills.occult + gear(s).occult >= 3 || hol === 'hallows', holiday: hol,
         headline: this.headline ??= gazette(s, day, 'Gull Court', [], '')[0],
         lost: s.quests.filter((q) => q.kind === 'lost' && !q.found && q.at).map((q) => ({ id: q.id, x: q.at!.x, z: q.at!.z })),
+        funeral: day === FUNERAL_DAY ? 'Sam Pike' : s.ceremonies.find((c) => c.kind === 'funeral' && c.day === day)?.names ?? null,
       });
       if (this.headlineDay !== day) {
         this.headlineDay = day;

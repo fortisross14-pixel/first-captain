@@ -4,7 +4,7 @@ import type { Person } from './social';
 /** What someone is doing at a stop: an idle pose, a prop in hand, the things they mutter. */
 export type Activity =
   | 'sell' | 'box' | 'read' | 'sweep' | 'mend' | 'drink' | 'haul' | 'wash' | 'feed' | 'count'
-  | 'preach' | 'watch' | 'flowers' | 'smoke' | 'sick' | 'confused' | 'lean';
+  | 'preach' | 'watch' | 'flowers' | 'smoke' | 'sick' | 'confused' | 'lean' | 'play';
 
 export interface Stop {
   /** Hours of the day, from inclusive, to exclusive; may wrap past midnight. */
@@ -29,7 +29,7 @@ const L = (o: Partial<Look> & Pick<Look, 'skin' | 'hair' | 'coat'>): Look => ({
 });
 
 /** The people of Saltwharf. Positions are street tiles (see world/saltwharf.ts). */
-export const RESIDENTS: Resident[] = [
+export const AUTHORED_RESIDENTS: Resident[] = [
   {
     id: 'nell', name: 'Nell Hartigan', gender: 'woman', attraction: 'both', cls: 'lower', traits: ['brave', 'jovial'],
     role: 'Dockworker and bare-knuckle boxer',
@@ -144,6 +144,12 @@ export const RESIDENTS: Resident[] = [
     schedule: [{ from: 9, to: 12, x: 6, z: 6, act: 'watch' }, { from: 14, to: 17, x: 14, z: 16, act: 'watch' }],
   },
 ];
+
+/**
+ * Everyone who lives in Saltwharf right now: the hand-written residents still alive,
+ * and the generated people old enough to be out. Rebuilt from the population each night.
+ */
+export const RESIDENTS: Resident[] = [...AUTHORED_RESIDENTS];
 
 /** The stop for a given hour, or null if they are at home. */
 export function stopAt(r: Resident, hour: number): Stop | null {

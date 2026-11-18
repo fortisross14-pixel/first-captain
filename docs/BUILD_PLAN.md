@@ -185,9 +185,19 @@ The Animal Crossing feeling, darker: residents have their own lives and you walk
 - [x] Landscape and tablets: the dock moves to the right edge, dialogue and panels to the lower left, sheets open on the right; larger screens scale the interface up.
 - [x] Characters rebuilt with more detail: bigger heads with eyes, brows, nose, cheeks and mouth; hair styles (short, long, bun, curls, bald, Georgian wig); beards; collars and cravats, lapels, waistcoats, aprons, belts, pleated skirts, thumbs and soled boots; caps, bowlers, top hats and ribboned bonnets; cloaks, and weapons in hand. Still a few merged meshes each.
 
-## M10 (next) A city of lives
+## M10 ✅ A city of lives
 
-Decided: a game year passes every 24 days (2 days a month); Saltwharf holds about 45–50 people and the rest of a 200–250 population lives in districts to come. Everyone gets a home, a workplace and a haunt (shown on their card once they tell you), ages, marries, has children and dies; friends invite you to weddings; relationships fade without contact; friends can recommend you for a job at rank 2.
+`src/game/population.ts`. Decided: a year passes every 24 days for ageing, while the calendar keeps its days for rent, shifts and feast days (a literal two-days-a-month calendar would make rent fall due every other day). Saltwharf holds about 48 people; London about 240.
+
+- [x] **Everyone is a person**: the 16 written residents plus about 220 generated people, each with a name, age, class, two traits, a home, a job and a haunt, a spouse, parents and children. About 32 generated people live in Saltwharf (families in Gull Court, Rope Walk and Back Lane; children; widows; old men on the quay steps); the rest live in Greymourne, Hollow Lane, St. Giles, Ashcombe Square, Bow Common and Limehouse Reach and are simulated as records until those districts exist.
+- [x] **Routines from jobs**: dockers and lightermen on the quay, laundresses in Gull Court, costers at the market, sweepers and match-sellers on Quay Street, barmaids and clerks indoors or away, children playing, the old on the quay steps; evenings at their haunt, but not every evening.
+- [x] **Finding people**: tap someone, Talk, "About their life": they tell you where they work, live and spend their evenings, and it goes on their card. The People screen shows age, work, home, haunt, family, where they probably are right now, and a warning when a friendship is fading. Friends among the generated people (and Mag and Ruby) can tell you where everyone is.
+- [x] **Lives, each night**: courtships, engagements and weddings (at the market cross at eleven, with Father Hale and the couple's circles; a supper outside the Copper Cup), births, children starting work at twelve, the old dying in their sleep (story-critical residents are spared for now), widows, and newlyweds moving away when Saltwharf is full. Hand-written residents marry and die too.
+- [x] **You are part of it**: friends send wedding invitations, birth announcements and funeral letters; go to the market cross for the wedding (bring a gift) or join the funeral on Quay Street. Someone you were courting marrying another stings.
+- [x] **Friendships fade**: after three days without seeing someone, friendship, romance, business and rivalry slowly fall; friends who drop below Friend write to ask where you've been.
+- [x] **Recommendations**: a friend who works somewhere puts in a word (Ask in the pie); ask for work within five days and you start at the second rank. Get fired within ten days and they lose face, and patience with you.
+- [x] **Your age**: you start at 21; the journal shows your age and your year in Saltwharf.
+- [x] Performance: coat tails and cloaks now merge with the body (six draw calls a person); only people near you cast shadows. The busiest morning view is about 200 draw calls.
 
 ## After the slice
 

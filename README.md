@@ -8,7 +8,11 @@ A dark gothic life-sim RPG set in a fictional Victorian London (1871): work, ren
 - Latest audit: [docs/AUDIT_2026-11-18.md](docs/AUDIT_2026-11-18.md) · repeat it with `node scripts/audit-metrics.cjs` and the `game-audit` skill
 - Story and world design: the *Pale Lamps Story Bible* (Claude Docs)
 
-## Current state: M9, Saltwharf lives
+## Current state: M10, a city of lives
+
+About 48 people in Saltwharf and 240 in London, each with a home, a job, a haunt and a family; they age a year every 24 days, court, marry, have children and die, and you're invited. Ask people about their lives to learn where to find them; friendships fade if you stay away; friends can get you hired a rung up. Also: the Gilt & Cameo style, cameo portraits, the Sims-style interaction pie, a tabbed journal and bag with equipment, and landscape and tablet layouts.
+
+### Earlier: M9, Saltwharf lives
 
 Neighbours with their own days: working at their stops, talking to each other (and about you), walking up to ask favours. Bells, the crier, the lamplighter, drunks and a constable; gulls, cats and rats; rain and fog banks; fevers, the missing, a funeral, an eviction and a newcomer; Vane's white lamp and the dead. Plus the rest of M8's list: recipes, mentors and perks, boss moods and a dock strike, feast days, clothes that wear out, and the Vestry election.
 

@@ -33,6 +33,8 @@ export interface Character {
   attraction: Attraction;
   look: Look;
   skills: Record<SkillId, number>;
+  /** Day of birth, in game days (a year is 24 days). */
+  birth?: number;
 }
 
 export interface Needs {
@@ -107,6 +109,14 @@ export interface GameState {
   /** Today's weather, chosen overnight; tomorrow's for the Gazette's forecast. */
   weather: Weather;
   tomorrow: Weather;
+  /** Everyone in London: hand-written residents and the generated population. */
+  people: import('./population').PersonRec[];
+  /** What you have learned about each person's life. */
+  known: Record<string, { home?: boolean; work?: boolean; haunt?: boolean }>;
+  /** Weddings and funerals to come: who, and the day (at 11:00). */
+  ceremonies: { kind: 'wedding' | 'funeral'; ids: string[]; names: string; day: number; attended?: boolean }[];
+  /** A word put in for you with an employer: who, and when. */
+  recommend: Record<string, { by: string; day: number }>;
   /** What you wear in each slot besides clothes: item ids. */
   equip: Partial<Record<'hat' | 'cloak' | 'neck' | 'wrist' | 'weapon', string>>;
   /** Condition of each outfit, 0–100. */
@@ -141,6 +151,11 @@ function upgrade(s: GameState): GameState {
 /** Defaults for the fields added for a living Saltwharf. */
 function fillLives(s: GameState): void {
   s.quests ??= [];
+  s.people ??= [];
+  s.known ??= {};
+  s.recommend ??= {};
+  s.ceremonies ??= [];
+  s.character.birth ??= -21 * 24;
   s.equip ??= {};
   s.weather ??= 'clear';
   s.tomorrow ??= 'clear';

@@ -57,9 +57,9 @@ const box = (w: number, h: number, d: number) => new THREE.BoxGeometry(w, h, d);
 const taper = (top: number, bottom: number, h: number, sides = 6) => new THREE.CylinderGeometry(top, bottom, h, sides);
 const shade = (c: number, k: number) => new THREE.Color(c).multiplyScalar(k).getHex();
 
+/** Open shapes (coat tails, cloaks) share the body's material, so they merge into one draw call. */
 function doubleSided(geo: THREE.BufferGeometry, color: number): THREE.Mesh {
-  const m = new THREE.Mesh(geo, mat(color, 0.85).clone());
-  (m.material as THREE.MeshStandardMaterial).side = THREE.DoubleSide;
+  const m = new THREE.Mesh(geo, mat(color, 0.85));
   m.castShadow = true;
   return m;
 }

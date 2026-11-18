@@ -670,7 +670,7 @@ button:disabled { cursor: default; }
 .goals { min-height: 40px; }
 
 /* --- The interaction pie: bubbles around a person, Sims-style ---------------- */
-.pie { position: absolute; inset: 0; z-index: 22; background: radial-gradient(circle at var(--px, 50%) var(--py, 50%), transparent 10%, rgba(4, 7, 14, .45) 60%); animation: fadein .2s ease-out both; }
+.pie { position: absolute; inset: 0; z-index: 18; background: radial-gradient(circle at var(--px, 50%) var(--py, 50%), transparent 10%, rgba(4, 7, 14, .45) 60%); animation: fadein .2s ease-out both; }
 .pie-ring { position: absolute; width: 0; height: 0; }
 .pie-hub { position: absolute; left: 0; top: 0; translate: -50% -50%; width: 84px; height: 84px; min-height: 0; padding: 0; border-radius: 50%; overflow: hidden;
   background: radial-gradient(ellipse at 50% 35%, #3a5490, #17264a 60%, #0a1226);

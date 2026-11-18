@@ -22,6 +22,8 @@ export interface LifeContext {
   headline: string;
   /** Lost things to show: quest id and tile. */
   lost: { id: number; x: number; z: number }[];
+  /** Whose funeral passes at eleven today, if anyone's. */
+  funeral: string | null;
 }
 
 export interface LifeHooks {
@@ -257,14 +259,14 @@ export class Life {
 
     // The funeral of old Sam Pike, the net-mender: day 9, 11:00.
     const mourn = LOOK({ coat: 0x121214, shirt: 0x121214, trousers: 0x121214, hat: 'top', hatColor: 0x0c0c0e });
-    const funeral = (c: LifeContext) => c.day === FUNERAL_DAY && c.hour >= 11 && c.hour < 12.4;
+    const funeral = (c: LifeContext) => !!c.funeral && c.hour >= 11 && c.hour < 12.4;
     const path = route([3, 16], [14, 16], [14, 8], [1, 8]);
     const offsets = [0, 0.9, 1.8, 2.7];
     offsets.forEach((d, k) => {
       const e = new Extra(scene, g, k === 0 ? LOOK({ coat: 0x121214, hat: 'top', hatColor: 0x0c0c0e, shirt: 0xf0f0f0 }) : { ...mourn, skirt: k === 3, hat: k === 3 ? 'bonnet' : 'top' },
         k === 0 ? 'The undertaker' : 'A mourner', 'funeral',
         path, (c) => funeral(c) && c.hour >= 11 + d / 30, {
-          speed: 0.35, lines: k === 3 ? ['Rest you, Sam.', 'Forty years he mended nets on that quay.', 'The fog had him at the end. He didn\'t know us.'] : undefined, talkEvery: 10,
+          speed: 0.35, lines: k === 3 ? (c: LifeContext) => (c.funeral === 'Sam Pike' ? ['Rest you, Sam.', 'Forty years he mended nets on that quay.', 'The fog had him at the end. He didn\'t know us.'] : [`Rest you, ${c.funeral?.split(' ')[0]}.`, 'Gone in their sleep. There are worse ways.', 'Saltwharf is smaller today.']) : undefined, talkEvery: 10,
           hold: (rig) => {
             if (k === 1 || k === 2) {
               rig.armL.rotation.x = -2.8;

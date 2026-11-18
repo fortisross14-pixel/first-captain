@@ -63,6 +63,17 @@ export class Npc {
     this.seed = res.id.length * 1.37 + res.id.charCodeAt(0) * 0.11;
   }
 
+  private meshes: THREE.Mesh[] | null = null;
+  private shadow = true;
+
+  /** Only people near you cast shadows: the shadow pass is the expensive one. */
+  setShadow(on: boolean): void {
+    if (on === this.shadow) return;
+    this.shadow = on;
+    this.meshes ??= (() => { const m: THREE.Mesh[] = []; this.walker.rig.root.traverse((o) => { if ((o as THREE.Mesh).isMesh) m.push(o as THREE.Mesh); }); return m; })();
+    for (const m of this.meshes) m.castShadow = on;
+  }
+
   get visible(): boolean {
     return this.walker.rig.root.visible;
   }
@@ -268,6 +279,13 @@ export class Npc {
         r.armL.rotation.x = 0.1;
         r.armR.rotation.x = 0.1;
         break;
+      case 'play': {
+        r.body.position.y = Math.abs(Math.sin(t * 6)) * 0.12;
+        r.armL.rotation.x = -1.6 + Math.sin(t * 6) * 0.6;
+        r.armR.rotation.x = -1.6 - Math.sin(t * 6) * 0.6;
+        r.body.rotation.y = t * 1.5;
+        break;
+      }
       case 'lean':
         r.body.rotation.z = 0.12;
         r.armL.rotation.x = -1.0;

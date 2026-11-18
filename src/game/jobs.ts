@@ -149,6 +149,8 @@ export interface Employment {
   shifts: number;
   /** Last day whose attendance has been checked. */
   checkedDay: number;
+  /** Who recommended you, if anyone: their standing suffers if you're fired early. */
+  recommendedBy?: string;
 }
 
 /** Game minute 0 is 07:00 on Sunday 1 October 1871 (day 0). */
