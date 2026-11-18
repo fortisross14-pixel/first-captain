@@ -5530,7 +5530,8 @@ export class Game {
 
     const s = this.state!;
     const player = this.player!;
-    const paused = this.busy || this.dialogue.open || this.hud.blocking;
+    // Reading or deciding stops the clock: dialogue, sheets, place panels, Decor, the prologue.
+    const paused = this.busy || this.dialogue.open || this.hud.blocking || this.hud.placeOpen || !!this.decor || !!document.querySelector('.prologue');
     if (!paused) {
       const before = this.clock.minutes;
       this.clock.tick(dt);

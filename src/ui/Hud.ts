@@ -242,6 +242,10 @@ export class Hud {
   }
 
   /** True while a menu covers the world and taps should not reach it. */
+  get placeOpen(): boolean {
+    return !this.q('.panel').hidden;
+  }
+
   get blocking(): boolean {
     return !this.q('.mapview').hidden || !this.q('.pie').hidden || !this.q('.journal').hidden || !this.q('.modal').hidden || !this.q('.listsheet').hidden || this.q('.celebrate').children.length > 0;
   }

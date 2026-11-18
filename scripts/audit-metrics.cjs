@@ -10,18 +10,23 @@ const url = process.argv[2] || 'http://localhost:4173/first-captain/?debug';
   const page = await (await browser.newContext({ ...devices['iPhone 13'] })).newPage();
   const closeDialogs = async () => {
     for (let i = 0; i < 25 && (await page.isVisible('.dialogue')); i++) {
-      if (await page.isVisible('.dialogue .choices button')) await page.click('.dialogue .choices button');
-      else await page.click('.dialogue');
+      if (await page.isVisible('.dialogue .choices button')) await page.click('.dialogue .choices button', { timeout: 3000 }).catch(() => {});
+      else await page.click('.dialogue', { timeout: 3000 }).catch(() => {});
       await page.waitForTimeout(120);
     }
   };
   await page.goto(url);
   await page.waitForTimeout(1200);
   await page.click('.title-screen .new');
+  await page.click('.slot-list [data-act="new"][data-slot="3"]');
+  await page.waitForTimeout(800);
   await page.fill('input[name=last]', 'Audit');
+  await page.click('.creator .next');
   for (const s of ['strength', 'cunning', 'cunning', 'charisma', 'charisma']) await page.click(`[data-skill=${s}] .plus`);
   await page.click('.creator .begin');
   await page.waitForTimeout(2000);
+  if (await page.isVisible('.pg-skip')) await page.click('.pg-skip');
+  await page.waitForTimeout(1500);
   await closeDialogs();
   // Monday 10:00 on Quay Street, when most residents are out.
   await page.evaluate(() => {
