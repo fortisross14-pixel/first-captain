@@ -214,11 +214,11 @@ The Animal Crossing feeling, darker: residents have their own lives and you walk
 | | Faction | Members | Duty each week | Punishment |
 |---|---|---|---|---|
 | Low | The Hollow Lane Kin | Silas, Ruby | Collect a debt from someone in Saltwharf | They come for you at night |
-| Low | The Courtfolk | Mag, Hannah, Jem | A loaf or £0.03 in Mag's poor box | Nobody watches over you |
-| Middling | The Dockers' Brotherhood | Nell, Tom | Thursday meeting at the Copper Cup, 20:00 | Accidents on the quay |
-| Middling | The Tradesmen's Guild | Pell, Lizzie, Bessa, Moss, Grubb | Friday supper at the Copper Cup, 19:00 | Guild shops charge a third more |
-| High | The Lantern Society | Hale, Quill, Mrs. Ashby | An essay at Hester's table | No more lessons from Hale and Quill |
-| High | Lady Vane's circle | (Ashcombe Square) | Saturday soirée; a carriage at the west end of Quay Street | A letter to your employer: you're let go |
+| Low | The Ragged Parish | Mag, Hannah, Jem | A loaf or £0.03 in Mag's poor box | Nobody watches over you |
+| Middling | The Lamplighters' Guild | Nell | Wednesday night patrol from the lamp by the Hiring Office, 21:00 | The patrols stop watching your streets |
+| Middling | The Guildhall | Pell, Lizzie, Bessa, Moss, Grubb | Friday supper at the Copper Cup, 19:00 | Guild shops charge a third more |
+| High | The Society for Psychical Inquiry | Hale, Quill, Mrs. Ashby | A paper at Hester's table | No more lessons from Hale and Quill |
+| High | The Velvet Court | (Mayfield; Lady Vane's Saturdays) | Saturday soirée; a carriage at the west end of Quay Street | A letter to your employer: you're let go |
 
 - [x] **Standing** from deeds (duties, favours for members, pickets, Fight Night wins, elections, helping the poor) plus how members feel about you. Three ranks each. A Standing page in the journal shows all six: standing, rank, this week's duty, rules, perks and what you need to join.
 - [x] **Joining**: ask a member (Ask in the pie) once standing and requirements are met; Lady Vane's circle is by invitation, which arrives when you are learned, charming, solvent, housed and well dressed, and admission depends on how the first soirée goes.
@@ -226,7 +226,20 @@ The Animal Crossing feeling, darker: residents have their own lives and you walk
 - [x] **Rivals**: joining cools its rivals (the Kin and the Guild; the Brotherhood, the Courtfolk and the Kin against Lady Vane).
 - [x] **Perks**: fewer robberies and better fencing (Kin); watch kept while you sleep rough and bread from the pot (Courtfolk); better dock pay and Nell at your side in fights (Brotherhood); discounts, rent grace and a loan (Guild); faster learning (Lantern Society); first impressions and Monday investments (Lady Vane). The top ranks of the Lantern Society and Lady Vane's circle point toward the main story.
 
-## Next: M13 the Fog Clock and the main story
+Renamed in M13 to match the Story Bible (the Dockers' Brotherhood became the Lamplighters' Guild, who hunt what walks in the fog).
+
+## M13 ✅ The Fog Clock and Act I, "The Fog"
+
+`src/game/story.ts`.
+
+- [x] **The Fog Clock** (0–100): rises each night, faster in fog, with every soul the fog takes, and once Vane's lamp is lit. At 25, 50 and 75 an urgent call: the trunk comes unlatched; the fog comes up Quay Street (people vanish nearly nightly); Saltwharf goes dark (the gas lamps no longer protect you). At 100, the Fall of London: the game ends. Fog weather grows likelier as it rises. Shown in the journal's Missions page and announced in the morning.
+- [x] **Hester's trunk** opens once you're ready (her third letter, the first disappearance, the clock at 25, or Occult 2): her journal (four pages, unlocked as you learn) and her pocket watch, which lets you see the dead and stops (the dock watch freezes) when one is near.
+- [x] **Act I**: learn the drowned sailor's name (Mag, Rudd, Father Hale, Nell or the Society know it), find his medal at Moss's, find him on the quay after ten at night, and end it one of three ways: **steel** (fight him; the Lamplighters help), **word** (his name and his medal, with Occult and Charisma), or **coin** (pay the Kin to take him away; the clock goes back less). Act I pushes the clock back, brings the missing home, and Pembleton tells you what Hester was. Mrs. Ashby's card points to Act II in Mayfield.
+- [x] Until Acts II–IV exist (they need Mayfield, Inkwell Row, Greymourne and the Undercroft), the clock slows after Act I and stops at 70.
+
+## Next
+
+The next districts (Lantern Market, then Mayfield) and Act II, "The Social Season"; businesses.
 
 ## After the slice
 

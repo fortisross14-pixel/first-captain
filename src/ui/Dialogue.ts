@@ -66,7 +66,7 @@ export class Dialogue {
       if (url && img.src !== url) img.src = url;
       const mono = this.cameo.querySelector('.mono') as HTMLElement;
       mono.hidden = !!url;
-      mono.textContent = line.speaker.replace(/^(The|A|An|Mr\.|Mrs\.|Dr\.|Father|Old|Foreman) /, '').charAt(0);
+      mono.textContent = line.speaker.replace(/^(The|A|An|Mr\.|Mrs\.|Dr\.|Father|Old|Foreman) /, '').charAt(0).toUpperCase();
     }
     this.textEl.textContent = line.text;
     this.el.classList.remove('pop');

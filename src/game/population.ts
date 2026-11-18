@@ -126,7 +126,7 @@ export const AUTHORED: Record<string, { age: number; home: string; work: string;
 const MEN = ['William', 'John', 'George', 'Thomas', 'James', 'Henry', 'Charles', 'Joseph', 'Frederick', 'Albert', 'Arthur', 'Alfred', 'Edward', 'Walter', 'Harry', 'Samuel', 'Daniel', 'Patrick', 'Michael', 'Isaac', 'Ezekiel', 'Silas', 'Amos', 'Edwin', 'Herbert', 'Ernest', 'Reuben', 'Abel', 'Jacob', 'Owen'];
 const WOMEN = ['Mary', 'Elizabeth', 'Sarah', 'Ann', 'Jane', 'Emma', 'Alice', 'Eliza', 'Ellen', 'Martha', 'Harriet', 'Emily', 'Florence', 'Clara', 'Rose', 'Kate', 'Bridget', 'Margaret', 'Esther', 'Louisa', 'Ada', 'Fanny', 'Lydia', 'Hester', 'Maud', 'Polly', 'Nora', 'Winifred', 'Agnes', 'Susannah'];
 const LAST = ['Smith', 'Jones', 'Brown', 'Taylor', 'Cooper', 'Fletcher', 'Murphy', 'Sullivan', 'O\'Brien', 'Walsh', 'Cohen', 'Levy', 'Mendoza', 'Okafor', 'Abbott', 'Baxter', 'Crabtree', 'Dawes', 'Ellery', 'Finch', 'Gunn', 'Hobbs', 'Inchley', 'Judd', 'Kemp', 'Larkin', 'Marlow', 'Nash', 'Oakes', 'Pike', 'Quinn', 'Rook', 'Sowerby', 'Thorne', 'Usher', 'Vickery', 'Wragg', 'Yeo', 'Blight', 'Coldwell', 'Dunnage', 'Grimshaw', 'Hatch', 'Muggeridge', 'Peabody', 'Scrivener', 'Tallow', 'Wick'];
-const OFF_DISTRICTS = ['Greymourne', 'Hollow Lane', 'St. Giles', 'Ashcombe Square', 'Bow Common', 'Limehouse Reach'];
+const OFF_DISTRICTS = ['Lantern Market', 'Inkwell Row', 'Mayfield', 'Ironmonger\'s Cross', 'Hollow Lane', 'Greymourne'];
 const TRAITS: Trait[] = ['open', 'shy', 'eccentric', 'serious', 'intellectual', 'romantic', 'jovial', 'proud', 'pious', 'cynical', 'greedy', 'brave'];
 
 function rng(seed: number): () => number {
@@ -257,10 +257,10 @@ export function generatePopulation(seed: number): PersonRec[] {
   // The rest of London.
   while (out.length < 32 + 190) {
     const d = pick(OFF_DISTRICTS);
-    household(d, d === 'Ashcombe Square' ? 'square' : 'lodgings');
+    household(d, d === 'Mayfield' ? 'square' : 'lodgings');
   }
   for (const p of out) {
-    if (p.district === 'Ashcombe Square') p.cls = r() < 0.6 ? 'upper' : 'middle';
+    if (p.district === 'Mayfield') p.cls = r() < 0.6 ? 'upper' : 'middle';
     const age = ageOf(p, 0);
     p.work = jobFor(age, p.gender, p.district);
     if (p.cls !== 'lower' && p.work) p.work = 'clerk';

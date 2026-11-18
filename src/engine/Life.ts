@@ -443,6 +443,11 @@ export class Life {
     return this.bonfire.visible;
   }
 
+  /** Is any of the dead visible within r of this point? */
+  ghostNear(p: THREE.Vector2, r: number): boolean {
+    return this.ghosts.some((g) => g.rig.rig.root.visible && Math.hypot(g.rig.position.x - p.x, g.rig.position.y - p.y) < r);
+  }
+
   ghost(i: number) {
     return this.ghosts[i];
   }

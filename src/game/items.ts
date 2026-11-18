@@ -87,6 +87,9 @@ export const ITEMS: Record<string, ItemDef> = {
   cudgel: { id: 'cudgel', name: 'Lead-weighted cudgel', price: 0.35, upgrade: true, slot: 'weapon', gear: { fight: 4, weapon: 'cudgel', dress: -0.04, robbery: 0.75 }, blurb: '+4 damage a blow; robbers think twice; respectable people cross the street.' },
   knife: { id: 'knife', name: 'Clasp knife', price: 0.3, upgrade: true, slot: 'weapon', gear: { fight: 3, weapon: 'knife', dress: -0.03 }, blurb: '+3 damage a blow. Constables frown at it.' },
   knuckles: { id: 'knuckles', name: 'Brass knuckles', price: 0.25, upgrade: true, slot: 'weapon', gear: { fight: 3, weapon: 'knuckles' }, blurb: '+3 damage a blow, and they fit in a pocket.' },
+  hjournal: { id: 'hjournal', name: 'Hester\'s journal', price: 0, verb: 'Read', blurb: 'Her small, slanting hand. Some pages are water-stained; some are torn out.' },
+  hwatch: { id: 'hwatch', name: 'Hester\'s pocket watch', price: 0, blurb: 'Silver, dented, keeps poor time. It stops ticking near anything unnatural.' },
+  jmedal: { id: 'jmedal', name: 'A seaman\'s medal', price: 0.3, blurb: 'Engraved: "J. MERROW, BRIG KITTIWAKE, FOR GALLANTRY". Pawned in 1869 by a widow.' },
   dreadful: { id: 'dreadful', name: 'Penny dreadful', price: 0.01, use: { social: 5 }, verb: 'Read', blurb: '"Varney the Vampyre, part XLI." Lurid, cheap, impossible to put down.' },
   // Second-hand furniture from Moss, for Hester's room.
   rug: { id: 'rug', name: 'Turkey rug', price: 0.4, upgrade: true, furniture: true, blurb: 'Comfort: the room tops up Social while you are home.' },
@@ -110,7 +113,7 @@ export const SHOPS: Record<string, Shop> = {
   market: { name: 'Saltwharf Market', keeper: 'the stallholders', stock: ['potato', 'apple', 'bread', 'onion', 'eel', 'mutton', 'eelpie', 'meatpie', 'dreadful'], buys: 0 },
   hester: { name: "Pell's Chandlery", keeper: 'Mrs. Pell', stock: ['candle', 'candle2', 'coal', 'bandage', 'tonic', 'mattress', 'chest'], buys: 0 },
   clothier: { name: 'Rag & Bone Clothiers', keeper: 'Lizzie Barlow', stock: ['work', 'sunday', 'coat', 'flatcap', 'bowler', 'bonnet', 'tophat', 'oilskin', 'woolcloak', 'cuff', 'bracelet', 'scarf', 'gloves', 'apron', 'boots'], buys: 0 },
-  pawnbroker: { name: 'Moss the Pawnbroker', keeper: 'Moss', stock: ['stick', 'cudgel', 'knife', 'knuckles', 'locket', 'medal', 'rug', 'curtains', 'mirror', 'bookshelf', 'workbench'], buys: 0.4 },
+  pawnbroker: { name: 'Moss the Pawnbroker', keeper: 'Moss', stock: ['jmedal', 'stick', 'cudgel', 'knife', 'knuckles', 'locket', 'medal', 'rug', 'curtains', 'mirror', 'bookshelf', 'workbench'], buys: 0.4 },
 };
 
 /** Item slots: Strength makes for a bigger load. */

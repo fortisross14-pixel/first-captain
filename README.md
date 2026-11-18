@@ -8,9 +8,13 @@ A dark gothic life-sim RPG set in a fictional Victorian London (1871): work, ren
 - Latest audit: [docs/AUDIT_2026-11-18.md](docs/AUDIT_2026-11-18.md) · repeat it with `node scripts/audit-metrics.cjs` and the `game-audit` skill
 - Story and world design: the *Pale Lamps Story Bible* (Claude Docs)
 
-## Current state: M12, factions
+## Current state: M13, the Fog Clock and Act I
 
-Six factions, two per class: the Hollow Lane Kin, the Courtfolk, the Dockers' Brotherhood, the Tradesmen's Guild, the Lantern Society and Lady Vane's circle. One at a time; weekly duties, rules, ranks, rivals and punishments.
+The fog thickens every night on the Fog Clock; urgent calls at 25, 50 and 75; London falls at 100. Hester's trunk, her journal and her watch lead to the drowned sailor on the quay: fight him, give him his name, or pay the Kin.
+
+### Earlier: M12, factions
+
+Six factions, two per class, as in the Story Bible: the Hollow Lane Kin, the Ragged Parish, the Lamplighters' Guild, the Guildhall, the Society for Psychical Inquiry and the Velvet Court. One at a time; weekly duties, rules, ranks, rivals and punishments.
 
 ### Earlier: M11, a family of your own
 

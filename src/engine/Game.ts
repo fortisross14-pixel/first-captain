@@ -14,6 +14,7 @@ import { LESSON_XP, MENTORS, PERKS, hasPerk, nextPerk, perkAt } from '../game/sk
 
 const PERKS_OWNED = (s: GameState) => PERKS.filter((p) => s.character.skills[p.skill] >= p.level);
 import { HOLIDAYS, MOOD_PAY, MOOD_TEXT, WEATHER_TEXT, bossMood, holidayOn, isSunday, rollWeather, strikeStarts } from '../game/calendar';
+import { JOURNAL, SAILOR, URGENT, clockWord } from '../game/story';
 import { FACTIONS, FACTION_IDS, addDeed, factionOf, joinBlockers, rankIn, standing, type FactionId } from '../game/factions';
 import { FUTURE_OFFICES, OFFICES, count as countVotes, officeTitle, pledgeChance, voters } from '../game/parish';
 import { ASKS, LOST_ZONES, PLACE_NAMES, READ_LETTERS, type Quest } from '../game/quests';
@@ -527,10 +528,9 @@ export class Game {
           ...(hasPerk(s, 'arts', 6) && s.wear[s.outfit] < 100 ? [act(`Mend your clothes (${this.condition()}, 1 hour)`, () => this.mend(false))] : []),
         ];
       case 'trunk':
-        return [act('Try the lid', () => this.dialogue.say(
-          { speaker: 'You', text: 'The lid will not move. The lock is old, but well made.' },
-          { speaker: P, text: 'Leave that be. Not yet.' },
-        ))];
+        return s.story.trunk
+          ? [act('Look in the trunk', () => this.dialogue.say({ speaker: 'You', text: 'Mothballs, a widow\'s black gloves, a bag of coarse salt, an iron nail as long as your hand, and the shape in the dust where the journal and the watch lay.' }))]
+          : [act('Try the lid', () => this.tryTrunk(), { primary: this.trunkReady() })];
       case 'door': {
         const unread = s.letters.filter((l) => !l.read).length;
         return [
@@ -558,6 +558,7 @@ export class Game {
     const free = this.friend('bessa') && !this.usedToday('bessa');
     if (!free && s.money < 0.02) return;
     if (free) this.markUsed('bessa');
+    if (this.member('brotherhood') && weekday(dayIndex(s.minutes)) === 3) addDeed(s, 'brotherhood', -3);
     else s.money = Math.round((s.money - 0.02) * 100) / 100;
     addNeed(s.needs, 'social', 15);
     addNeed(s.needs, 'rest', -3);
@@ -621,6 +622,7 @@ export class Game {
     const render = () => {
       const rows: ListRow[] = [];
       for (const itemId of shop.stock) {
+        if (itemId === 'jmedal' && !(s.story.name && !s.story.medal && s.story.act1 === 'open' && !s.inventory.some((i) => i.id === 'jmedal'))) continue;
         const def = ITEMS[itemId];
         const price = this.priceAt(id, itemId);
         const owned = def.upgrade && owns(s, itemId);
@@ -802,7 +804,8 @@ export class Game {
       const def = ITEMS[it.id];
       const actions: Action[] = [];
       if (def.use) actions.push({ label: def.verb ?? 'Use', onClick: () => { const m = useItem(s, it.id); if (m) this.hud.toast(m); again(); } });
-      actions.push({ label: 'Drop', onClick: () => { removeItem(s, it.id); again(); } });
+      if (it.id === 'hjournal') actions.push({ label: 'Read', onClick: () => { this.hud.closeList(); void this.readJournal(); } });
+      if (!['hjournal', 'hwatch', 'jmedal'].includes(it.id)) actions.push({ label: 'Drop', onClick: () => { removeItem(s, it.id); again(); } });
       const fx = def.use ? Object.entries(def.use).map(([k, v]) => `${NEED_NAMES[k as NeedId]} +${v}`).join(', ') : '';
       return { label: `${def.name} ×${it.qty}`, sub: [def.blurb, fx].filter(Boolean).join(' · '), actions };
     };
@@ -948,11 +951,7 @@ export class Game {
     const st = s.strike;
     const scab = jobId === 'docks' && !!st && shiftDay >= st.day && shiftDay <= st.until;
     const mood = bossMood(jobId, shiftDay, s);
-    let bonus = rep.pay * (MOOD_PAY[mood] - 1) + (jobId === 'docks' ? rep.pay * (s.dockRaise + (this.member('brotherhood') ? 0.1 : 0)) : 0) + (scab ? rep.pay : 0);
-    if (jobId === 'docks' && (s.factions.deeds.brotherhood ?? 0) < -10 && !rep.fired) {
-      addNeed(s.needs, 'health', -6);
-      extras.push('A crate slips its rope and catches your shoulder. Nobody saw anything. Health −6');
-    }
+    let bonus = rep.pay * (MOOD_PAY[mood] - 1) + (jobId === 'docks' ? rep.pay * s.dockRaise : 0) + (scab ? rep.pay : 0);
     bonus = Math.round(bonus * 100) / 100;
     if (bonus !== 0 && !rep.fired) {
       s.money = Math.round((s.money + bonus) * 100) / 100;
@@ -963,8 +962,7 @@ export class Game {
     if (scab && st) {
       st.side = 'scab';
       addFact(s, 'scab', ['nell', 'tom', 'hannah', 'rudd']);
-      addDeed(s, 'brotherhood', -40);
-      if (this.member('brotherhood')) this.expel('brotherhood', 'You crossed the picket. Brothers don\'t.');
+
       for (const id of ['nell', 'tom', 'hannah']) {
         const r = this.rel(id);
         r.friendship = Math.max(0, r.friendship - 10);
@@ -1024,7 +1022,6 @@ export class Game {
     this.clock.minutes += 120;
     s.minutes = this.clock.minutes;
     for (const id of ['nell', 'tom', 'hannah']) this.rel(id).friendship = Math.min(100, this.rel(id).friendship + 5);
-    addDeed(s, 'brotherhood', 8);
     addDeed(s, 'court', 3);
     this.rel('rudd').rivalry = Math.min(100, this.rel('rudd').rivalry + 3);
     addFact(s, 'helped', ['nell', 'tom', 'hannah', 'jem'], 'nell');
@@ -1160,6 +1157,7 @@ export class Game {
     let look: Look | null = null;
     if (name === 'You') look = this.outfitLook(s.outfit);
     else if (name === P) look = { skin: 0xcfe6f4, hair: 0xf2f6fa, coat: 0x7a96b0, trousers: 0x6a86a0, shirt: 0xf0f4f8, boots: 0x4a5a6a, scarf: 0xffffff, hat: 'top', hatColor: 0x8aa6c0, hairStyle: 'wig', eyes: 0x6a8aaa };
+    else if (name === 'The drowned sailor' || name === 'A drowned sailor') look = { skin: 0xa8c8d8, hair: 0x4a6a7a, coat: 0x2a4a5a, trousers: 0x2a3a4a, shirt: 0x8aa8b8, boots: 0x1a2a3a, hat: 'cap', hatColor: 0x1a3a4a, beard: 0x4a6a7a, eyes: 0xd8f0ff };
     else if (name === NOTORIOUS.name) look = { skin: 0xb08a6a, hair: 0x15110e, coat: 0x1e1a18, trousers: 0x1a1614, shirt: 0x5a2a22, boots: 0x0e0c0a, hat: 'cap', hatColor: 0x121010, build: 1.25, beard: 0x15110e };
     else {
       const r = RESIDENTS.find((x) => x.name === name || this.short(x.id) === name || name.endsWith(x.name));
@@ -1626,6 +1624,213 @@ export class Game {
     }];
   }
 
+  // --- The main story: the Fog Clock and Act I ---------------------------------
+
+  private trunkReady(): boolean {
+    const s = this.state!;
+    return s.hesterLetters >= 3 || s.story.clock >= 25 || Object.keys(s.life.missing).length > 0 || s.character.skills.occult >= 2;
+  }
+
+  private async tryTrunk(): Promise<void> {
+    const s = this.state!;
+    if (!this.trunkReady()) {
+      await this.dialogue.say({ speaker: 'You', text: 'The lid will not move. The lock is old, but well made.' }, { speaker: P, text: 'Leave that be. Not yet. When the fog comes up the stairs, then.' });
+      return;
+    }
+    s.story.trunk = true;
+    s.story.act1 = 'open';
+    s.story.pages = 1;
+    if (canCarry(s, 'hjournal')) addItem(s, 'hjournal');
+    if (canCarry(s, 'hwatch')) addItem(s, 'hwatch');
+    sfx('page');
+    await this.dialogue.say(
+      { speaker: '', text: 'This time the lid lifts, as if it had only been waiting to be asked. Mothballs. Salt. An iron nail as long as your hand. A journal in Hester\'s slanting hand, and a silver pocket watch that starts ticking the moment you touch it.' },
+      { speaker: P, text: '"So. She wanted you to have it." For once he does not make a joke. "Read the journal. Keep the watch on you. When it stops, something is near that should not be."' },
+    );
+    await this.hud.celebrate('promotion', 'Act I', 'The Fog', 'Hester\'s journal and watch are in your bag. The drowned man walks the quay at night.');
+    await this.readJournal();
+    this.refreshObjectives();
+  }
+
+  private async readJournal(): Promise<void> {
+    const s = this.state!;
+    sfx('page');
+    const pages = JOURNAL.slice(0, Math.max(1, s.story.pages));
+    await this.hud.modal('Hester\'s journal', pages, '', 'letter', 'In her own hand');
+  }
+
+  /** What the story wants of you now, for goals and the journal. */
+  private storyGoals(): string[] {
+    const st = this.state!.story;
+    if (st.act1 === 'locked') return this.trunkReady() ? ['Hester\'s trunk: try the lid again'] : [];
+    if (st.act1 === 'done') return [];
+    const out: string[] = [];
+    if (!st.name) out.push('Act I: learn the drowned sailor\'s name (Old Mag remembers; so do Rudd\'s books)');
+    else if (!st.medal && !st.kinPaid) out.push(`Act I: find something of ${SAILOR.name}'s (Moss buys from widows), or face him as he is`);
+    out.push('Act I: find the drowned sailor on the quay after ten at night (the watch will stop)');
+    return out;
+  }
+
+  /** Ask a resident about the sailor: Mag, Rudd and Hale know things. */
+  private sailorActions(npc: Npc): Action[] {
+    const s = this.state!;
+    const st = s.story;
+    const id = npc.res.id;
+    const out: Action[] = [];
+    if (st.act1 === 'open' && !st.name && ['mag', 'rudd', 'hale', 'quill', 'nell'].includes(id)) {
+      out.push({
+        label: 'Ask about the drowned man on the quay', primary: true,
+        onClick: () => {
+          this.hud.hidePlace();
+          const r = this.rel(id);
+          const knows = id === 'mag' || (id === 'rudd' && r.friendship >= 15) || (id === 'hale' && r.friendship >= 15) || this.member('lantern');
+          if (!knows) {
+            void this.dialogue.say({ speaker: npc.res.name, text: id === 'rudd' ? '"I don\'t talk about the river\'s dead with strangers."' : '"Drowned men are ten a penny on this river. Ask Old Mag. She was there for all of them."' });
+            return;
+          }
+          st.name = true;
+          st.pages = Math.max(st.pages, 2);
+          const lines: Record<string, string> = {
+            mag: `"Jack. Jack Merrow, off ${SAILOR.ship}. Walked into the river in the fog of '69 with his pockets full of nothing. His wife pawned his medal to bury him. Moss has it still, I'll wager. Moss has everything still."`,
+            rudd: `Rudd fetches an old tally book. "${SAILOR.name}, ${SAILOR.ship}. Signed off drunk, the night of the fog. Body never found. Widow pawned his medal, I heard."`,
+            hale: `"I buried an empty coffin for a sailor in '69. ${SAILOR.name}. His widow said he'd be back. She died last winter, still waiting. She pawned his medal at Moss's to pay me, God forgive me."`,
+            quill: `"The Society has him in the fog papers: ${SAILOR.name}, of ${SAILOR.ship}, drowned 1869. First of the new dead. Every haunting on this river begins with him."`,
+            nell: `"My father worked with him. ${SAILOR.name}. Kittiwake. His widow pawned the medal they gave him. Moss'll have it."`,
+          };
+          void this.dialogue.say({ speaker: npc.res.name, text: `${lines[id]}\nYou learned his name. (Hester's journal has more now.)` });
+          this.refreshObjectives();
+        },
+      });
+    }
+    if (st.act1 === 'open' && id === 'silas' && !st.kinPaid) {
+      const cost = this.member('kin') ? 0.75 : 1.5;
+      out.push({
+        label: `Pay the Kin to deal with the drowned man (£${cost.toFixed(2)})`, disabled: s.money < cost,
+        onClick: () => {
+          s.money = Math.round((s.money - cost) * 100) / 100;
+          st.kinPaid = dayIndex(s.minutes);
+          addDeed(s, 'kin', 6);
+          this.hud.hidePlace();
+          void this.dialogue.say({ speaker: npc.res.name, text: '"Iron, salt and a boat with no bottom. He\'ll be someone else\'s ghost by morning. Upriver, I should think. Hollow Lane, maybe." He smiles. "Don\'t ask what we do with it."' });
+        },
+      });
+    }
+    return out;
+  }
+
+  /** Face the drowned sailor: steel, word or coin. */
+  private async sailor(): Promise<void> {
+    const s = this.state!;
+    const st = s.story;
+    if (!s.inventory.some((i) => i.id === 'hwatch') && s.character.skills.occult < 3) return;
+    const hasMedal = s.inventory.some((i) => i.id === 'jmedal');
+    const opts = [
+      'Fight it (iron and fists)',
+      st.name ? (hasMedal ? `Say his name, and give him his medal` : 'Say his name') : 'Speak to it',
+      'Back away',
+    ];
+    const c = await this.dialogue.ask({ speaker: 'The drowned sailor', text: 'Hester\'s watch stops. The fog thickens round a shape in a pea-coat, water running from its sleeves that never reaches the ground. It turns to you. Its face is the river at night.' }, opts);
+    if (c === 2) return;
+    if (c === 0) {
+      const lamplighters = this.member('brotherhood');
+      const won = await this.fight({ name: 'The drowned sailor', hp: lamplighters ? 40 : 60, dmg: [7, 12], hit: 0.72, nerve: 999 }, lamplighters ? 'Nell and two lamplighters come running with poles and salt. "Hit it where it\'s thinnest!"' : 'It comes at you like a wave comes at a wall.', false, false);
+      if (won) await this.endAct1('steel');
+      return;
+    }
+    // Word: his name, and something he loved.
+    if (!st.name) {
+      await this.dialogue.say({ speaker: 'The drowned sailor', text: '"...who..." The word comes up like a bubble from deep water. It does not know its own name. Neither do you.' });
+      return;
+    }
+    const chance = (hasMedal ? 0.55 : 0.2) + s.character.skills.occult * 0.06 + s.character.skills.charisma * 0.04;
+    if (Math.random() < chance) {
+      if (hasMedal) removeItem(s, 'jmedal');
+      await this.dialogue.say(
+        { speaker: 'You', text: `"Jack. Jack Merrow. ${hasMedal ? 'This is yours. She kept it for you as long as she could.' : 'You were on the Kittiwake. You can go home now.'}"` },
+        { speaker: 'The drowned sailor', text: '"...Jack." It says it as if tasting it. The water stops running from its sleeves. For a moment there is a man there, young, embarrassed, with salt in his beard. Then there is only fog, thinning, and the river going on.' },
+      );
+      await this.endAct1('word');
+    } else {
+      addNeed(s.needs, 'health', -12);
+      await this.dialogue.say({ speaker: 'The drowned sailor', text: `"...JACK..." It screams the name back at you and the cold goes through you like a blade. Not enough. Not yet. (Health −12. ${hasMedal ? 'Try again another night.' : 'Something of his might hold him.'})` });
+    }
+  }
+
+  private async endAct1(path: 'steel' | 'word' | 'coin'): Promise<void> {
+    const s = this.state!;
+    const st = s.story;
+    st.act1 = 'done';
+    st.path = path;
+    st.pages = JOURNAL.length;
+    st.clock = Math.max(0, st.clock - (path === 'coin' ? 15 : 30));
+    // The lost come home out of the fog.
+    for (const id of Object.keys(s.life.missing)) {
+      delete s.life.missing[id];
+      s.life.confused[id] = dayIndex(s.minutes) + 1;
+    }
+    const sub = { steel: 'You put him down with iron and fists. The quay is quiet; the river is not grateful.', word: 'You gave him back his name. He went. The fog over the quay has thinned.', coin: 'The Kin took him away in a boat with no bottom. He is someone else\'s ghost now.' }[path];
+    await this.hud.celebrate('promotion', 'Act I complete', 'The Fog', sub);
+    sendLetter(s, 'Mrs. Constance Ashby', 'A card for you', `I hear you have been on the quay at night, doing what my husband\'s friends would not.\n\nMy cousin holds séances in Mayfield, for the Velvet Court. One of them stopped being a trick. When the season opens, come. Bring Hester\'s watch.\n\nC.A.\n\n(Act II, "The Social Season", opens with Mayfield in a later district. Until then the fog thickens slowly, and Saltwharf is yours.)`);
+    this.refreshObjectives();
+  }
+
+  /** Each night: the Fog Clock moves, urgent calls fire, the Kin keep their bargains, and London may fall. */
+  private nightlyStory(day: number): string[] {
+    const s = this.state!;
+    const st = s.story;
+    const lines: string[] = [];
+    if (st.kinPaid !== undefined && st.act1 === 'open' && day > st.kinPaid) {
+      void this.endAct1('coin');
+      lines.push('Before dawn, the Kin rowed something out onto the river and came back without it.');
+    }
+    const before = st.clock;
+    let rate = 0.6 + (s.weather === 'fog' ? 0.3 : 0) + (day >= VANE_DONE ? 0.2 : 0);
+    if (st.act1 === 'done') rate *= 0.25;
+    st.clock = Math.min(st.act1 === 'done' ? 70 : 100, st.clock + rate);
+    if (Math.floor(st.clock / 10) > Math.floor(before / 10)) lines.push(`The Fog Clock stands at ${Math.round(st.clock)}: the fog is ${clockWord(st.clock)}.`);
+    for (const t of [25, 50, 75]) {
+      if (st.clock >= t && st.urgent < t && st.act1 !== 'done') {
+        st.urgent = t;
+        const u = URGENT[t];
+        lines.push(`URGENT: ${u.title}. ${u.text}`);
+        if (t === 25 && !st.trunk) lines.push('Pembleton is pacing. "The trunk," he says. "Now."');
+      }
+    }
+    if (st.clock >= 100 && !st.fallen) {
+      st.fallen = true;
+      this.pendingFall = true;
+    }
+    return lines;
+  }
+
+  private pendingFall = false;
+
+  /** The losing ending: the fog takes London. */
+  private async fallOfLondon(): Promise<void> {
+    const s = this.state!;
+    await this.hud.modal('The Fall of London', [
+      'The fog came up Quay Street, and then up the stairs, and then it did not leave.',
+      'The white lamps burned on in Mayfield for a week after the last gas lamp in Saltwharf went out. Then they too went dark, and the city was quiet.',
+      `Nobody remembers ${s.character.first} ${s.character.last}. Nobody remembers anyone. That is what the Pale does.`,
+    ], 'THE END', 'letter', 'An ending');
+    await this.dialogue.say({ speaker: P, text: '"She told me this would happen if nobody listened." The ghost is fading too. "Begin again. Do better. Open the trunk sooner."' });
+    deleteSave();
+    location.reload();
+  }
+
+  /** The watch in the dock stops when the dead are near. */
+  private watchStopped = false;
+  private updateWatch(): void {
+    const s = this.state!;
+    if (!s.inventory.some((i) => i.id === 'hwatch')) return;
+    const ghost = this.location.id === 'saltwharf' && this.life.ghostNear(this.player!.position, 6);
+    if (ghost !== this.watchStopped) {
+      this.watchStopped = ghost;
+      document.querySelector('.tok.watch')?.classList.toggle('stopped', ghost);
+      if (ghost) this.hud.toast('Hester\'s watch has stopped.', 2500);
+    }
+  }
+
   // --- Factions ----------------------------------------------------------------
 
   private member(f: FactionId): boolean {
@@ -1735,7 +1940,7 @@ export class Game {
     if (f === 'society' && s.jobs.length) {
       const e = s.jobs[Math.floor(Math.random() * s.jobs.length)];
       leave(s, e.jobId, true);
-      sendLetter(s, JOBS[e.jobId].boss, 'Your position', 'A letter has reached me from Ashcombe Square. I am sorry. Don\'t come in tomorrow.');
+      sendLetter(s, JOBS[e.jobId].boss, 'Your position', 'A letter has reached me from Mayfield. I am sorry. Don\'t come in tomorrow.');
     }
     this.hud.toast(`Thrown out of ${def.name}: ${def.punishment.charAt(0).toLowerCase()}${def.punishment.slice(1)}.`, 5000);
   }
@@ -1778,9 +1983,33 @@ export class Game {
     const p = this.player.position;
     const near = (x: number, z: number, r = 3) => Math.hypot(p.x - x, p.y - z) < r;
     const once = (k: string) => (s.used[k] === day ? false : ((s.used[k] = day), true));
-    if (F.member === 'brotherhood' && wd === 4 && h >= 20 && h < 22 && near(18.5, 8.5) && once('meet:brotherhood')) void this.meeting('brotherhood', 0.02, 'The back room of the Copper Cup, thick with pipe smoke. Nell reads the owners\' latest letter aloud and the room boos it to pieces.');
+    if (F.member === 'brotherhood' && wd === 3 && h >= 21 && h < 23 && near(26.5, 8.5) && once('meet:brotherhood')) void this.patrol();
     if (F.member === 'guild' && wd === 5 && h >= 19 && h < 21 && near(18.5, 8.5) && once('meet:guild')) void this.meeting('guild', 0.05, 'Mutton, claret and the minutes of the last meeting. Grubb proposes a motion against the Kin. Mrs. Pell proposes a motion against Grubb.');
     if (wd === 6 && h >= 19 && h < 21 && near(1.5, 8.5, 2.5) && (F.member === 'society' || F.invited) && once('soiree')) void this.soiree();
+  }
+
+  /** The Lamplighters' Wednesday patrol: the old lamps, and what waits between them. */
+  private async patrol(): Promise<void> {
+    const s = this.state!;
+    this.busy = true;
+    this.player!.stop();
+    s.factions.dutyDone = true;
+    addDeed(s, 'brotherhood', 3);
+    const r = this.rel('nell');
+    r.met = true;
+    r.seen = dayIndex(s.minutes);
+    this.busy = false;
+    await this.dialogue.say({ speaker: 'Nell Hartigan', text: '"Lantern up. Pole up. Stay in the light, and if the light goes out, stay behind me." The patrol walks Quay Street lamp by lamp, and the fog walks with you.' });
+    if (Math.random() < 0.5 + s.story.clock / 200) {
+      const won = await this.fight({ name: 'A thing in the fog', hp: 34, dmg: [5, 10], hit: 0.68, nerve: 999 }, 'Between two lamps the fog stands up. It has a shape, nearly. It has a mouth, nearly.', false, false);
+      if (won) {
+        s.money = Math.round((s.money + 0.1) * 100) / 100;
+        addDeed(s, 'brotherhood', 4);
+        s.story.clock = Math.max(0, s.story.clock - 1);
+        this.hud.toast('It comes apart like wet paper. The Guild pays a bounty: £0.10.', 4000);
+      }
+    } else this.hud.toast('A quiet round. The lamps burn, the fog keeps its distance. Duty done.', 3500);
+    this.clock.minutes += 120;
   }
 
   private async meeting(f: FactionId, dues: number, text: string): Promise<void> {
@@ -1827,12 +2056,12 @@ export class Game {
         F.dutyDone = true;
         addDeed(s, 'society', 25);
         for (const r of FACTIONS.society.rivals) addDeed(s, r, -15);
-        await this.hud.celebrate('promotion', 'Admitted', 'Lady Vane\'s circle', 'A Guest of Ashcombe Square. Saturdays, the carriage waits at the west end of Quay Street.');
+        await this.hud.celebrate('promotion', 'Admitted', 'The Velvet Court', 'A Guest of Mayfield. Saturdays, the carriage waits at the west end of Quay Street.');
       } else await this.dialogue.say({ speaker: 'Lady Vane', text: '"How very... authentic." The carriage takes you home. No second invitation comes.' });
     } else {
       F.dutyDone = true;
       addDeed(s, 'society', score * 2);
-      await this.dialogue.say({ speaker: '', text: `Candles, string quartet, ices in October. You come home at midnight smelling of other people\'s money. Duty done for the week.${score < 0 ? ' Lady Vane was cool with you at the door.' : ''}` });
+      await this.dialogue.say({ speaker: '', text: `Vane House, Mayfield: candles, string quartet, ices in October, and every window lit with a white lamp. You come home at midnight smelling of other people\'s money. Duty done for the week.${score < 0 ? ' Lady Vane was cool with you at the door.' : ''}` });
     }
   }
 
@@ -1859,7 +2088,7 @@ export class Game {
       }
       if (F.member && weekday(day) === 1) {
         if (f === 'kin' && rankIn(s, 'kin') === 2) { s.money = Math.round((s.money + 0.1) * 100) / 100; lines.push('Your cut of the Kin\'s week: £0.10, in a twist of newspaper under the door.'); }
-        if (f === 'society') { s.money = Math.round((s.money + 0.15) * 100) / 100; lines.push('Returns from Ashcombe Square investments: £0.15.'); }
+        if (f === 'society') { s.money = Math.round((s.money + 0.15) * 100) / 100; lines.push('Returns from your Mayfield investments: £0.15.'); }
       }
       if (F.member) {
         const r = rankIn(s, F.member);
@@ -1875,7 +2104,7 @@ export class Game {
     if (!F.member && !F.invited && !(F.expelled.society && F.expelled.society > day) && joinBlockers(s, 'society', this.respectable()).every((b) => b.startsWith('standing'))) {
       F.invited = true;
       addDeed(s, 'society', Math.max(0, 20 - standing(s, 'society')));
-      sendLetter(s, 'Lady Honoria Vane', 'An invitation', `Lady Vane requests the pleasure of your company on Saturday at eight, at Ashcombe Square. A carriage will wait at the west end of Quay Street from seven.\n\nR.S.V.P. is unnecessary. One comes.`);
+      sendLetter(s, 'Lady Honoria Vane', 'An invitation', `Lady Vane requests the pleasure of your company on Saturday at eight, at Vane House, Mayfield. A carriage will wait at the west end of Quay Street from seven.\n\nR.S.V.P. is unnecessary. One comes.`);
     }
     return lines;
   }
@@ -2452,6 +2681,8 @@ export class Game {
     if (tag === 'crier') {
       const heads = gazette(s, day, ZONES.find((z) => z.id === s.hotZone)?.name ?? 'Gull Court', [], `${s.character.first} ${s.character.last}`);
       await this.dialogue.say({ speaker: 'The crier', text: `"Oyez! ${heads[0]}! And: ${heads[1]}!" He rings his bell in your face. "For the rest, the Gazette. One penny."` });
+    } else if (tag === 'ghost:0' && s.story.act1 === 'open') {
+      await this.sailor();
     } else if (tag.startsWith('ghost:')) {
       const g = this.life.ghost(Number(tag.slice(6)));
       if (!hasPerk(s, 'occult', 6) && holidayOn(day)?.id !== 'hallows') {
@@ -2572,7 +2803,7 @@ export class Game {
     const businessExtra = perks.filter((a) => a.label.startsWith('Sell to Silas'));
     const askExtra = perks.filter((a) => !romanceExtra.includes(a) && !businessExtra.includes(a));
     const seesAll = r.friendship >= 30 && (p.id === 'mag' || p.id === 'ruby' || !AUTHORED[p.id]);
-    const ask = [...this.factionActions(npc), ...this.recommendActions(npc), ...this.lessonActions(npc), ...this.parishActions(npc), ...askExtra].map(asPie);
+    const ask = [...this.sailorActions(npc), ...this.factionActions(npc), ...this.recommendActions(npc), ...this.lessonActions(npc), ...this.parishActions(npc), ...askExtra].map(asPie);
     if (seesAll) ask.unshift({ label: 'Where is everyone?', sub: 'they know', onClick: () => { this.hud.hidePlace(); this.whereIs(npc); } });
     const favours = this.favourActions(npc).map((a) => ({ ...asPie(a), icon: 'favour' as const, primary: !a.disabled }));
     const fam = this.familyActions(npc);
@@ -2888,7 +3119,7 @@ export class Game {
       const rows: ListRow[] = s.inventory.map((it) => ({
         label: `${ITEMS[it.id].name} ×${it.qty}`,
         sub: `Silas offers £${Math.max(0.01, Math.floor(ITEMS[it.id].price * (this.member('kin') ? 80 : 70)) / 100).toFixed(2)}`,
-        actions: [{ label: 'Sell', onClick: () => { sell(s, SHOPS.pawnbroker, it.id, this.member('kin') ? 0.8 : 0.7); if (this.member('guild')) addDeed(s, 'guild', -10); sfx('coin'); render(); } }],
+        actions: [{ label: 'Sell', onClick: () => { sell(s, SHOPS.pawnbroker, it.id, this.member('kin') ? 0.8 : 0.7); if (this.member('guild')) addDeed(s, 'guild', -10); if (this.member('brotherhood')) addDeed(s, 'brotherhood', -10); sfx('coin'); render(); } }],
       }));
       if (!rows.length) rows.push({ label: 'Nothing to sell.', sub: '', actions: [] });
       this.hud.showList('Silas Crane', 'No questions asked', rows);
@@ -3244,7 +3475,7 @@ export class Game {
       this.applyFurniture();
       lines.push('A thin grey cat has moved in. She sleeps on the end of your bed and has decided you may stay.');
     }
-    lines.push(...this.nightlyLives(day), ...this.nightlyLivesOfAll(day), ...this.nightlyFamily(day), ...this.nightlyFactions(day));
+    lines.push(...this.nightlyLives(day), ...this.nightlyLivesOfAll(day), ...this.nightlyFamily(day), ...this.nightlyFactions(day), ...this.nightlyStory(day));
     const myAge = this.playerAge(day);
     if (myAge >= 60 && Math.random() < 0.0004 * Math.pow(myAge - 57, 1.3) + (myAge >= 92 ? 1 : 0)) this.pendingDeath = true;
     s.hotZone = HOT_ZONES[Math.floor(Math.random() * HOT_ZONES.length)];
@@ -3262,6 +3493,7 @@ export class Game {
     const yesterday = s.weather;
     s.weather = s.tomorrow;
     s.tomorrow = rollWeather(day + 1);
+    if (s.tomorrow !== 'fog' && Math.random() < s.story.clock / 250) s.tomorrow = 'fog';
     this.locations.saltwharf.setWeather?.(s.weather);
     // The missing come back, confused; on a fog night someone else may not come home.
     for (const [id, until] of Object.entries(L.missing)) {
@@ -3274,7 +3506,9 @@ export class Game {
     }
     for (const [id, until] of Object.entries(L.confused)) if (until < day) delete L.confused[id];
     const takeable = ['tom', 'lizzie', 'jem', 'hannah', 'ruby', 'moss'].filter((id) => !(L.sick[id] >= day) && !(L.missing[id] >= day));
-    if (yesterday === 'fog' && !Object.keys(L.missing).length && Math.random() < 0.4 && takeable.length) {
+    const fogTakes = (yesterday === 'fog' ? 0.4 : 0) + (s.story.clock >= 50 && s.story.act1 !== 'done' ? 0.35 : 0);
+    if (!Object.keys(L.missing).length && Math.random() < fogTakes && takeable.length) {
+      s.story.clock += 2;
       const id = takeable[Math.floor(Math.random() * takeable.length)];
       L.missing[id] = day + 1;
       lines.push(`MISSING: ${this.nameOf(id)} walked home through last night's fog and never arrived. Posters are going up.`);
@@ -3363,6 +3597,8 @@ export class Game {
   // Danger -----------------------------------------------------------------
 
   private nearLamp(x: number, z: number, r = 1.8): boolean {
+    // When Saltwharf goes dark, the gas lamps are no help.
+    if (this.state && this.state.story.clock >= 75 && this.state.story.act1 !== 'done') return false;
     return (this.locations.saltwharf.lamps ?? []).some((l) => Math.hypot(l.x - x, l.z - z) <= r);
   }
 
@@ -3372,9 +3608,12 @@ export class Game {
     const p = this.player.position;
     let d = dangerAt(p.x, p.y, this.clock.hour, s.hotZone, this.nearLamp(p.x, p.y));
     if (s.weather === 'fog') d *= 1.3;
+    if (s.story.clock >= 75 && s.story.act1 !== 'done') d *= 1.4;
     if (hasPerk(s, 'cunning', 6)) d *= 0.75;
     if (this.life.constableNear(p.x, p.y)) d *= 0.5;
     if (this.life.bonfireLit && Math.hypot(p.x - 15.5, p.y - 20.5) < 7) d *= 0.3;
+    if (this.member('brotherhood')) d *= 0.8;
+    if ((s.factions.deeds.brotherhood ?? 0) < -10) d *= 1.25;
     return Math.min(1, d);
   }
 
@@ -3725,6 +3964,15 @@ export class Game {
 
   private async chatPembleton(): Promise<void> {
     const s = this.state!;
+    if (s.story.act1 === 'done' && !s.story.told) {
+      s.story.told = true;
+      await this.dialogue.say(
+        { speaker: P, text: '"You did it. Whatever you did, the quay is quiet. Then I suppose you should know." He looks at the trunk, not at you.' },
+        { speaker: P, text: '"Your aunt was a Warden. One of the last. The dead of London do not lie easy, and for three hundred years a few stubborn souls have kept them quiet. She kept them quiet in Saltwharf for thirty years."' },
+        { speaker: P, text: '"She died the month the white lamps reached the docks. That was not a coincidence, whatever the coroner said. The lamps burn something. Ask in Mayfield what."' },
+      );
+      return;
+    }
     const lines = [
       'In my day a gentleman did not live above a chandler. In my day a gentleman did not die on the stairs, either. Times change.',
       'The fog was never this thick before those white lamps came. I notice these things. I have nothing else to do.',
@@ -3807,6 +4055,11 @@ export class Game {
       return;
     }
     if (this.pendingBirth) await this.birth();
+    if (this.pendingFall) {
+      this.pendingFall = false;
+      await this.fallOfLondon();
+      return;
+    }
     this.save();
   }
 
@@ -3982,6 +4235,7 @@ export class Game {
   private goals(): string[] {
     const s = this.state!;
     const out: string[] = [];
+    out.push(...this.storyGoals().slice(0, 1));
     for (const q of s.quests.filter((x) => !x.done).slice(0, 2)) out.push(`Favour: ${q.text}`);
     if (s.factions?.member && !s.factions.dutyDone) {
       const d = FACTIONS[s.factions.member];
@@ -4000,7 +4254,7 @@ export class Game {
       .map((p) => ({ p, f: s.relations[p.id].friendship }))
       .filter((x) => x.f < 30)
       .sort((a, b) => b.f - a.f)[0];
-    if (close) out.push(`Befriend ${close.p.name.split(' ')[0]}: friendship ${Math.round(close.f)} / 30`);
+    if (close) out.push(`Befriend ${this.first(close.p.id)}: friendship ${Math.round(close.f)} / 30`);
     else if (known.length < RESIDENTS.filter((r) => this.present(r)).length) out.push(`Meet the neighbours: ${known.length} / ${RESIDENTS.filter((r) => this.present(r)).length}`);
     const office = OFFICES[s.parish.rank];
     if (office && s.parish.standing === null && s.character.skills.study >= office.study - 1) out.push(`Stand for ${office.name}: ask Father Hale (Study ${office.study}, ${office.friends} friends)`);
@@ -4108,7 +4362,11 @@ export class Game {
     const rent = s.rent.graceUntil !== null ? `Rent of £${s.rent.amount.toFixed(2)} is overdue.` : `Rent of £${s.rent.amount.toFixed(2)} is due ${due}.`;
     const office = officeTitle(s, c.gender === 'woman');
     const missionsHtml = `
-      <h3>The story</h3><p>${esc(story)}</p>
+      <h3>The story · Fog Clock ${Math.round(s.story.clock)}</h3>
+      <div class="sk-bar fogclock"><i style="width:${Math.round(s.story.clock)}%"></i></div>
+      <p class="meta">The fog is ${clockWord(s.story.clock)}. At 25, 50 and 75 an urgent call; at 100, London falls. Finishing an act pushes it back.</p>
+      <p>${esc(s.story.act1 === 'done' ? `Act I, The Fog: done (${s.story.path === 'word' ? 'you gave Jack Merrow his name' : s.story.path === 'steel' ? 'you put the drowned man down' : 'the Kin took him away'}). Act II, The Social Season, waits in Mayfield.` : s.story.act1 === 'open' ? 'Act I, The Fog: Hester\'s journal and watch lead to the drowned man on the quay.' : story)}</p>
+      <ul class="perks">${this.storyGoals().map((g) => `<li>${esc(g)}</li>`).join('')}</ul>
       <h3>Family</h3><ul class="perks">${(() => {
         const f = s.family;
         const items: string[] = [];
@@ -4244,6 +4502,7 @@ export class Game {
     player.update(dt, this.elapsed);
     this.updateNpcs(dt);
     this.updateHome(dt);
+    if (this.mode === 'play') this.updateWatch();
     this.updateStalker(dt);
     this.updateTully(dt);
     if (this.location.id === 'saltwharf') {
@@ -4251,7 +4510,7 @@ export class Game {
       const hol = holidayOn(day)?.id ?? (holidayOn(dayIndex(s.minutes - 6 * 60))?.id === 'hallows' && this.clock.hour < 6 ? 'hallows' : null);
       this.life.update(dt, this.elapsed, {
         hour: this.clock.hour, day, weather: s.weather, player: player.position,
-        sight: s.character.skills.occult + gear(s).occult >= 3 || hol === 'hallows', holiday: hol,
+        sight: s.character.skills.occult + gear(s).occult >= 3 || hol === 'hallows' || s.inventory.some((i) => i.id === 'hwatch'), holiday: hol,
         headline: this.headline ??= gazette(s, day, 'Gull Court', [], '')[0],
         lost: s.quests.filter((q) => q.kind === 'lost' && !q.found && q.at).map((q) => ({ id: q.id, x: q.at!.x, z: q.at!.z })),
         funeral: day === FUNERAL_DAY ? 'Sam Pike' : s.ceremonies.find((c) => c.kind === 'funeral' && c.day === day)?.names ?? null,

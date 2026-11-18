@@ -128,6 +128,8 @@ export interface GameState {
     taught: Record<string, Partial<Record<SkillId, number>>>;
     ancestors: { name: string; born: number; died: number; summary: string }[];
   };
+  /** The main story and the Fog Clock. */
+  story: import('./story').StoryState;
   /** Factions: deeds, membership, duty. */
   factions: import('./factions').FactionState;
   /** Weddings and funerals to come: who, and the day (at 11:00). */
@@ -172,6 +174,7 @@ function fillLives(s: GameState): void {
   s.known ??= {};
   s.recommend ??= {};
   s.ceremonies ??= [];
+  s.story ??= { clock: 8, urgent: 0, trunk: false, name: false, medal: false, act1: 'locked', pages: 0 };
   s.factions ??= { deeds: {}, member: null, since: -1, dutyDue: -1, dutyDone: false, expelled: {} };
   s.family ??= { children: [], strain: 0, taught: {}, ancestors: [] };
   s.character.birth ??= -21 * 24;

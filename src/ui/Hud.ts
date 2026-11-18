@@ -388,8 +388,9 @@ export class Hud {
   update(state: GameState, district: string, date: string, time: string, rentDue: string, jobLine = ''): void {
     // Pocket watch hands follow the game clock.
     const [hh, mm] = time.split(':').map(Number);
-    const hour = this.q('.w-hour');
-    const min = this.q('.w-min');
+    const stopped = this.q('.tok.watch').classList.contains('stopped');
+    const hour = stopped ? null : this.q('.w-hour');
+    const min = stopped ? null : this.q('.w-min');
     hour?.setAttribute('transform', `rotate(${((hh % 12) + mm / 60) * 30} 24 26)`);
     min?.setAttribute('transform', `rotate(${mm * 6} 24 26)`);
     // Token backs show counts.

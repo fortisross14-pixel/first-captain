@@ -723,3 +723,8 @@ button:disabled { cursor: default; }
 .journal-sheet.letter h2 { color: var(--sheet) !important; font-family: var(--f-sc) !important; text-shadow: none !important; }
 .journal-sheet.letter .meta { color: #6a4e1a !important; font-family: var(--f-script) !important; font-size: 20px !important; }
 .journal-sheet.letter .modal-body p { color: #2a2620 !important; font-family: var(--f-body) !important; font-style: italic; }
+/* Hester's watch stops near the dead. */
+.tok.watch.stopped .hex { animation: watchcold 1.4s ease-in-out infinite; }
+.tok.watch.stopped .lab { color: #bfe4ff; }
+@keyframes watchcold { 50% { filter: drop-shadow(0 0 10px #bfe4ff) brightness(.8); } }
+.fogclock i { background: linear-gradient(90deg, #8a96a0, #4a5a6a 60%, #1a2230) !important; }
