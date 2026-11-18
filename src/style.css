@@ -667,3 +667,4 @@ button:disabled { cursor: default; }
 .creator .sname { font-family: var(--f-display); color: var(--gilt-hi); }
 .creator input { font-family: var(--f-display); border-color: rgba(201, 162, 74, .6); }
 .stepper button { box-shadow: inset 0 0 0 1px var(--gilt) !important; color: var(--gilt-hi); }
+.goals { min-height: 40px; }
