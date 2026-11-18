@@ -8,7 +8,11 @@ A dark gothic life-sim RPG set in a fictional Victorian London (1871): work, ren
 - Latest audit: [docs/AUDIT_2026-11-18.md](docs/AUDIT_2026-11-18.md) · repeat it with `node scripts/audit-metrics.cjs` and the `game-audit` skill
 - Story and world design: the *Pale Lamps Story Bible* (Claude Docs)
 
-## Current state: M11, a family of your own
+## Current state: M12, factions
+
+Six factions, two per class: the Hollow Lane Kin, the Courtfolk, the Dockers' Brotherhood, the Tradesmen's Guild, the Lantern Society and Lady Vane's circle. One at a time; weekly duties, rules, ranks, rivals and punishments.
+
+### Earlier: M11, a family of your own
 
 Propose, marry at the market cross, bring your spouse home to Hester's room, have or take in children, grow old and die in your sleep; then carry on as your grown child.
 

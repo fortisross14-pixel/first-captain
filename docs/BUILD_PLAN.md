@@ -207,7 +207,26 @@ The Animal Crossing feeling, darker: residents have their own lives and you walk
 - [x] **Old age**: your hair greys from 58; from 60 you may die in your sleep. An "In Memoriam" sums up the life, and Pembleton asks who carries on.
 - [x] **Carrying on**: continue as a child of 16 or more: they inherit the room, the purse, the things, some of the friendships, a little of your skills and everything you taught them. The journal keeps the family line.
 
-## Next: M12 Factions, then M13 the Fog Clock and the main story
+## M12 ✅ Factions
+
+`src/game/factions.ts`. Six factions, two for each class; one at a time.
+
+| | Faction | Members | Duty each week | Punishment |
+|---|---|---|---|---|
+| Low | The Hollow Lane Kin | Silas, Ruby | Collect a debt from someone in Saltwharf | They come for you at night |
+| Low | The Courtfolk | Mag, Hannah, Jem | A loaf or £0.03 in Mag's poor box | Nobody watches over you |
+| Middling | The Dockers' Brotherhood | Nell, Tom | Thursday meeting at the Copper Cup, 20:00 | Accidents on the quay |
+| Middling | The Tradesmen's Guild | Pell, Lizzie, Bessa, Moss, Grubb | Friday supper at the Copper Cup, 19:00 | Guild shops charge a third more |
+| High | The Lantern Society | Hale, Quill, Mrs. Ashby | An essay at Hester's table | No more lessons from Hale and Quill |
+| High | Lady Vane's circle | (Ashcombe Square) | Saturday soirée; a carriage at the west end of Quay Street | A letter to your employer: you're let go |
+
+- [x] **Standing** from deeds (duties, favours for members, pickets, Fight Night wins, elections, helping the poor) plus how members feel about you. Three ranks each. A Standing page in the journal shows all six: standing, rank, this week's duty, rules, perks and what you need to join.
+- [x] **Joining**: ask a member (Ask in the pie) once standing and requirements are met; Lady Vane's circle is by invitation, which arrives when you are learned, charming, solvent, housed and well dressed, and admission depends on how the first soirée goes.
+- [x] **Rules with teeth**: crossing a picket throws you out of the Brotherhood; marrying beneath you throws you out of Lady Vane's circle; marrying respectable costs you with the Kin; fencing with Silas costs you with the Guild. Neglected duties lower standing; fall far enough and you're thrown out, punished, and barred for a fortnight.
+- [x] **Rivals**: joining cools its rivals (the Kin and the Guild; the Brotherhood, the Courtfolk and the Kin against Lady Vane).
+- [x] **Perks**: fewer robberies and better fencing (Kin); watch kept while you sleep rough and bread from the pot (Courtfolk); better dock pay and Nell at your side in fights (Brotherhood); discounts, rent grace and a loan (Guild); faster learning (Lantern Society); first impressions and Monday investments (Lady Vane). The top ranks of the Lantern Society and Lady Vane's circle point toward the main story.
+
+## Next: M13 the Fog Clock and the main story
 
 ## After the slice
 

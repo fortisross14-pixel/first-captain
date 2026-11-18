@@ -14,6 +14,7 @@ import { LESSON_XP, MENTORS, PERKS, hasPerk, nextPerk, perkAt } from '../game/sk
 
 const PERKS_OWNED = (s: GameState) => PERKS.filter((p) => s.character.skills[p.skill] >= p.level);
 import { HOLIDAYS, MOOD_PAY, MOOD_TEXT, WEATHER_TEXT, bossMood, holidayOn, isSunday, rollWeather, strikeStarts } from '../game/calendar';
+import { FACTIONS, FACTION_IDS, addDeed, factionOf, joinBlockers, rankIn, standing, type FactionId } from '../game/factions';
 import { FUTURE_OFFICES, OFFICES, count as countVotes, officeTitle, pledgeChance, voters } from '../game/parish';
 import { ASKS, LOST_ZONES, PLACE_NAMES, READ_LETTERS, type Quest } from '../game/quests';
 import { ACTIVITY_TEXT, AMBIENT, CONFUSED_LINES, GENERIC, SICK_LINES, conversation } from '../game/talk';
@@ -506,7 +507,10 @@ export class Game {
       case 'table': {
         const night = this.clock.hour >= 18 || this.clock.hour < 7;
         const candle = s.inventory.some((i) => i.id === 'candle' || i.id === 'candle2');
-        return [act(night ? (candle ? 'Read by candlelight (1 hour)' : 'Read (needs a candle after dark)') : 'Read by the window (1 hour)', () => this.read(), { primary: true, disabled: night && !candle })];
+        return [
+          act(night ? (candle ? 'Read by candlelight (1 hour)' : 'Read (needs a candle after dark)') : 'Read by the window (1 hour)', () => this.read(this.member('lantern')), { primary: true, disabled: night && !candle }),
+          ...(this.member('lantern') && !s.factions.dutyDone ? [act('Write your essay for the Lantern Society (1 hour)', () => this.essay(), { primary: true })] : []),
+        ];
       }
       case 'bookshelf':
         return [act('Read from the shelf (1 hour)', () => this.read(true), { primary: true, disabled: (this.clock.hour >= 18 || this.clock.hour < 7) && !s.inventory.some((i) => i.id === 'candle' || i.id === 'candle2') })];
@@ -602,6 +606,9 @@ export class Game {
     if (keeper && this.friend(keeper)) p *= 0.8;
     if (keeper && this.rival(keeper)) p *= 1.3;
     if (hasPerk(this.state!, 'charisma', 3)) p *= 0.95;
+    const guildShop = ['hester', 'pawnbroker', 'clothier'].includes(shopId);
+    if (guildShop && this.member('guild')) p *= 0.9;
+    if (guildShop && (this.state!.factions.deeds.guild ?? 0) < -10) p *= 1.33;
     return Math.max(0.01, Math.round(p * 100) / 100);
   }
 
@@ -739,8 +746,21 @@ export class Game {
     addNeed(s.needs, 'rest', -3);
     this.clock.minutes += 60;
     s.minutes = this.clock.minutes;
-    const ups = gainXp(s, 'study', Math.round((night ? 18 : 12) * (shelf || owns(s, 'bookshelf') ? 1.5 : 1) * (hasPerk(s, 'study', 6) ? 1.25 : 1)));
+    const ups = gainXp(s, 'study', Math.round((night ? 18 : 12) * (shelf || owns(s, 'bookshelf') ? 1.5 : 1) * (hasPerk(s, 'study', 6) ? 1.25 : 1) * (this.member('lantern') ? 1.25 : 1)));
     this.hud.toast(`An hour with Hester's books. Study practice.${ups.length ? ` ${ups.join(' ')}` : ''}`, 3500);
+  }
+
+  private essay(): void {
+    const s = this.state!;
+    simulateNeeds(s.needs, 1, 'awake');
+    addNeed(s.needs, 'rest', -5);
+    this.clock.minutes += 60;
+    s.factions.dutyDone = true;
+    const good = Math.random() < 0.4 + s.character.skills.study * 0.04;
+    addDeed(s, 'lantern', good ? 5 : 1);
+    const ups = gainXp(s, 'study', 14);
+    const topics = ['On the Lighting of Quay Street, and Its Effects upon the Fog', 'A Short History of St. Botolph-by-the-River', 'Observations of the Thames at Low Water', 'On Certain Persons Lately Missing from Saltwharf'];
+    this.hud.toast(`"${topics[Math.floor(Math.random() * topics.length)]}." ${good ? 'Quill will like it.' : 'Hale will correct the commas.'} Duty done.${ups.length ? ` ${ups.join(' ')}` : ''}`, 4500);
   }
 
   private restOnStep(): void {
@@ -928,7 +948,11 @@ export class Game {
     const st = s.strike;
     const scab = jobId === 'docks' && !!st && shiftDay >= st.day && shiftDay <= st.until;
     const mood = bossMood(jobId, shiftDay, s);
-    let bonus = rep.pay * (MOOD_PAY[mood] - 1) + (jobId === 'docks' ? rep.pay * s.dockRaise : 0) + (scab ? rep.pay : 0);
+    let bonus = rep.pay * (MOOD_PAY[mood] - 1) + (jobId === 'docks' ? rep.pay * (s.dockRaise + (this.member('brotherhood') ? 0.1 : 0)) : 0) + (scab ? rep.pay : 0);
+    if (jobId === 'docks' && (s.factions.deeds.brotherhood ?? 0) < -10 && !rep.fired) {
+      addNeed(s.needs, 'health', -6);
+      extras.push('A crate slips its rope and catches your shoulder. Nobody saw anything. Health −6');
+    }
     bonus = Math.round(bonus * 100) / 100;
     if (bonus !== 0 && !rep.fired) {
       s.money = Math.round((s.money + bonus) * 100) / 100;
@@ -939,6 +963,8 @@ export class Game {
     if (scab && st) {
       st.side = 'scab';
       addFact(s, 'scab', ['nell', 'tom', 'hannah', 'rudd']);
+      addDeed(s, 'brotherhood', -40);
+      if (this.member('brotherhood')) this.expel('brotherhood', 'You crossed the picket. Brothers don\'t.');
       for (const id of ['nell', 'tom', 'hannah']) {
         const r = this.rel(id);
         r.friendship = Math.max(0, r.friendship - 10);
@@ -998,6 +1024,8 @@ export class Game {
     this.clock.minutes += 120;
     s.minutes = this.clock.minutes;
     for (const id of ['nell', 'tom', 'hannah']) this.rel(id).friendship = Math.min(100, this.rel(id).friendship + 5);
+    addDeed(s, 'brotherhood', 8);
+    addDeed(s, 'court', 3);
     this.rel('rudd').rivalry = Math.min(100, this.rel('rudd').rivalry + 3);
     addFact(s, 'helped', ['nell', 'tom', 'hannah', 'jem'], 'nell');
     this.hud.toast('Two hours at the gate in the cold, shouting at carts. Nell shares her tea. Dockers\' friendship +5, Social +14. Rudd is writing names down.', 4500);
@@ -1598,6 +1626,282 @@ export class Game {
     }];
   }
 
+  // --- Factions ----------------------------------------------------------------
+
+  private member(f: FactionId): boolean {
+    return this.state!.factions.member === f;
+  }
+
+  private respectable(): boolean {
+    const s = this.state!;
+    return (s.outfit === 'coat' || s.outfit === 'sunday') && s.wear[s.outfit] >= 40;
+  }
+
+  /** Joining, leaving and the duties that pass through a faction's members. */
+  private factionActions(npc: Npc): Action[] {
+    const s = this.state!;
+    const id = npc.res.id;
+    const F = s.factions;
+    const out: Action[] = [];
+    const f = factionOf(id);
+    if (f && f !== 'society') {
+      const def = { ...FACTIONS[f], name: FACTIONS[f].name.replace(/^The /, 'the ') };
+      if (F.member === f) {
+        out.push({ label: `Leave ${def.name}`, onClick: () => { this.hud.hidePlace(); void this.leaveFaction(true); } });
+      } else {
+        const blockers = joinBlockers(s, f, this.respectable());
+        const other = F.member ? FACTIONS[F.member].name.replace(/^The /, 'the ') : null;
+        out.push({
+          label: other ? `Join ${def.name} (leave ${other} first)` : blockers.length ? `Join ${def.name} (needs ${blockers.join(', ')})` : `Ask to join ${def.name}`,
+          primary: !other && !blockers.length,
+          disabled: !!other || blockers.length > 0,
+          onClick: () => { this.hud.hidePlace(); void this.joinFaction(f, npc.res.name); },
+        });
+      }
+    }
+    // Duties.
+    if (F.member === 'kin' && F.debtor === id && !F.dutyDone) {
+      out.push({ label: 'Collect the Kin\'s debt', primary: true, onClick: () => { this.hud.hidePlace(); void this.collectDebt(npc); } });
+    }
+    if (F.member === 'court' && id === 'mag' && !F.dutyDone) {
+      const bread = s.inventory.some((i) => i.id === 'bread');
+      out.push({
+        label: bread ? 'Put a loaf in the poor box' : 'Put £0.03 in the poor box', primary: true, disabled: !bread && s.money < 0.03,
+        onClick: () => {
+          if (bread) removeItem(s, 'bread');
+          else s.money = Math.round((s.money - 0.03) * 100) / 100;
+          F.dutyDone = true;
+          addDeed(s, 'court', 2);
+          this.hud.hidePlace();
+          void this.dialogue.say({ speaker: npc.res.name, text: '"The Court thanks you. The Court never forgets, neither the good nor the other." Duty done for the week.' });
+        },
+      });
+    }
+    if (F.member === 'court' && id === 'hannah') {
+      out.push({ label: this.usedToday('courtpot') ? 'Bread from the Court\'s pot (tomorrow)' : 'Bread from the Court\'s pot', disabled: this.usedToday('courtpot'), onClick: () => { this.markUsed('courtpot'); addNeed(s.needs, 'hunger', 25); this.hud.hidePlace(); this.hud.toast('A heel of bread and a ladle of something hot. Hunger +25.'); } });
+    }
+    if (F.member === 'guild' && id === 'pell' && rankIn(s, 'guild') === 2 && !F.loan) {
+      out.push({ label: 'Ask the Guild for a loan (£1)', onClick: () => { F.loan = true; s.money = Math.round((s.money + 1) * 100) / 100; s.debt = Math.round((s.debt + 1.1) * 100) / 100; this.hud.hidePlace(); this.hud.toast('The Guild lends you £1, to be repaid with a shilling\'s interest from your wages.', 4000); } });
+    }
+    return out;
+  }
+
+  private async joinFaction(f: FactionId, via: string): Promise<void> {
+    const s = this.state!;
+    const def = FACTIONS[f];
+    const F = s.factions;
+    const day = dayIndex(s.minutes);
+    const yes = await this.dialogue.ask({ speaker: via, text: `"${def.blurb}" A long look. "Our rules: ${def.rules.map((r) => r.charAt(0).toLowerCase() + r.slice(1)).join('; ')}. Break them and ${def.punishment.charAt(0).toLowerCase()}${def.punishment.slice(1)}."` }, ['I\'m in.', 'Let me think on it.']);
+    if (yes !== 0) return;
+    F.member = f;
+    F.since = day;
+    F.dutyDue = day + 7;
+    F.dutyDone = false;
+    this.pickDebtor();
+    addDeed(s, f, 5);
+    for (const r of def.rivals) {
+      addDeed(s, r, -15);
+      for (const m of FACTIONS[r].members) { const rr = this.rel(m); rr.friendship = Math.max(0, rr.friendship - 8); }
+    }
+    await this.hud.celebrate('promotion', 'Sworn in', def.name, `${def.ranks[0]}. This week: ${def.duty.charAt(0).toLowerCase()}${def.duty.slice(1)}.`);
+    this.refreshObjectives();
+  }
+
+  private async leaveFaction(voluntary: boolean): Promise<void> {
+    const s = this.state!;
+    const F = s.factions;
+    const f = F.member;
+    if (!f) return;
+    if (voluntary) {
+      const yes = await this.dialogue.ask({ speaker: 'You', text: `Leave ${FACTIONS[f].name}? They will take it badly.` }, ['Leave', 'Stay']);
+      if (yes !== 0) return;
+    }
+    F.member = null;
+    addDeed(s, f, voluntary ? -20 : -35);
+    if (f === 'kin') sendLetter(s, 'Unsigned', 'Nobody leaves', 'Nobody leaves the Kin, friend. They just stop being lucky.');
+    this.hud.toast(`You are no longer one of ${FACTIONS[f].name}.`, 3500);
+  }
+
+  /** Thrown out: each faction punishes in its own way. */
+  private expel(f: FactionId, why: string): void {
+    const s = this.state!;
+    const day = dayIndex(s.minutes);
+    if (s.factions.member === f) s.factions.member = null;
+    s.factions.expelled[f] = day + 14;
+    addDeed(s, f, -30);
+    const def = FACTIONS[f];
+    sendLetter(s, def.name, 'You are out', `${why}\n\n${def.punishment}.`);
+    if (f === 'kin') s.used.ambush = day;
+    if (f === 'society' && s.jobs.length) {
+      const e = s.jobs[Math.floor(Math.random() * s.jobs.length)];
+      leave(s, e.jobId, true);
+      sendLetter(s, JOBS[e.jobId].boss, 'Your position', 'A letter has reached me from Ashcombe Square. I am sorry. Don\'t come in tomorrow.');
+    }
+    this.hud.toast(`Thrown out of ${def.name}: ${def.punishment.charAt(0).toLowerCase()}${def.punishment.slice(1)}.`, 5000);
+  }
+
+  private pickDebtor(): void {
+    const s = this.state!;
+    const day = dayIndex(s.minutes);
+    const pool = s.people.filter((p) => !p.authored && p.alive && p.district === 'Saltwharf' && ageOf(p, day) >= 20 && p.work && JOB_KINDS[p.work].area);
+    s.factions.debtor = pool.length ? pool[Math.floor(Math.random() * pool.length)].id : undefined;
+  }
+
+  private async collectDebt(npc: Npc): Promise<void> {
+    const s = this.state!;
+    const c = await this.dialogue.ask({ speaker: npc.res.name, text: '"Silas sent you? I told him, Friday. I\'ll have it Friday."' }, ['Talk them round (Charisma)', 'Lean on them (Strength)', 'Let it go']);
+    if (c === 2) return;
+    const sk = c === 0 ? s.character.skills.charisma : s.character.skills.strength;
+    if (Math.random() < 0.45 + sk * 0.06) {
+      s.factions.dutyDone = true;
+      s.money = Math.round((s.money + 0.05) * 100) / 100;
+      addDeed(s, 'kin', 3);
+      if (c === 1) {
+        const r = this.rel(npc.res.id);
+        r.rivalry = Math.min(100, r.rivalry + 15);
+        this.note('wronged', npc.res.id);
+      }
+      await this.dialogue.say({ speaker: npc.res.name, text: c === 0 ? '"...All right. All right. Here. Tell him we\'re square." (£0.05 is your cut.)' : 'They count it out with shaking hands. Somebody saw. (£0.05 is your cut.)' });
+    } else {
+      await this.dialogue.say({ speaker: npc.res.name, text: c === 0 ? '"Friday," they say again, and walk off.' : 'They shove past you. Not today.' });
+    }
+  }
+
+  /** Meetings and Saturdays: the Brotherhood, the Guild, Lady Vane. */
+  private checkFactionEvents(): void {
+    const s = this.state!;
+    if (this.busy || this.dialogue.open || this.hud.blocking || this.location.id !== 'saltwharf' || !this.player) return;
+    const F = s.factions;
+    const day = dayIndex(s.minutes);
+    const wd = weekday(day);
+    const h = this.clock.hour;
+    const p = this.player.position;
+    const near = (x: number, z: number, r = 3) => Math.hypot(p.x - x, p.y - z) < r;
+    const once = (k: string) => (s.used[k] === day ? false : ((s.used[k] = day), true));
+    if (F.member === 'brotherhood' && wd === 4 && h >= 20 && h < 22 && near(18.5, 8.5) && once('meet:brotherhood')) void this.meeting('brotherhood', 0.02, 'The back room of the Copper Cup, thick with pipe smoke. Nell reads the owners\' latest letter aloud and the room boos it to pieces.');
+    if (F.member === 'guild' && wd === 5 && h >= 19 && h < 21 && near(18.5, 8.5) && once('meet:guild')) void this.meeting('guild', 0.05, 'Mutton, claret and the minutes of the last meeting. Grubb proposes a motion against the Kin. Mrs. Pell proposes a motion against Grubb.');
+    if (wd === 6 && h >= 19 && h < 21 && near(1.5, 8.5, 2.5) && (F.member === 'society' || F.invited) && once('soiree')) void this.soiree();
+  }
+
+  private async meeting(f: FactionId, dues: number, text: string): Promise<void> {
+    const s = this.state!;
+    this.busy = true;
+    this.player!.stop();
+    s.money = Math.max(0, Math.round((s.money - dues) * 100) / 100);
+    s.factions.dutyDone = true;
+    addDeed(s, f, 2);
+    addNeed(s.needs, 'social', 18);
+    for (const m of FACTIONS[f].members) { const r = this.rel(m); r.met = true; r.friendship = Math.min(100, r.friendship + 2); r.seen = dayIndex(s.minutes); }
+    this.clock.minutes += 90;
+    this.busy = false;
+    await this.dialogue.say({ speaker: '', text: `${text}\nDues paid (£${dues.toFixed(2)}). Duty done for the week. Social +18.` });
+  }
+
+  /** Lady Vane's Saturday, in Ashcombe Square. */
+  private async soiree(): Promise<void> {
+    const s = this.state!;
+    const F = s.factions;
+    this.busy = true;
+    this.player!.stop();
+    await this.hud.fade(true);
+    this.clock.minutes += 150;
+    await this.hud.fade(false);
+    const sk = s.character.skills;
+    let score = 0;
+    const a = await this.dialogue.ask({ speaker: 'Lady Vane', text: '"And you are the one from the river. How thrilling. Tell me, do you read?"' }, ['Quote Gibbon at her (Study)', 'Make her laugh (Charisma)', '"Only the Gazette, ma\'am."']);
+    score += a === 0 ? (sk.study >= 6 ? 2 : -1) : a === 1 ? (sk.charisma >= 5 ? 2 : 0) : -1;
+    const b = await this.dialogue.ask({ speaker: 'Mr. Vane', text: 'A pale man with paler eyes takes your hand and does not let go. "My lamps. Saltwharf is grateful for them, I hope?"' }, ['"They are very bright, sir."', '"Some people won\'t walk under them."', 'Say nothing, and take your hand back']);
+    score += b === 0 ? 1 : b === 1 ? -2 : 0;
+    if (b === 1) addDeed(s, 'lantern', 4);
+    const c = await this.dialogue.ask({ speaker: 'A dowager', text: '"Whom will you marry, child? One must marry someone."' }, ['"Someone of good family."', '"Whomever I please."', '"I am married already."']);
+    score += c === 0 ? 1 : c === 1 ? -1 : 0;
+    addNeed(s.needs, 'social', 15);
+    addNeed(s.needs, 'rest', -10);
+    this.busy = false;
+    if (!F.member) {
+      F.invited = false;
+      if (score >= 1) {
+        F.member = 'society';
+        F.since = dayIndex(s.minutes);
+        F.dutyDue = F.since + 7;
+        F.dutyDone = true;
+        addDeed(s, 'society', 25);
+        for (const r of FACTIONS.society.rivals) addDeed(s, r, -15);
+        await this.hud.celebrate('promotion', 'Admitted', 'Lady Vane\'s circle', 'A Guest of Ashcombe Square. Saturdays, the carriage waits at the west end of Quay Street.');
+      } else await this.dialogue.say({ speaker: 'Lady Vane', text: '"How very... authentic." The carriage takes you home. No second invitation comes.' });
+    } else {
+      F.dutyDone = true;
+      addDeed(s, 'society', score * 2);
+      await this.dialogue.say({ speaker: '', text: `Candles, string quartet, ices in October. You come home at midnight smelling of other people\'s money. Duty done for the week.${score < 0 ? ' Lady Vane was cool with you at the door.' : ''}` });
+    }
+  }
+
+  /** Each night: the week's duty is judged; Lady Vane may write; Monday's cuts. */
+  private nightlyFactions(day: number): string[] {
+    const s = this.state!;
+    const F = s.factions;
+    const lines: string[] = [];
+    const f = F.member;
+    if (f) {
+      const def = FACTIONS[f];
+      if (day > F.dutyDue) {
+        if (F.dutyDone) {
+          addDeed(s, f, 6);
+          lines.push(`${def.name}: your duty this week is noted. Standing ${standing(s, f)}.`);
+        } else {
+          addDeed(s, f, -12);
+          lines.push(`${def.name}: you neglected your duty this week. They noticed.`);
+          if (standing(s, f) < def.at[0] - 25) this.expel(f, 'You were told the rules. You have not kept them.');
+        }
+        F.dutyDue = day + 7;
+        F.dutyDone = false;
+        this.pickDebtor();
+      }
+      if (F.member && weekday(day) === 1) {
+        if (f === 'kin' && rankIn(s, 'kin') === 2) { s.money = Math.round((s.money + 0.1) * 100) / 100; lines.push('Your cut of the Kin\'s week: £0.10, in a twist of newspaper under the door.'); }
+        if (f === 'society') { s.money = Math.round((s.money + 0.15) * 100) / 100; lines.push('Returns from Ashcombe Square investments: £0.15.'); }
+      }
+      if (F.member) {
+        const r = rankIn(s, F.member);
+        const key = `frank:${F.member}`;
+        if ((s.used[key] ?? 0) < r) {
+          s.used[key] = r;
+          lines.push(`${def.name} now count you a ${def.ranks[r]}.`);
+        }
+      }
+      if (F.member === 'kin' && F.debtor) lines.push(`The Kin want a debt collected from ${this.nameOf(F.debtor)} this week.`);
+    }
+    // Lady Vane notices those who rise.
+    if (!F.member && !F.invited && !(F.expelled.society && F.expelled.society > day) && joinBlockers(s, 'society', this.respectable()).every((b) => b.startsWith('standing'))) {
+      F.invited = true;
+      addDeed(s, 'society', Math.max(0, 20 - standing(s, 'society')));
+      sendLetter(s, 'Lady Honoria Vane', 'An invitation', `Lady Vane requests the pleasure of your company on Saturday at eight, at Ashcombe Square. A carriage will wait at the west end of Quay Street from seven.\n\nR.S.V.P. is unnecessary. One comes.`);
+    }
+    return lines;
+  }
+
+  /** Standing with every faction, for the journal. */
+  private factionsHtml(): string {
+    const s = this.state!;
+    const esc = (t: string) => t.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
+    const F = s.factions;
+    const day = dayIndex(s.minutes);
+    return FACTION_IDS.map((f) => {
+      const def = FACTIONS[f];
+      const st = standing(s, f);
+      const mine = F.member === f;
+      const pct = Math.max(0, Math.min(100, st));
+      const blockers = joinBlockers(s, f, this.respectable());
+      const status = mine
+        ? `<b>${esc(def.ranks[rankIn(s, f)])}</b> · this week: ${esc(def.duty)}${F.dutyDone ? ' (done)' : ` (by ${this.clock.formatShortDate(new Date(1871, 9, 1 + F.dutyDue))})`}${f === 'kin' && F.debtor ? ` · collect from ${esc(this.nameOf(F.debtor))}` : ''}`
+        : (F.expelled[f] ?? -1) > day ? 'They threw you out.' : blockers.length ? `To join: ${esc(blockers.join(', '))}` : f === 'society' ? 'By invitation only.' : `You could join: ask ${esc(def.members.map((m) => this.short(m)).join(' or '))}.`;
+      return `<div class="skillrow"><div class="sk-h"><span>${esc(def.name)}${mine ? ' ❦' : ''}</span><b>${st}</b></div><div class="sk-bar"><i style="width:${pct}%"></i></div>
+        <div class="sk-sub">${status}</div>
+        <div class="sk-sub">${esc(def.cls === 'low' ? 'Low' : def.cls === 'middle' ? 'Middling' : 'High')} · rules: ${esc(def.rules.join('; '))}</div>
+        <div class="sk-sub">Perks: ${esc(def.perks.join('; '))}</div></div>`;
+    }).join('') + '<p class="meta">One faction at a time. Joining one cools its rivals. Standing comes from what you do and how members feel about you.</p>';
+  }
+
   // --- A family of your own --------------------------------------------------
 
   private playerAge(day = dayIndex(this.state!.minutes)): number {
@@ -1763,6 +2067,9 @@ export class Game {
     // Crossing classes is talked about.
     const mine = s.parish.rank > 0 || s.outfit === 'coat' || s.outfit === 'sunday' ? 'middle' : 'lower';
     if (p.cls !== mine) addFact(s, 'courting', ['ruby', 'mag', 'pell'], id, 'scandal');
+    // Factions have views on whom you marry.
+    if (this.member('society') && p.cls === 'lower') this.expel('society', 'You married beneath you, in front of everyone.');
+    if (this.member('kin') && p.cls !== 'lower') addDeed(s, 'kin', -20);
     this.busy = false;
     this.syncPopulation();
     this.syncHome();
@@ -2049,6 +2356,8 @@ export class Game {
     if (pay > 0) s.money = Math.round((s.money + pay) * 100) / 100;
     addNeed(s.needs, 'social', 8);
     this.note('helped', q.who, undefined, [q.who]);
+    const qf = factionOf(q.who);
+    if (qf) addDeed(s, qf, 3);
     sfx('chime');
     await this.dialogue.say({ speaker: this.nameOf(q.who), text: [text, `Friendship +9${pay > 0 ? ` · £${pay.toFixed(2)}` : ''}`].join('\n') });
     await this.hud.celebrate('goal', 'Favour done', this.nameOf(q.who), 'Word gets round that you help people.');
@@ -2173,6 +2482,7 @@ export class Game {
         addNeed(s.needs, 'social', 8);
         this.rel('grubb').rivalry = Math.min(100, this.rel('grubb').rivalry + 2);
         addFact(s, 'helped', ['mag', 'ruby', 'hannah'], 'mag');
+        addDeed(s, 'court', 6);
         await this.dialogue.say({ speaker: 'Mrs. Okafor', text: '"God keep you." She presses your hand. "Watch Grubb. He\'s selling to the lamp men, house by house."' });
       } else if (c === 1) {
         addNeed(s.needs, 'rest', -8);
@@ -2262,7 +2572,7 @@ export class Game {
     const businessExtra = perks.filter((a) => a.label.startsWith('Sell to Silas'));
     const askExtra = perks.filter((a) => !romanceExtra.includes(a) && !businessExtra.includes(a));
     const seesAll = r.friendship >= 30 && (p.id === 'mag' || p.id === 'ruby' || !AUTHORED[p.id]);
-    const ask = [...this.recommendActions(npc), ...this.lessonActions(npc), ...this.parishActions(npc), ...askExtra].map(asPie);
+    const ask = [...this.factionActions(npc), ...this.recommendActions(npc), ...this.lessonActions(npc), ...this.parishActions(npc), ...askExtra].map(asPie);
     if (seesAll) ask.unshift({ label: 'Where is everyone?', sub: 'they know', onClick: () => { this.hud.hidePlace(); this.whereIs(npc); } });
     const favours = this.favourActions(npc).map((a) => ({ ...asPie(a), icon: 'favour' as const, primary: !a.disabled }));
     const fam = this.familyActions(npc);
@@ -2323,7 +2633,7 @@ export class Game {
         this.hud.toast('Thin soup, thick bread, and a blessing you didn\'t ask for. Hunger +35.');
       }));
     }
-    if (id === 'silas' && this.friend(id)) {
+    if (id === 'silas' && (this.friend(id) || this.member('kin'))) {
       out.push({ label: 'Sell to Silas (70%)', onClick: () => this.sellToSilas() });
     }
     if (id === 'hale' && isSunday(dayIndex(s.minutes)) && this.clock.hour >= 8 && this.clock.hour < 12) {
@@ -2418,6 +2728,7 @@ export class Game {
     const out: Action[] = [];
     for (const [skill, m] of Object.entries(MENTORS) as [keyof typeof MENTORS, (typeof MENTORS)['study']][]) {
       if (m.who !== npc.res.id || r.friendship < 10 || npc.act === 'sick') continue;
+      if ((m.who === 'hale' || m.who === 'quill') && (s.factions.deeds.lantern ?? 0) < -10) continue;
       const free = r.friendship >= 30;
       const fee = free ? 0 : m.fee;
       const key = `lesson:${skill}`;
@@ -2431,7 +2742,7 @@ export class Game {
           addNeed(s.needs, 'rest', -6);
           this.clock.minutes += 60;
           s.minutes = this.clock.minutes;
-          const ups = gainXp(s, skill, Math.round(LESSON_XP * (hasPerk(s, 'study', 6) ? 1.25 : 1)));
+          const ups = gainXp(s, skill, Math.round(LESSON_XP * (hasPerk(s, 'study', 6) ? 1.25 : 1) * (this.member('lantern') ? 1.25 : 1)));
           r.friendship = Math.min(100, r.friendship + 2);
           this.hud.hidePlace();
           void this.dialogue.say({ speaker: npc.res.name, text: [m.text, `${SKILL_INFO[skill].name} lesson`, ...ups].join('\n') }).then(() => npc.held && this.showPerson(npc));
@@ -2528,6 +2839,8 @@ export class Game {
     const woman = s.character.gender === 'woman';
     if (mine > theirs) {
       s.parish.rank++;
+      addDeed(s, 'guild', 12);
+      addDeed(s, 'society', 10);
       const t = officeTitle(s, woman);
       addFact(s, 'elected', ['hale', 'pell', 'grubb', 'ruby', 'mag', 'jem'], undefined, t);
       this.rel(office.rival).rivalry = Math.min(100, this.rel(office.rival).rivalry + 15);
@@ -2574,8 +2887,8 @@ export class Game {
     const render = () => {
       const rows: ListRow[] = s.inventory.map((it) => ({
         label: `${ITEMS[it.id].name} ×${it.qty}`,
-        sub: `Silas offers £${Math.max(0.01, Math.floor(ITEMS[it.id].price * 70) / 100).toFixed(2)}`,
-        actions: [{ label: 'Sell', onClick: () => { sell(s, SHOPS.pawnbroker, it.id, 0.7); sfx('coin'); render(); } }],
+        sub: `Silas offers £${Math.max(0.01, Math.floor(ITEMS[it.id].price * (this.member('kin') ? 80 : 70)) / 100).toFixed(2)}`,
+        actions: [{ label: 'Sell', onClick: () => { sell(s, SHOPS.pawnbroker, it.id, this.member('kin') ? 0.8 : 0.7); if (this.member('guild')) addDeed(s, 'guild', -10); sfx('coin'); render(); } }],
       }));
       if (!rows.length) rows.push({ label: 'Nothing to sell.', sub: '', actions: [] });
       this.hud.showList('Silas Crane', 'No questions asked', rows);
@@ -2672,7 +2985,7 @@ export class Game {
     // Robbery: at most once a night; likelier on dangerous streets, with a fat purse or fine clothes.
     if (dark && s.lastRobberyDay !== day && !this.stalker) {
       const dress = s.outfit === 'sunday' ? 1.4 : s.outfit === 'coat' ? 1.25 : 1;
-      const rate = 0.004 * this.dangerHere() * (1 + s.money * 0.6) * dress * (s.notoriety >= 3 ? 0.5 : 1) * (this.friend('ruby') ? 0.5 : 1) * (hasPerk(s, 'strength', 6) ? 0.67 : 1) * gear(s).robbery;
+      const rate = 0.004 * this.dangerHere() * (1 + s.money * 0.6) * dress * (s.notoriety >= 3 ? 0.5 : 1) * (this.friend('ruby') ? 0.5 : 1) * (hasPerk(s, 'strength', 6) ? 0.67 : 1) * gear(s).robbery * (this.member('kin') ? 0.33 : 1);
       if (Math.random() < rate * gameMinutes) {
         this.startStalker();
         return;
@@ -2755,7 +3068,7 @@ export class Game {
       }
     }
     if (fight) {
-      const nell = this.friend('nell');
+      const nell = this.friend('nell') || this.member('brotherhood');
       const foe = nell ? { ...enemy, hp: Math.max(6, enemy.hp - 12) } : enemy;
       await this.fight(foe, nell ? 'Boots on the cobbles: Nell Hartigan comes running and lands the first blow. "Two on one now, friend."' : 'They come at you.', firstStrike && !nell, true);
     }
@@ -2931,7 +3244,7 @@ export class Game {
       this.applyFurniture();
       lines.push('A thin grey cat has moved in. She sleeps on the end of your bed and has decided you may stay.');
     }
-    lines.push(...this.nightlyLives(day), ...this.nightlyLivesOfAll(day), ...this.nightlyFamily(day));
+    lines.push(...this.nightlyLives(day), ...this.nightlyLivesOfAll(day), ...this.nightlyFamily(day), ...this.nightlyFactions(day));
     const myAge = this.playerAge(day);
     if (myAge >= 60 && Math.random() < 0.0004 * Math.pow(myAge - 57, 1.3) + (myAge >= 92 ? 1 : 0)) this.pendingDeath = true;
     s.hotZone = HOT_ZONES[Math.floor(Math.random() * HOT_ZONES.length)];
@@ -3213,6 +3526,8 @@ export class Game {
       s.notoriety++;
       addNeed(s.needs, 'social', 20);
       this.note('champion', undefined, bout.enemy.name, ['nell', 'jem', 'ruby', 'bessa']);
+      addDeed(s, 'kin', 4);
+      addDeed(s, 'brotherhood', 2);
       const wasLast = s.ladder === LADDER.length - 1;
       if (s.ladder < LADDER.length) s.ladder++;
       if (bout.enemy.name.startsWith('Iron Nell')) {
@@ -3362,7 +3677,7 @@ export class Game {
     const g = gear(s).dress * (res.cls === 'middle' ? 1 : 0.6);
     if (w < 15) return -0.08 + g;
     const k = w < 40 ? 0.5 : 1;
-    const office = res.cls === 'middle' ? s.parish.rank * 0.04 : 0;
+    const office = res.cls === 'middle' ? s.parish.rank * 0.04 + (this.member('society') ? 0.06 : 0) : 0;
     if (s.outfit === 'coat') return 0.08 * k + office + g;
     if (s.outfit === 'work') return (CIRCLES.docks.includes(id) ? 0.08 : 0) * k + office + g;
     if (s.outfit === 'sunday') return (res.cls === 'middle' ? 0.1 : res.traits.includes('jovial') || res.traits.includes('cynical') ? -0.05 : 0.02) * k + office + g;
@@ -3556,7 +3871,7 @@ export class Game {
   /** Sleeping in the street: someone may go through your pockets. Cunning wakes you; a friend may keep watch. */
   private theftWhileAsleep(): string | null {
     const s = this.state!;
-    if (hasPerk(s, 'cunning', 10)) return null;
+    if (hasPerk(s, 'cunning', 10) || this.member('court')) return this.member('court') ? 'Someone from the Court sat up beside you all night. Nothing was taken.' : null;
     const mag = s.relations?.mag;
     const watched = !!mag && mag.friendship >= 30;
     const chance = Math.max(0.05, 0.45 - s.character.skills.cunning * 0.04) * (watched ? 0.4 : 1);
@@ -3618,7 +3933,7 @@ export class Game {
         this.rentPaid = true;
         return `Rent, £${r.amount.toFixed(2)}. Paid. Pleasure, I'm sure. Same again at the end of the month.`;
       }
-      r.graceUntil = this.clock.minutes + ((this.friend('grubb') ? 14 : 7) + (s.parish.rank > 0 ? 7 : 0)) * DAY;
+      r.graceUntil = this.clock.minutes + ((this.friend('grubb') || this.member('guild') ? 14 : 7) + (s.parish.rank > 0 ? 7 : 0)) * DAY;
       return `£${r.amount.toFixed(2)}, and you haven't got it. ${this.friend('grubb') ? 'Fourteen days, because I like you.' : 'Seven days.'} After that you and your things go in the gutter.`;
     }
     if (r.graceUntil !== null) {
@@ -3668,6 +3983,10 @@ export class Game {
     const s = this.state!;
     const out: string[] = [];
     for (const q of s.quests.filter((x) => !x.done).slice(0, 2)) out.push(`Favour: ${q.text}`);
+    if (s.factions?.member && !s.factions.dutyDone) {
+      const d = FACTIONS[s.factions.member];
+      out.push(`${d.ranks[rankIn(s, s.factions.member)]}: ${s.factions.member === 'kin' && s.factions.debtor ? `collect the Kin's debt from ${this.short(s.factions.debtor)}` : d.duty}`);
+    }
     if (s.parish.standing !== null) out.push(`Election in ${Math.max(0, s.parish.standing - dayIndex(s.minutes))} days: ${s.parish.pledges.length} pledges, ${s.parish.crowd} from speeches`);
     if (!s.housed) out.push(`Get your room back: £${s.money.toFixed(2)} / £${s.rent.arrears.toFixed(2)}`);
     else if (s.money < s.rent.amount) out.push(`Rent by ${this.clock.formatShortDate(this.clock.rentDue)}: £${s.money.toFixed(2)} / £${s.rent.amount.toFixed(2)}`);
@@ -3807,7 +4126,7 @@ export class Game {
       <h3>Purse</h3><p>£${s.money.toFixed(2)}. ${rent}${s.debt > 0 ? ` You owe the hospital £${s.debt.toFixed(2)}.` : ''}</p>
       <h3>Standing</h3><p>${office ? `${office} of St. Botolph. ` : ''}${s.parish.standing !== null ? `Standing for ${OFFICES[s.parish.rank].name}: ${s.parish.pledges.length} pledged, ${s.parish.crowd} won by speeches.` : OFFICES[s.parish.rank] ? `Next: ${OFFICES[s.parish.rank].name} (Study ${OFFICES[s.parish.rank].study}, ${OFFICES[s.parish.rank].friends} friends; ask Father Hale).` : ''}${s.champion ? ` ${CHAMPION_TITLE}.` : ''}</p>
       <h3>Days ahead</h3><p>${HOLIDAYS.map((h) => `${h.name}, ${h.date} ${h.month === 9 ? 'Oct' : 'Nov'}`).join(' · ')}. Today: ${s.weather}.</p>`;
-    this.hud.setJournal(Hud.titleFor(s), skillsHtml, missionsHtml);
+    this.hud.setJournal(Hud.titleFor(s), skillsHtml, missionsHtml, this.factionsHtml());
   }
 
   // --- Creator preview ------------------------------------------------------
@@ -3917,6 +4236,7 @@ export class Game {
       }
       this.checkQuests();
       this.checkCeremonies();
+      this.checkFactionEvents();
       if (s.parish.standing !== null && today >= s.parish.standing && this.clock.hour >= 12 && !this.busy && !this.dialogue.open && !this.hud.blocking) void this.election();
       if (s.minutes - this.lastSaveMinute >= 60) this.save();
     }

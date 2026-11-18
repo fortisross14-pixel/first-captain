@@ -128,6 +128,8 @@ export interface GameState {
     taught: Record<string, Partial<Record<SkillId, number>>>;
     ancestors: { name: string; born: number; died: number; summary: string }[];
   };
+  /** Factions: deeds, membership, duty. */
+  factions: import('./factions').FactionState;
   /** Weddings and funerals to come: who, and the day (at 11:00). */
   ceremonies: { kind: 'wedding' | 'funeral'; ids: string[]; names: string; day: number; attended?: boolean }[];
   /** A word put in for you with an employer: who, and when. */
@@ -170,6 +172,7 @@ function fillLives(s: GameState): void {
   s.known ??= {};
   s.recommend ??= {};
   s.ceremonies ??= [];
+  s.factions ??= { deeds: {}, member: null, since: -1, dutyDue: -1, dutyDone: false, expelled: {} };
   s.family ??= { children: [], strain: 0, taught: {}, ancestors: [] };
   s.character.birth ??= -21 * 24;
   s.equip ??= {};

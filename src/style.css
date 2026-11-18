@@ -680,7 +680,7 @@ button:disabled { cursor: default; }
 .pie-hub.back .bk { font: 400 34px/0.8 var(--f-display); }
 .pie-hub.back .gl { font: 400 13px var(--f-sc); letter-spacing: .04em; }
 @keyframes hubIn { from { opacity: 0; scale: .5; } }
-.pie-b { position: absolute; left: 0; top: 0; translate: calc(-50% + var(--x)) calc(-50% + var(--y)); min-height: 44px; max-width: 150px; padding: 8px 14px; border-radius: 22px;
+.pie-b { position: absolute; left: 0; top: 0; translate: calc(-50% + var(--x)) calc(-50% + var(--y)); min-height: 44px; width: max-content; max-width: 160px; padding: 8px 14px; border-radius: 22px;
   display: grid; justify-items: center; gap: 1px; text-align: center; color: var(--ink);
   background: radial-gradient(ellipse at 50% 20%, #fffaf0, var(--ivory) 70%, #ddd0b2);
   box-shadow: 0 0 0 1.5px var(--gilt), 0 0 0 3.5px var(--sheet), 0 6px 14px rgba(0, 0, 0, .6);

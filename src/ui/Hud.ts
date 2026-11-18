@@ -116,10 +116,12 @@ export class Hud {
             <div class="tabs" role="tablist">
               <button role="tab" data-page="skills" aria-selected="true">Skills</button>
               <button role="tab" data-page="missions" aria-selected="false">Missions</button>
+              <button role="tab" data-page="standing" aria-selected="false">Standing</button>
               <button role="tab" data-page="options" aria-selected="false">Options</button>
             </div>
             <div class="journal-body page-skills"></div>
             <div class="journal-body page-missions" hidden></div>
+            <div class="journal-body page-standing" hidden></div>
             <div class="journal-body page-options" hidden>
               <div class="opt"><span>Sound</span><button class="sound-toggle"></button></div>
               <div class="opt"><span>Graphics</span><button class="quality-toggle"></button></div>
@@ -247,7 +249,7 @@ export class Hud {
   private journalPage(page: string): void {
     sfx('page');
     this.el.querySelectorAll<HTMLButtonElement>('.journal-sheet.diary .tabs button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.page === page)));
-    for (const p of ['skills', 'missions', 'options']) this.q(`.page-${p}`).hidden = p !== page;
+    for (const p of ['skills', 'missions', 'standing', 'options']) this.q(`.page-${p}`).hidden = p !== page;
   }
 
   set journalOpen(open: boolean) {
@@ -586,10 +588,11 @@ export class Hud {
     return new Promise((r) => setTimeout(r, 450));
   }
 
-  setJournal(title: string, skills: string, missions: string): void {
+  setJournal(title: string, skills: string, missions: string, standing = ''): void {
     this.q('.journal h2').textContent = title;
     this.q('.page-skills').innerHTML = skills;
     this.q('.page-missions').innerHTML = missions;
+    this.q('.page-standing').innerHTML = standing;
   }
 
   static titleFor(state: GameState): string {
