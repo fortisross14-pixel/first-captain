@@ -45,6 +45,8 @@ export interface ItemDef {
   /** Equipment: the slot it goes in and what it does. */
   slot?: Slot;
   gear?: Gear;
+  /** Something found in the rubbish: worth a little to Moss, more to Lizzie at Rag & Bone. */
+  junk?: boolean;
 }
 
 export const ITEMS: Record<string, ItemDef> = {
@@ -105,6 +107,18 @@ export const ITEMS: Record<string, ItemDef> = {
   mirror: { id: 'mirror', name: 'Looking-glass', price: 0.45, upgrade: true, furniture: true, blurb: 'Tidy yourself each morning: better first impressions all day.' },
   workbench: { id: 'workbench', name: 'Workbench', price: 0.9, upgrade: true, furniture: true, blurb: 'Carve trinkets to sell: Arts & Crafts practice.' },
   scarf: { id: 'scarf', name: 'Wool scarf', price: 0.25, upgrade: true, blurb: 'Sleeping rough costs no Health and rests a little better.' },
+  // Finds: what Saltwharf throws away, and what the river gives back.
+  rags: { id: 'rags', name: 'Bundle of rags', price: 0.05, junk: true, blurb: 'Filthy, but the paper mills pay for rag. Lizzie buys them.' },
+  bottle: { id: 'bottle', name: 'Empty bottle', price: 0.04, junk: true, blurb: 'Rinse it and it is worth a farthing to the brewers.' },
+  bones: { id: 'bones', name: 'Clean bones', price: 0.05, junk: true, blurb: 'Mutton, you hope. The bone-boilers pay by the pound.' },
+  pipe: { id: 'pipe', name: 'Clay pipe', price: 0.05, junk: true, blurb: 'Hardly smoked. The stem is only a little chewed.' },
+  buttons: { id: 'buttons', name: 'Brass buttons', price: 0.08, junk: true, blurb: 'Cut off a coat that won\'t be needing them.' },
+  glove: { id: 'glove', name: 'Odd kid glove', price: 0.1, junk: true, blurb: 'Good leather, a lady\'s left hand. Somebody\'s maid is in trouble.' },
+  rope: { id: 'rope', name: 'Old rope', price: 0.06, junk: true, blurb: 'Tarred and frayed. Picked apart, it is oakum.' },
+  copper: { id: 'copper', name: 'Scrap of copper', price: 0.15, junk: true, blurb: 'Sheathing off a hull. Green, heavy and worth having.' },
+  spoon: { id: 'spoon', name: 'Bent silver spoon', price: 0.25, junk: true, blurb: 'Hallmarked. Moss will not ask; you will not tell.' },
+  ring: { id: 'ring', name: 'Tarnished ring', price: 0.6, junk: true, blurb: 'Gold under the grime. Somebody dropped a promise in the mud.' },
+  watch: { id: 'watch', name: 'Broken pocket watch', price: 0.9, junk: true, blurb: 'Stopped at a quarter past three. The case alone is worth something.' },
   boots: { id: 'boots', name: 'Good boots', price: 0.6, upgrade: true, blurb: 'You walk a quarter faster.' },
 };
 
@@ -199,4 +213,5 @@ export function gear(s: GameState): Required<Pick<Gear, 'fight' | 'dress' | 'rob
 }
 
 /** Food is anything you eat or cook with; the rest is "other". */
+export const isJunk = (id: string) => !!ITEMS[id]?.junk;
 export const isFood = (id: string) => ['potato', 'bread', 'apple', 'eelpie', 'meatpie', 'onion', 'eel', 'mutton', 'stew', 'broth'].includes(id);

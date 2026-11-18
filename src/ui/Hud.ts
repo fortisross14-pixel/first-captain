@@ -331,7 +331,7 @@ export class Hud {
   onMap: ((view: 'london' | 'district') => void) | null = null;
 
   /** The map: an SVG, a card for what you tapped, and a button to go there. */
-  showMap(view: 'london' | 'district', svg: string, onPick: (id: string) => { title: string; text: string; go?: () => void } | null): void {
+  showMap(view: 'london' | 'district', svg: string, onPick: (id: string) => { title: string; text: string; go?: () => void; goLabel?: string } | null): void {
     const m = this.q('.mapview');
     m.querySelectorAll<HTMLButtonElement>('.map-tabs button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.map === view)));
     const body = m.querySelector('.map-body') as HTMLElement;
@@ -353,8 +353,8 @@ export class Hud {
       if (info.go) {
         const go = document.createElement('button');
         go.className = 'primary';
-        go.textContent = view === 'london' ? 'Open' : 'Walk there';
-        go.addEventListener('click', () => { if (view !== 'london') m.hidden = true; info.go!(); });
+        go.textContent = info.goLabel ?? (view === 'london' ? 'Open' : 'Walk there');
+        go.addEventListener('click', () => { if (view !== 'london' || info.goLabel) m.hidden = true; info.go!(); });
         card.appendChild(go);
       }
     }));

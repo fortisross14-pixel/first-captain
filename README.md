@@ -18,7 +18,7 @@ Six factions, two per class, as in the Story Bible: the Hollow Lane Kin, the Rag
 
 ### Earlier: M11, a family of your own
 
-Propose, marry at the market cross, bring your spouse home to Hester's room, have or take in children, grow old and die in your sleep; then carry on as your grown child.
+Propose, marry at the market cross, bring your spouse home to Hester's room, have or take in children, grow old and die in your sleep. Death is for good: that life ends, and its save slot is cleared.
 
 ### Earlier: M10, a city of lives
 

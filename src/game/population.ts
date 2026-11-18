@@ -277,15 +277,33 @@ function tileIn(area: { x0: number; z0: number; x1: number; z1: number }, r: () 
   return { x: area.x0 + Math.floor(r() * (area.x1 - area.x0 + 1)), z: area.z0 + Math.floor(r() * (area.z1 - area.z0 + 1)) };
 }
 
+/** A spot on the pavement by your own front door: within a few steps, either side. */
+function doorstep(p: PersonRec, r: () => number, spread = 2): { x: number; z: number } | null {
+  const d = HOMES[p.home]?.door;
+  if (!d) return null;
+  const off = (1 + Math.floor(r() * spread)) * (r() < 0.5 ? -1 : 1);
+  return { x: Math.max(1, Math.min(42, d.x + off)), z: d.z };
+}
+
+/** How far a haunt is from home, in tiles (a rough walk). */
+function farFromHome(p: PersonRec, area: { x0: number; z0: number; x1: number; z1: number }): boolean {
+  const d = HOMES[p.home]?.door;
+  if (!d) return false;
+  return Math.abs((area.x0 + area.x1) / 2 - d.x) + Math.abs((area.z0 + area.z1) / 2 - d.z) > 16;
+}
+
 export function scheduleFor(p: PersonRec, day: number): Stop[] {
   const r = rng(p.id.split('').reduce((a, c) => a * 31 + c.charCodeAt(0), 7));
   const age = ageOf(p, day);
   const out: Stop[] = [];
   const job = p.work ? JOB_KINDS[p.work] : null;
+  // Some folk keep close to home: a pipe on the step, gossip over the railings.
+  const homebody = r() < 0.65;
   if (age < 3) return out;
   if (age < 9) {
-    const play = tileIn(HAUNTS[p.haunt ?? 'courtyard'].area, r);
-    out.push({ from: 9, to: 17, ...play, act: 'play' });
+    const area = HAUNTS[p.haunt ?? 'courtyard'].area;
+    const near = farFromHome(p, area) ? doorstep(p, r, 3) : null;
+    out.push({ from: 9, to: 17, ...(near ?? tileIn(area, r)), act: 'play' });
     return out;
   }
   if (job?.area) {
@@ -296,14 +314,16 @@ export function scheduleFor(p: PersonRec, day: number): Stop[] {
   const haunt = p.cls !== 'lower' && ['cupfront', 'courtyard', 'yard'].includes(p.haunt ?? '') ? (p.id.charCodeAt(1) % 2 ? 'church' : 'market') : p.haunt;
   const h = haunt ? HAUNTS[haunt] : null;
   if (h) {
-    const at = tileIn(h.area, r);
+    const near = homebody && farFromHome(p, h.area) ? doorstep(p, r) : null;
+    const at = near ?? tileIn(h.area, r);
+    const act: Activity = age < 14 ? 'play' : near ? (p.traits.includes('jovial') || p.traits.includes('open') ? 'lean' : r() < 0.5 ? 'smoke' : 'watch') : h.act;
     const busy = (x: number) => job && x >= job.from && x < job.to;
     const from = busy(h.from) && job ? job.to : h.from;
-    if (from < h.to) out.push({ from, to: h.to, ...at, act: age < 14 ? 'play' : h.act });
+    if (from < h.to) out.push({ from, to: h.to, ...at, act });
   }
   if (age >= 62 && !job) {
-    const at = tileIn(HAUNTS.steps.area, r);
-    out.unshift({ from: 10, to: 14, ...at, act: 'watch' });
+    const near = farFromHome(p, HAUNTS.steps.area) ? doorstep(p, r, 1) : null;
+    out.unshift({ from: 10, to: 14, ...(near ?? tileIn(HAUNTS.steps.area, r)), act: 'watch' });
   }
   return out;
 }

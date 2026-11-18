@@ -21,7 +21,7 @@ export const ZONES: Zone[] = [
   { id: 'street', name: 'Quay Street', x0: 0, z0: 7, x1: 43, z1: 8, base: 0.25 },
   { id: 'backlane', name: 'Back Lane', x0: 0, z0: 23, x1: 43, z1: 26, base: 0.5 },
   { id: 'churchst', name: 'Church Street', x0: 0, z0: 32, x1: 43, z1: 34, base: 0.35 },
-  { id: 'rope', name: 'Rope Walk east', x0: 32, z0: 15, x1: 43, z1: 16, base: 0.4 },
+  { id: 'rope', name: 'Rope Walk west', x0: 32, z0: 15, x1: 43, z1: 16, base: 0.4 },
 ];
 
 export const HOT_ZONES = ['court', 'alley', 'lanes', 'yard', 'quay', 'backlane', 'hollow'];

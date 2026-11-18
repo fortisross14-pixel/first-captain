@@ -256,6 +256,14 @@ Renamed in M13 to match the Story Bible (the Dockers' Brotherhood became the Lam
 - [x] **Fewer people in the street**: at most 16 townsfolk outside at once; everyone else is at work, at home, or inside their haunt. Drinkers go inside the Copper Cup (and sit as patrons you can talk to), chapel-goers go into St. Botolph's, and the better-off don't frequent the low haunts.
 - [x] **Decor**: at home, a Decor button lets you pick any piece and move, turn, recolour, put away or sell it to Moss; change the wall colour and floor; bring stored pieces back. New furniture (armchair, wardrobe, plant, painting, clock, lamp, cradle) is sold at Moss's and Pell's, and most of it does something (rest, comfort, less wear, light to read by).
 
+## M16 ✅ North up, roads out, things worth finding
+
+- [x] **North is up everywhere**: Saltwharf sits on the north bank of the Thames, so the scene, the district map and the London map all read the same way: river at the bottom (south), west on the left. Nothing in the district moved; the London map is redrawn around it, with dotted roads out of Saltwharf.
+- [x] **Roads to the other districts**: fingerposts at the edges. Back Lane runs west to Lantern Market (and Mayfield beyond), the Hollow Lane arch at the west end of the waterfront, Gravel Lane north to Inkwell Row and Greymourne, and the Wherry Stairs, where watermen row you across to Ironmonger's Cross. Tapping a district on the London map offers "Walk to the road". The districts themselves are still lost in the fog; travel comes with the first new district.
+- [x] **Scavenging**: rubbish heaps in the Back Lane alleys and behind the church, an alley midden toward Hollow Lane, slop buckets by Gull Court and the Copper Cup, and the foreshore at low tide (05:00–10:00, 16:00–21:00) for mudlarking. Each can be picked over once a day: rags, bottles, bones, clay pipes, brass buttons, odd gloves, rope, copper sheathing, now and then a silver spoon, a ring or a pocket watch, or a few coppers. Cunning finds more; rats and the mud can hurt. Lizzie at Rag & Bone buys finds at a better rate than Moss, with "Sell all".
+- [x] **Townsfolk keep near home**: in their free hours about two in three stay on their own doorstep (smoking, leaning, watching the street) when their usual haunt is a long walk away; children play near their house and the old watch from the step.
+- [x] **Death is final**: no carrying on as your child. The In Memoriam card, a last word from Hester's ghost, and that life's save slot is cleared.
+
 ## Next
 
 The next districts (Lantern Market, then Mayfield) and Act II, "The Social Season"; businesses.

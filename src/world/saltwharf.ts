@@ -3,6 +3,8 @@ import { Lighting } from '../engine/Lighting';
 import { Grid } from './grid';
 import type { Location, MapRect, Place } from './location';
 import { HOUSES } from './saltwharfHomes';
+import { SPOTS, buildSpot } from './scavenge';
+import { EXITS } from './exits';
 import { mergeSubtree } from './merge';
 import { C, mat } from './materials';
 import {
@@ -191,18 +193,59 @@ export function buildSaltwharf(): Location {
     b.position.set(x + w / 2, 0, z + d / 2);
     root.add(b);
   };
-  for (let x = -6; x < MAP_W + 6; x += 4) backdrop(x, MAP_H, 4, 5);
+  // Gaps are left for the roads out: north up Gravel Lane (x 37–38), west along Back Lane (z 23–26).
+  for (let x = -6; x < MAP_W + 6; x += 4) if (x !== 34 && x !== 38) backdrop(x, MAP_H, 4, 5);
+  backdrop(34, MAP_H, 3, 5);
+  backdrop(39, MAP_H, 3, 5);
   for (let z = 7; z < MAP_H; z += 5) {
     backdrop(-6, z, 6, 5);
-    if (z < 10 || z > 14) backdrop(MAP_W, z, 6, 5);
+    if ((z < 10 || z > 14) && z !== 22) backdrop(MAP_W, z, 6, 5);
   }
+  backdrop(MAP_W, 22, 6, 1);
   // Hollow Lane: the rookery's mouth, east of the houses. A dark archway, and the lane beyond.
   backdrop(MAP_W, 10, 6, 1);
   backdrop(MAP_W, 14, 6, 1);
-  const arch = makeSign('HOLLOW LANE', 2.6, '#1a1214', '#b8a070');
-  arch.position.set(MAP_W + 0.05, 3.2, 12.5);
-  arch.rotation.y = -Math.PI / 2;
-  root.add(arch);
+
+  // The roads out: fingerposts at the gaps, and the Wherry Stairs down to the watermen.
+  const exitSign = (id: string, text: string, w: number, x: number, z: number, ry: number) => {
+    const g = new THREE.Group();
+    const sign = makeSign(text, w, '#1a1214', '#d8c080');
+    sign.position.set(x, 3.2, z);
+    sign.rotation.y = ry;
+    g.add(sign);
+    g.userData.placeId = `exit:${id}`;
+    root.add(g);
+    tappables.push(g);
+  };
+  exitSign('hollow', 'HOLLOW LANE', 2.6, MAP_W + 0.05, 12.5, -Math.PI / 2);
+  exitSign('market', 'TO LANTERN MARKET', 3.6, MAP_W + 0.05, 24.5, -Math.PI / 2);
+  exitSign('north', 'INKWELL ROW · GREYMOURNE', 3.0, 38, MAP_H + 0.05, Math.PI);
+  {
+    const g = new THREE.Group();
+    const stage = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.16, 2.2), mat(C.woodDark));
+    stage.position.set(36.5, 0.05, 2.9);
+    g.add(stage);
+    for (const [px, pz] of [[35.5, 1.9], [37.5, 1.9], [35.5, 3.9], [37.5, 3.9]]) {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.4, 6), mat(C.wood));
+      post.position.set(px, 0.2, pz);
+      g.add(post);
+    }
+    const boat = makeBarge();
+    boat.scale.set(0.35, 0.6, 0.35);
+    boat.position.set(36.5, -0.2, 1.2);
+    g.add(boat);
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.4, 6), mat(C.wood));
+    post.position.set(35.2, 1.2, 4.4);
+    g.add(post);
+    const sign = makeSign('WHERRY STAIRS', 1.8, '#1a1214', '#d8c080');
+    sign.position.set(35.2, 2.2, 4.32);
+    sign.rotation.y = Math.PI;
+    g.add(sign);
+    g.userData.placeId = 'exit:wherry';
+    root.add(g);
+    tappables.push(g);
+  }
+  for (const e of EXITS) places.push({ id: `exit:${e.id}`, name: e.title, description: e.description, door: e.door, faceTo: { x: e.door.x + (e.id === 'market' || e.id === 'hollow' ? 1 : 0.5), z: e.door.z + (e.id === 'north' ? 1 : e.id === 'wherry' ? -1 : 0.5) } });
 
   // --- Houses: every family has a door --------------------------------------
   const mapRects: MapRect[] = [];
@@ -299,6 +342,15 @@ export function buildSaltwharf(): Location {
     grid.block(x, WATER_ROWS);
   }
 
+  // Rubbish heaps, slop buckets and the foreshore: worth a rummage.
+  for (const sp of SPOTS) {
+    const g = buildSpot(sp);
+    root.add(g);
+    tappables.push(g);
+    grid.block(sp.x, sp.z);
+    places.push({ id: `scav:${sp.id}`, name: sp.name, description: sp.description, door: sp.stand, faceTo: { x: sp.x + 0.5, z: sp.z + 0.5 } });
+  }
+
   // Lamps: gaslights, and one cold white Vane Lamp outside the hiring office.
   const lampTiles: [number, number, boolean][] = [
     [2, 6, false], [9, 6, false], [16, 6, false], [23, 6, false], [30, 6, false],
@@ -367,6 +419,8 @@ export function buildSaltwharf(): Location {
       streets: [
         { x: 1, z: 5.2, label: 'The quay' }, { x: 1, z: 7.6, label: 'Quay Street' }, { x: 1, z: 15.6, label: 'Rope Walk' },
         { x: 1, z: 24.6, label: 'Back Lane' }, { x: 13, z: 33.6, label: 'Church Street' }, { x: 43.6, z: 12.4, label: '‹ Hollow Lane' },
+        { x: 43.6, z: 24.4, label: '‹ to Lantern Market' }, { x: 43.4, z: 32.9, label: '˄ Gravel Lane, north' },
+        { x: 38.6, z: 2.6, label: 'Wherry Stairs ˅' },
       ],
     },
     fadeOccluders: true,

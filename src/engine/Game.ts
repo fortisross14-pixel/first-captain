@@ -27,7 +27,7 @@ import { HOT_ZONES, NOTORIOUS, ZONES, dangerAt, zoneAt } from '../game/danger';
 import { CHAMPION_TITLE, FIGHT_NIGHT, LADDER, type Bout } from '../game/fightnight';
 import { CONGRATS, HESTER_LETTERS, gazette, sendLetter } from '../game/letters';
 import { CIRCLES, addFact, knowledgeOf, reactions, spreadGossip, type FactKind, type Pending } from '../game/world';
-import { OUTFIT_NAMES, SLOT_NAMES, gear, isFood, type Outfit, type Slot, ITEMS, SHOPS, addItem, buy, canCarry, owns, removeItem, sell, sellPrice, slots, usedSlots, useItem } from '../game/items';
+import { OUTFIT_NAMES, SLOT_NAMES, gear, isFood, isJunk, type Outfit, type Slot, ITEMS, SHOPS, addItem, buy, canCarry, owns, removeItem, sell, sellPrice, slots, usedSlots, useItem } from '../game/items';
 import { SHOP_KEEPERS, VOICES } from '../game/voices';
 import {
   canStartShift, checkAttendance, completeShift, dayStart, employment, gainXp, hire, hireBlocker, leave, nextShiftText,
@@ -48,6 +48,8 @@ import type { Location, Place } from '../world/location';
 import { buildSaltwharf } from '../world/saltwharf';
 import { makeDoorIcon } from '../world/doorIcon';
 import { FLOOR_COLORS, FURNITURE, WALL_COLORS, defaultLayout, footprint, type FurnitureType } from '../world/furniture';
+import { SPOTS, rummage } from '../world/scavenge';
+import { EXITS, ROUTE_TO } from '../world/exits';
 import { INTERIORS, buildInterior, isOpen } from '../world/interior';
 import { OLD_HOMES } from '../world/saltwharfHomes';
 import { Portraits } from '../ui/Portraits';
@@ -65,6 +67,10 @@ const HOSPITAL_BILL = 0.15;
 
 /** Months since October 1871, so October 1871 is 0. */
 const monthIndex = (d: Date) => (d.getFullYear() - 1871) * 12 + d.getMonth() - 9;
+
+const LONDON_NAMES: Record<string, string> = {
+  market: 'Lantern Market', hollow: 'Hollow Lane', inkwell: 'Inkwell Row and Greymourne', ironmonger: 'Ironmonger\'s Cross',
+};
 
 export class Game {
   private readonly renderer: THREE.WebGLRenderer;
@@ -537,30 +543,40 @@ export class Game {
 
     if (view === 'london') {
       const D: [string, string, string, number, number, string, boolean][] = [
-        ['inkwell', 'INKWELL ROW', 'M120 40 L235 32 L250 100 L140 108 Z', 185, 72, 'North. Clerks, presses, scholars: the newspaper office, the library, the Society for Psychical Inquiry.', false],
-        ['greymourne', 'GREYMOURNE', 'M255 28 L345 40 L340 112 L262 104 Z', 300, 70, 'North, on the hill. A gothic cemetery; undertakers and stonemasons. The dead do not all stay put.', false],
-        ['mayfield', 'MAYFIELD', 'M12 90 L118 82 L128 190 L16 200 Z', 68, 142, 'West. Elite, glittering, cruel: tailors, jewellers, salons, the Velvet Court, and Vane House.', false],
-        ['market', 'LANTERN MARKET', 'M132 116 L252 108 L262 196 L140 206 Z', 196, 160, 'Centre. The busy hub: grocers, the music hall, the theatre and the omnibus depot.', false],
-        ['saltwharf', 'SALTWHARF', 'M262 262 L350 250 L352 318 L266 322 Z', 304, 288, 'East, on the river. Poor, foggy and honest. You live here.', true],
-        ['hollow', 'HOLLOW LANE', 'M240 330 L352 326 L348 390 L246 392 Z', 296, 360, 'East. The rookery: fences, fight pits, black markets, and the Kin\'s tunnels.', false],
-        ['ironmonger', 'IRONMONGER\'S CROSS', 'M40 296 L232 300 L236 380 L48 384 Z', 140, 340, 'South. Smoke, steel and factories; the Lamplighters\' Guild hall.', false],
-        ['undercroft', 'THE UNDERCROFT', 'M90 396 L290 396 L280 436 L100 436 Z', 190, 418, 'Beneath. The drowned streets of older Londons. Nothing for sale; things that want out.', false],
+        ['inkwell', 'INKWELL ROW', 'M124 36 L238 30 L246 100 L132 106 Z', 185, 70, 'North. Clerks, presses, scholars: the newspaper office, the library, the Society for Psychical Inquiry.', false],
+        ['greymourne', 'GREYMOURNE', 'M252 26 L348 36 L346 112 L258 106 Z', 300, 70, 'North-east, on the hill. A gothic cemetery; undertakers and stonemasons. The dead do not all stay put.', false],
+        ['mayfield', 'MAYFIELD', 'M12 72 L120 66 L128 204 L16 210 Z', 68, 140, 'West. Elite, glittering, cruel: tailors, jewellers, salons, the Velvet Court, and Vane House.', false],
+        ['market', 'LANTERN MARKET', 'M134 112 L276 106 L280 184 L140 190 Z', 206, 150, 'The centre. The busy hub: grocers, the music hall, the theatre and the omnibus depot.', false],
+        ['hollow', 'HOLLOW LANE', 'M146 198 L266 192 L268 242 L152 248 Z', 206, 222, 'On the river, west of Saltwharf. The rookery: fences, fight pits, black markets, and the Kin\'s tunnels.', false],
+        ['saltwharf', 'SALTWHARF', 'M276 192 L352 186 L352 244 L278 248 Z', 314, 216, 'East, on the north bank of the Thames. Poor, foggy and honest. You live here.', true],
+        ['ironmonger', 'IRONMONGER\'S CROSS', 'M40 312 L300 304 L306 380 L48 386 Z', 172, 348, 'South, across the river. Smoke, steel and factories; the Lamplighters\' Guild hall.', false],
+        ['undercroft', 'THE UNDERCROFT', 'M90 398 L290 398 L280 436 L100 436 Z', 190, 420, 'Beneath. The drowned streets of older Londons. Nothing for sale; things that want out.', false],
       ];
+      // The roads out of Saltwharf, dotted: west, north, and the ferry south.
+      const routes = ['M278 232 C 262 232, 258 226, 250 224', 'M280 206 C 262 196, 258 180, 252 170', 'M330 190 C 326 160, 318 130, 306 104', 'M318 248 C 316 270, 300 290, 284 306'];
       const svg = `<svg viewBox="0 0 360 450" class="map-london">${defs}
         <rect width="360" height="450" fill="url(#mp-paper)"/>
-        <path d="M-10 222 C 60 196, 110 262, 182 236 S 300 206, 370 248 L 370 278 C 300 238, 250 272, 182 266 S 60 230, -10 252 Z" fill="url(#mp-waves)" stroke="#8aa0b0" stroke-opacity=".6"/>
-        <text x="34" y="244" class="mp-river">The River Thames</text>
+        <path d="M-10 256 C 60 238, 120 280, 190 262 S 300 250, 370 256 L 370 292 C 300 282, 250 302, 190 296 S 60 274, -10 292 Z" fill="url(#mp-waves)" stroke="#8aa0b0" stroke-opacity=".6"/>
+        <text x="30" y="282" class="mp-river">The River Thames</text>
         ${D.map(([id, name, path, x, y, , open]) => `<g data-id="${id}" class="mp-dist${open ? ' open' : ''}"><path d="${path}" fill="url(#${open ? 'mp-hatch2' : id === 'undercroft' ? 'mp-cross' : 'mp-hatch'})" stroke="${open ? '#e8c66a' : '#cdb88a'}" stroke-opacity="${open ? 1 : 0.5}" stroke-width="${open ? 1.6 : 1}" ${id === 'undercroft' ? 'stroke-dasharray="4 3"' : ''}/><text x="${x}" y="${y}">${name}</text>${open ? `<text x="${x}" y="${y + 13}" class="mp-here">— you are here —</text>` : ''}</g>`).join('')}
+        <g pointer-events="none">${routes.map((d) => `<path d="${d}" fill="none" stroke="#e8c66a" stroke-opacity=".8" stroke-width="1.4" stroke-dasharray="2 3"/>`).join('')}</g>
         <g class="mp-shroud" pointer-events="none">${fogLayer(360, 450, true)}</g>
-        <ellipse cx="306" cy="288" rx="62" ry="44" fill="url(#mp-glow)" opacity=".25" pointer-events="none"/>
+        <ellipse cx="314" cy="218" rx="56" ry="40" fill="url(#mp-glow)" opacity=".25" pointer-events="none"/>
         <rect width="360" height="450" fill="url(#mp-vign)" pointer-events="none"/>
         ${cartouche(180, 30, 230, 'A PLAN OF LONDON', 'with its Districts · 1871')}
-        ${rose(34, 420, 16, 'up')}
+        ${rose(334, 420, 16, 'up')}
       </svg>`;
       this.hud.showMap('london', svg, (id) => {
         const d = D.find((x) => x[0] === id);
         if (!d) return null;
-        return { title: d[1].toLowerCase().replace(/(^|\s)\S/g, (m) => m.toUpperCase()), text: d[5] + (d[6] ? '' : ' Lost in the fog, for now: it opens in a later district.'), go: d[6] ? () => this.openMap('district') : undefined };
+        const title = d[1].toLowerCase().replace(/(^|\s)\S/g, (m) => m.toUpperCase()).replace("'S", "'s");
+        if (d[6]) return { title, text: d[5], go: () => this.openMap('district') };
+        const road = EXITS.find((e) => e.id === ROUTE_TO[id]);
+        if (!road) return { title, text: `${d[5]} No road goes there. Not one you can walk, anyway.` };
+        return {
+          title, text: `${d[5]} Lost in the fog for now: it opens in a later chapter. The way there: ${road.title.replace(/^The /, 'the ')}.`,
+          goLabel: 'Walk to the road', go: () => this.walkToExit(road.id),
+        };
       });
       return;
     }
@@ -592,8 +608,8 @@ export class Game {
       <rect width="${W}" height="${H + 40}" fill="url(#mp-vign)" pointer-events="none"/>
       <g class="mp-you" pointer-events="none"><circle cx="${X(where.x)}" cy="${Y(where.y)}" r="16" fill="url(#mp-glow)"/><circle cx="${X(where.x)}" cy="${Y(where.y)}" r="5.5" class="you"/><circle cx="${X(where.x)}" cy="${Y(where.y)}" r="12" class="you-ring"/></g>
       ${cartouche(W / 2, 30, 270, 'SALTWHARF DOCKS', 'in the Parish of St. Botolph · 1871')}
-      ${rose(W - 34, 82, 18, 'down')}
-      <g class="mp-scale" transform="translate(18 ${H - 14})"><path d="M0 0 h60 M0 -4 v8 M30 -3 v6 M60 -4 v8"/><text x="30" y="-8">one furlong</text></g>
+      ${rose(W - 34, 82, 18, 'up')}
+      <g class="mp-scale" transform="translate(${W - 80} ${H - 14})"><path d="M0 0 h60 M0 -4 v8 M30 -3 v6 M60 -4 v8"/><text x="30" y="-8">one furlong</text></g>
     </svg>`;
     this.hud.showMap('district', svg, (id) => {
       const pl = loc.places.find((p) => p.id === id);
@@ -609,6 +625,15 @@ export class Game {
         },
       };
     });
+  }
+
+  /** Walk to the road out toward another district (leaving whatever building you are in). */
+  private walkToExit(id: string): void {
+    const place = this.locations.saltwharf.places.find((p) => p.id === `exit:${id}`);
+    if (!place) return;
+    if (this.location.id === 'saltwharf') return this.goToPlace(place);
+    const from = this.location.id === 'hesterRoom' ? 'hester' : this.location.id.slice(4);
+    void this.goTo('saltwharf', from).then(() => this.goToPlace(place));
   }
 
   /** Walk to a door and straight through it. */
@@ -674,6 +699,21 @@ export class Game {
     }
     if (this.location.id === 'saltwharf') {
       if (place.id === 'tenements' || place.id.startsWith('house:')) return [];
+      if (place.id.startsWith('exit:')) {
+        const ex = EXITS.find((e) => `exit:${e.id}` === place.id)!;
+        const dest = LONDON_NAMES[ex.to] ?? 'the city';
+        return [
+          act(`Travel to ${dest} · lost in the fog for now`, () => undefined, { primary: true, disabled: true }),
+          act('Look at the map of London', () => this.openMap('london')),
+        ];
+      }
+      if (place.id.startsWith('scav:')) {
+        const sp = SPOTS.find((x) => `scav:${x.id}` === place.id)!;
+        const low = sp.kind !== 'foreshore' || this.lowTide();
+        if (this.usedToday(place.id)) return [act('Picked clean. Come back tomorrow.', () => undefined, { disabled: true })];
+        if (!low) return [act('The tide is in. The mud shows from 05:00 to 10:00 and 16:00 to 21:00.', () => undefined, { disabled: true })];
+        return [act(sp.kind === 'foreshore' ? 'Go down and mudlark (30 min)' : 'Rummage through it (15 min)', () => this.scavenge(sp.id), { primary: true })];
+      }
       if (place.id === 'church') return [act('Father Hale is usually at the market cross in the mornings', () => undefined, { disabled: true })];
       const inside = INTERIORS.find((d) => d.id === place.id);
       const closed = inside && !isOpen(inside, this.clock.hour) ? [act(`Closed. Opens at ${String(inside.open[0]).padStart(2, '0')}:00`, () => undefined, { disabled: true })] : [];
@@ -719,6 +759,7 @@ export class Game {
           const fee = this.friend('lizzie') ? 0 : 0.05;
           return [
             act('Browse the rails', () => this.openShop('clothier'), { primary: true }),
+            act('Sell Lizzie your finds', () => this.sellFinds()),
             act(s.wear[s.outfit] >= 100 ? 'Your clothes are in good repair' : `Have Lizzie mend what you're wearing (${this.condition()}) · ${fee ? `£${fee.toFixed(2)}` : 'free'}`, () => this.mend(true), { disabled: s.wear[s.outfit] >= 100 || s.money + 1e-9 < fee }),
           ];
         }
@@ -2757,7 +2798,7 @@ export class Game {
     }
   }
 
-  /** You die, in your sleep, an old soul. The epilogue, and who carries on. */
+  /** You die, in your sleep, an old soul. The epilogue; this life is over for good. */
   private async playerDies(): Promise<void> {
     const s = this.state!;
     this.busy = true;
@@ -2777,46 +2818,12 @@ export class Game {
     ].filter(Boolean);
     this.busy = false;
     await this.hud.modal('In Memoriam', summary, 'R.I.P.', 'letter', `${c.first} ${c.last}`);
-    const heirs = kids.filter((k) => ageOf(k, day) >= 16);
-    const choice = await this.dialogue.ask({ speaker: P, text: heirs.length ? '"So. That is that." The ghost is quiet a long while. "The room does not stay empty. It never has. Who carries on?"' : '"So. That is that. The room will be let again, I suppose." He sounds, for once, sorry.' }, [...heirs.map((h) => `Carry on as ${h.first} (${ageOf(h, day)})`), 'Begin a new life']);
-    if (choice < heirs.length) this.carryOn(heirs[choice], summary.join(' '));
-    else {
-      deleteSave();
-      location.reload();
-    }
-  }
-
-  /** Your eldest carries on: the room, the purse, the friendships (somewhat), and what you taught them. */
-  private carryOn(heir: PersonRec, summary: string): void {
-    const s = this.state!;
-    const day = dayIndex(s.minutes);
-    const old = s.character;
-    s.family.ancestors.push({ name: `${old.first} ${old.last}`, born: old.birth ?? -504, died: day, summary });
-    const taught = s.family.taught[heir.id] ?? {};
-    const skills = Object.fromEntries(SKILLS.map((k) => [k, Math.min(20, Math.floor(old.skills[k] * 0.3 + (taught[k] ?? 0)))])) as typeof old.skills;
-    s.character = {
-      first: heir.first, last: heir.last, gender: heir.gender, attraction: heir.attraction, birth: heir.birth, skills,
-      look: { ...(heir.look ?? old.look), age: undefined },
-    };
-    for (const r of Object.values(s.relations ?? {})) {
-      r.friendship *= 0.6;
-      r.romance = 0;
-      r.business *= 0.5;
-      r.rivalry *= 0.5;
-    }
-    delete s.relations[heir.id];
-    s.people = s.people.filter((p) => p.id !== heir.id);
-    s.family = { children: [], strain: 0, taught: {}, ancestors: s.family.ancestors };
-    s.jobs = [];
-    s.parish = { rank: 0, standing: null, pledges: [], crowd: 0, lastSpeech: -1 };
-    s.champion = false;
-    s.ladder = 0;
-    s.needs = { hunger: 70, rest: 90, social: 50, health: 95 };
-    this.syncPopulation();
-    this.syncHome();
-    this.refreshLook();
-    this.hud.toast(`You are ${heir.first} ${heir.last} now. The room, the purse and some of the friendships are yours.`, 5000);
-    this.save();
+    await this.dialogue.ask({ speaker: P, text: kids.length
+      ? '"So. That is that." The ghost is quiet a long while. "They will grow up without you, the way I grew old without anyone. The room will be let again."'
+      : '"So. That is that. The room will be let again, I suppose." He sounds, for once, sorry.' }, ['Rest in peace']);
+    // Death is for good: this life's slot is cleared, and the title screen waits.
+    deleteSave();
+    location.reload();
   }
 
   // --- Favours: neighbours come to you -------------------------------------
@@ -3428,6 +3435,82 @@ export class Game {
     }
     sfx('flip');
     this.hud.toast(byLizzie ? `Lizzie darns, patches and presses while you wait. Good as new${fee ? '' : ', and she won\'t take your money'}.` : 'An hour with needle and thread. Good as new, nearly.', 3500);
+  }
+
+  /** The tide is out twice a day: morning and evening. */
+  private lowTide(): boolean {
+    const h = this.clock.hour;
+    return (h >= 5 && h < 10) || (h >= 16 && h < 21);
+  }
+
+  /** Rummage a heap, a bucket or the foreshore: rags and bottles mostly, now and then something worth having. */
+  private scavenge(spotId: string): void {
+    const s = this.state!;
+    const sp = SPOTS.find((x) => x.id === spotId)!;
+    const key = `scav:${sp.id}`;
+    this.clock.minutes += sp.kind === 'foreshore' ? 30 : 15;
+    this.markUsed(key);
+    const cun = s.character.skills.cunning;
+    const finds: string[] = [];
+    let pennies = 0;
+    const tries = 1 + (Math.random() < 0.2 + cun * 0.03 ? 1 : 0);
+    for (let i = 0; i < tries; i++) {
+      const got = rummage(sp.kind, cun);
+      if (got === '£') pennies += 0.01 + Math.floor(Math.random() * 3) / 100;
+      else if (got) finds.push(got);
+    }
+    const kept: string[] = [];
+    let full = false;
+    for (const id of finds) {
+      if (canCarry(s, id)) {
+        addItem(s, id);
+        const n = ITEMS[id].name.toLowerCase();
+        kept.push(/^(clean bones|brass buttons|old rope)$/.test(n) ? `some ${n}` : `${/^[aeiou]/.test(n) ? 'an' : 'a'} ${n}`);
+      } else full = true;
+    }
+    if (pennies) s.money = Math.round((s.money + pennies) * 100) / 100;
+    const xp = gainXp(s, 'cunning', 3);
+    // Rats, glass and the cold river.
+    let hurt = '';
+    if (Math.random() < (sp.kind === 'foreshore' ? 0.12 : 0.08)) {
+      addNeed(s.needs, 'health', -4);
+      hurt = sp.kind === 'foreshore' ? ' The mud takes a boot and nearly a foot. Health −4.' : ' A rat bites, and you bite back a curse. Health −4.';
+    }
+    s.needs.social = Math.max(0, s.needs.social - 1);
+    const what = [...kept, ...(pennies ? [`${Math.round(pennies * 100)}d in coppers`] : [])];
+    const rare = finds.some((id) => ['ring', 'watch', 'spoon'].includes(id));
+    sfx(what.length ? (rare ? 'chime' : 'coin') : 'flip');
+    const text = what.length
+      ? `${sp.kind === 'foreshore' ? 'Knee-deep in the mud' : 'Elbow-deep'}, you come up with ${what.join(' and ')}.${rare ? ' Moss will want to see that.' : ''}`
+      : sp.kind === 'foreshore' ? 'Half an hour of mud for nothing but cold hands.' : 'Nothing but ash and cabbage stalks.';
+    this.hud.toast(`${text}${full ? ' Your bag is full: you leave the rest.' : ''}${hurt} ${xp.join(' ')}`.trim(), 4500);
+    if (this.player) {
+      const v = new THREE.Vector3(this.player.position.x, 1.95, this.player.position.y).project(this.rig.camera);
+      const x = (v.x * 0.5 + 0.5) * window.innerWidth;
+      const y = (-v.y * 0.5 + 0.5) * window.innerHeight;
+      what.forEach((w, k) => this.hud.floater(`+ ${w}`, x, y - 10 - k * 22, 'gain'));
+    }
+    this.save();
+  }
+
+  /** Lizzie Barlow buys rags, bones, bottles and the like at a better rate than Moss. */
+  private sellFinds(): void {
+    const s = this.state!;
+    const rate = this.friend('lizzie') ? 0.7 : 0.55;
+    const render = () => {
+      const finds = s.inventory.filter((it) => isJunk(it.id));
+      const rows: ListRow[] = finds.map((it) => ({
+        label: `${ITEMS[it.id].name} ×${it.qty}`,
+        sub: `Lizzie offers £${sellPrice(SHOPS.pawnbroker, it.id, rate).toFixed(2)} each`,
+        actions: [{ label: 'Sell', onClick: () => { sell(s, SHOPS.pawnbroker, it.id, rate); sfx('coin'); render(); } }],
+      }));
+      if (finds.length) {
+        const all = finds.reduce((a, it) => a + sellPrice(SHOPS.pawnbroker, it.id, rate) * it.qty, 0);
+        rows.unshift({ label: 'Sell everything you found', sub: `£${all.toFixed(2)} for the lot`, actions: [{ label: 'Sell all', onClick: () => { for (const it of [...finds]) while (s.inventory.some((x) => x.id === it.id)) sell(s, SHOPS.pawnbroker, it.id, rate); sfx('coin'); render(); } }] });
+      } else rows.push({ label: 'Nothing she wants.', sub: 'Rags, bones, bottles: rummage the heaps in the alleys, the slop buckets, the foreshore at low tide.', actions: [] });
+      this.hud.showList('Rag & Bone', '"Rags, bones, bottles! I\'ll take the lot, love."', rows);
+    };
+    render();
   }
 
   private sellToSilas(): void {
