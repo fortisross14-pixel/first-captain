@@ -130,6 +130,10 @@ After the slice: more districts, factions, the main story and the Fog Clock, bus
 
 The P1 list from `docs/AUDIT_2026-11-18.md`, done: money sinks and upgrades, relationship rewards and resident voices, goals and the morning summary, the autopilot rule, shift reminders, the slim HUD, touch fixes, and merged geometry (541 → 91 draw calls). Next: the visual and style pass.
 
+## Visual pass: Ghost Story
+
+The style chosen from four proposals is in `docs/STYLE_GUIDE.md`: torn midnight-paper panels, ticket buttons, a diary, flipping coins and Hester's pocket watch in the dock, celebrations for promotions, goals, skills and friends, floating money and need deltas, fight shake, drifting fog over the world, and the title screen condensing out of the fog.
+
 ## After the slice
 
 More districts, factions, the main story and the Fog Clock, businesses, marriage, children and aging.

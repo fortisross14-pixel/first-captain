@@ -17,7 +17,7 @@ import {
 import { playBar } from '../minigames/bar';
 import { ENEMIES, runFight, type Enemy } from '../minigames/fight';
 import { playCargo } from '../minigames/cargo';
-import { loadGame, newGame, saveGame, type Character, type GameState, type LocationId, type NeedId } from '../game/state';
+import { SKILLS, SKILL_INFO, loadGame, newGame, saveGame, type Character, type GameState, type LocationId, type NeedId } from '../game/state';
 import { Creator } from '../ui/Creator';
 import { Dialogue, type Line } from '../ui/Dialogue';
 import { Hud, type Action, type ListRow } from '../ui/Hud';
@@ -67,6 +67,8 @@ export class Game {
   private readonly preview = { scene: new THREE.Scene(), camera: new THREE.PerspectiveCamera(30, 1, 0.1, 50), rig: null as Rig | null };
 
   private markerLife = 0;
+  private rentPaid = false;
+  private prevSkills: Record<string, number> | null = null;
   private goalsTimer = 0;
   private occlusionTimer = 0;
   private lastSaveMinute = 0;
@@ -92,6 +94,8 @@ export class Game {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
     container.appendChild(this.renderer.domElement);
+    // Drifting fog and a vignette over the world: cheap, compositor-only layers.
+    container.insertAdjacentHTML('beforeend', '<div class="atmo" aria-hidden="true"><i class="fog f1"></i><i class="fog f2"></i><div class="vignette"></div></div>');
 
     this.locations = { saltwharf: buildSaltwharf(), hesterRoom: buildHesterRoom() };
     this.location = this.locations.saltwharf;
@@ -195,6 +199,7 @@ export class Game {
     this.title?.remove();
     this.title = null;
     this.state = s;
+    this.prevSkills = null;
     this.clock.minutes = s.minutes;
     this.lastSaveMinute = s.minutes;
     this.player?.rig.root.removeFromParent();
@@ -489,7 +494,10 @@ export class Game {
                 if (r === 'ok') {
                   sfx('coin');
                   if (def.upgrade) this.applyUpgrades();
-                  if (def.upgrade) this.hud.toast(`${def.name}: ${def.blurb}`, 3500);
+                  if (def.upgrade) {
+                    this.hud.closeList();
+                    void this.hud.celebrate('goal', 'Yours now', def.name, def.blurb);
+                  }
                 }
                 if (r === 'full') this.hud.toast('Your bag is full.');
                 this.refreshObjectives();
@@ -700,8 +708,12 @@ export class Game {
       ...extras,
       ...rep.levelUps,
     ];
-    await this.hud.modal(`Shift over · ${rankBefore}`, report);
-    if (rep.promotedTo) await this.dialogue.say({ speaker: job.boss, text: job.lines.promoted.replace('{rank}', rep.promotedTo) });
+    await this.hud.modal(`Shift over · ${rankBefore}`, report.filter((l) => !l.startsWith('Grade:')), GRADE_INFO[grade].name);
+    if (rep.promotedTo) {
+      const e2 = employment(s, jobId);
+      await this.hud.celebrate('promotion', 'Promoted', rep.promotedTo, `${job.career}: £${e2 ? job.ranks[e2.rank].pay.toFixed(2) : '?'} a shift`);
+      await this.dialogue.say({ speaker: job.boss, text: job.lines.promoted.replace('{rank}', rep.promotedTo) });
+    }
     if (rep.fired) await this.dialogue.say({ speaker: job.boss, text: job.lines.fired });
     this.busy = false;
     this.save();
@@ -915,6 +927,7 @@ export class Game {
     // Mood varies by person and day.
     const seed = Math.sin((dayIndex(s.minutes) + 1) * 12.9898 + npc.res.id.length * 78.233) * 43758.5453;
     // A good coat, and clean linen from Hannah, help first impressions.
+    const before = { f: r.friendship, ro: r.romance };
     const dress = (owns(s, 'coat') ? 0.08 : 0) + (this.friend('hannah') ? 0.04 : 0);
     const mood = ((seed - Math.floor(seed)) - 0.5) * 0.2 + dress;
     const out = interact(s, npc.res, r, i, mood);
@@ -925,6 +938,8 @@ export class Game {
     const delta = Object.entries(out.changes).filter(([, v]) => v).map(([k, v]) => `${names[k]} ${v! > 0 ? '+' : ''}${Math.round(v!)}`).join(' · ');
     const hint = out.liked ? (out.success ? 'They liked that.' : 'They usually like that, just not today.') : out.disliked ? 'They did not like that.' : '';
     await this.dialogue.say({ speaker: npc.res.name, text: [out.text, hint, delta, ...xp].filter(Boolean).join('\n') });
+    if (before.f < 30 && r.friendship >= 30) await this.hud.celebrate('friend', 'A new friend', npc.res.name, VOICES[npc.res.id].perk.replace(/^Friend: /, ''));
+    if (before.ro < 30 && r.romance >= 30) await this.hud.celebrate('friend', 'Courting', npc.res.name, 'You can walk by the river together now.');
     if (npc.held) this.showPerson(npc);
   }
 
@@ -1282,6 +1297,10 @@ export class Game {
   /** Grubb's news; if he has thrown you out, you are put on the street. */
   private async announceRent(news: string): Promise<void> {
     await this.dialogue.say({ speaker: 'Mr. Grubb', text: news });
+    if (this.rentPaid) {
+      this.rentPaid = false;
+      await this.hud.celebrate('goal', 'Goal complete', 'Rent paid', 'A roof for another month');
+    }
     if (!this.state!.housed && this.location.id === 'hesterRoom') {
       await this.goTo('saltwharf', 'hester');
       this.hud.toast('Evicted. Sleep rough in the Gull Court archway, or pay Grubb to get the room back.', 5000);
@@ -1297,6 +1316,7 @@ export class Game {
     s.rent.arrears = 0;
     s.housed = true;
     s.rent.dueMonth = monthIndex(this.clock.date);
+    void this.hud.celebrate('goal', 'Goal complete', 'Home again', "Hester's room is yours once more");
     await this.dialogue.say({ speaker: 'Mr. Grubb', text: `£${cost.toFixed(2)}. Here's the new key. Next month's due at the end of the month, same as ever.` });
     this.save();
   }
@@ -1314,6 +1334,7 @@ export class Game {
     if (r.graceUntil === null && now > r.dueMonth) {
       if (s.money >= r.amount) {
         pay();
+        this.rentPaid = true;
         return `Rent, £${r.amount.toFixed(2)}. Paid. Pleasure, I'm sure. Same again at the end of the month.`;
       }
       r.graceUntil = this.clock.minutes + (this.friend('grubb') ? 14 : 7) * DAY;
@@ -1323,6 +1344,7 @@ export class Game {
       if (s.money >= r.amount) {
         pay();
         r.graceUntil = null;
+        this.rentPaid = true;
         return "Paid at last. Don't make me climb those stairs again.";
       }
       if (this.clock.minutes > r.graceUntil) {
@@ -1428,6 +1450,7 @@ export class Game {
     );
     s.tutorial.step = 'done';
     this.refreshObjectives();
+    await this.hud.celebrate('goal', 'Chapter one', 'You survived your first day', 'Saltwharf is yours to make or break');
   }
 
   // --- Saving and journal ---------------------------------------------------
@@ -1576,6 +1599,14 @@ export class Game {
     }
 
     const jobLine = s.jobs.map((e) => `${title(s, e)} · ${nextShiftText(s, e.jobId)}`).join('\n');
+    // Any skill that rose since last frame gets its moment, wherever the XP came from.
+    if (!this.prevSkills) this.prevSkills = { ...s.character.skills };
+    for (const k of SKILLS) {
+      if (s.character.skills[k] > (this.prevSkills[k] ?? 0)) {
+        void this.hud.celebrate('skill', 'Skill improved', `${SKILL_INFO[k].name} ${s.character.skills[k]}`, SKILL_INFO[k].blurb);
+      }
+    }
+    this.prevSkills = { ...s.character.skills };
     this.hud.update(s, this.location.name, this.clock.formatDate(), this.clock.formatTime(), this.clock.formatShortDate(this.clock.rentDue), jobLine);
     this.renderer.render(this.location.scene, this.rig.camera);
   }

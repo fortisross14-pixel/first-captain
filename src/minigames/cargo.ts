@@ -133,7 +133,7 @@ export function playCargo(root: HTMLElement, p: MinigameParams): Promise<Minigam
     const shade = [0, '#b08a5a', '#8a6236', '#5e3e1e'][c.weight] as string;
     ctx.fillStyle = c.broken ? '#4a3a30' : shade;
     ctx.fillRect(x - COL_W / 2 + 3, y - CRATE_H, COL_W - 6, CRATE_H - 2);
-    ctx.strokeStyle = c.fragile ? '#c0392b' : '#2a1a0e';
+    ctx.strokeStyle = c.fragile ? '#e3a35a' : '#2a1a0e';
     ctx.lineWidth = c.fragile ? 3 : 2;
     ctx.strokeRect(x - COL_W / 2 + 3, y - CRATE_H, COL_W - 6, CRATE_H - 2);
     ctx.fillStyle = '#f1e6c8';
@@ -143,7 +143,10 @@ export function playCargo(root: HTMLElement, p: MinigameParams): Promise<Minigam
   }
 
   function draw(): void {
-    ctx.fillStyle = '#1b2228';
+    const sky = ctx.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, '#18233a');
+    sky.addColorStop(1, '#0a0f17');
+    ctx.fillStyle = sky;
     ctx.fillRect(0, 0, W, H);
     // Crane
     ctx.fillStyle = '#2a2c30';
@@ -158,7 +161,7 @@ export function playCargo(root: HTMLElement, p: MinigameParams): Promise<Minigam
     if (running && !falling) drawCrate(hx, HOOK_Y + CRATE_H + 4, next);
     // Guide line
     ctx.setLineDash([4, 6]);
-    ctx.strokeStyle = 'rgba(214,180,110,.35)';
+    ctx.strokeStyle = 'rgba(220,239,255,.35)';
     ctx.beginPath();
     ctx.moveTo(hx, HOOK_Y + CRATE_H + 8);
     ctx.lineTo(hx, DECK_Y - 4);
@@ -183,7 +186,7 @@ export function playCargo(root: HTMLElement, p: MinigameParams): Promise<Minigam
     if (falling) drawCrate(falling.x, falling.y + CRATE_H, falling.crate);
 
     // Water
-    ctx.fillStyle = 'rgba(35, 52, 58, .9)';
+    ctx.fillStyle = 'rgba(16, 26, 40, .92)';
     ctx.fillRect(0, DECK_Y + 22 + Math.sin(t * 2) * 2, W, H);
     for (const sp of splashes) {
       ctx.strokeStyle = `rgba(200,220,230,${1 - sp.t})`;
@@ -199,9 +202,9 @@ export function playCargo(root: HTMLElement, p: MinigameParams): Promise<Minigam
     ctx.fillStyle = 'rgba(255,255,255,.1)';
     ctx.fillRect(mx, 16, mw, 8);
     const frac = Math.max(-1, Math.min(1, tq / limit));
-    ctx.fillStyle = Math.abs(frac) > 0.75 ? '#c0503a' : '#d6b46e';
+    ctx.fillStyle = Math.abs(frac) > 0.75 ? '#e3a35a' : '#dcefff';
     ctx.fillRect(mx + mw / 2, 16, (frac * mw) / 2, 8);
-    ctx.fillStyle = '#f1e6c8';
+    ctx.fillStyle = '#f4fbff';
     ctx.fillRect(mx + mw / 2 - 1, 12, 2, 16);
   }
 

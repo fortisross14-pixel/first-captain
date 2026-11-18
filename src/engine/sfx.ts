@@ -1,4 +1,4 @@
-export type SfxName = 'click' | 'coin' | 'hit' | 'hurt' | 'drop' | 'splash' | 'pour' | 'bad';
+export type SfxName = 'click' | 'coin' | 'hit' | 'hurt' | 'drop' | 'splash' | 'pour' | 'bad' | 'fanfare' | 'chime' | 'flip' | 'page' | 'tick';
 
 /** Fire-and-forget sound effect; the Sound engine listens if it is running. */
 export function sfx(name: SfxName): void {

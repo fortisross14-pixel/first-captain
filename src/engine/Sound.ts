@@ -146,6 +146,12 @@ export class Sound {
       case 'splash': burst(0.5, 0.8, 1800, 'bandpass'); break;
       case 'pour': burst(0.25, 0.25, 2500, 'bandpass'); tone(880, 0.05, 0.08, 0.04); break;
       case 'bad': tone(220, 0, 0.18, 0.08, 'sawtooth'); tone(180, 0.08, 0.2, 0.06, 'sawtooth'); break;
+      // A rising minor arpeggio with a bell on top: promotions and goals.
+      case 'fanfare': [392, 466, 587, 784].forEach((f, i) => tone(f, i * 0.09, 0.6, 0.07, 'triangle')); tone(1568, 0.36, 1.2, 0.05); burst(0.8, 0.12, 4000, 'highpass'); break;
+      case 'chime': [880, 1175, 1568].forEach((f, i) => tone(f, i * 0.07, 0.9, 0.05)); break;
+      case 'flip': tone(1400, 0, 0.05, 0.04, 'triangle'); tone(2100, 0.08, 0.08, 0.03, 'triangle'); burst(0.06, 0.15, 5000, 'highpass'); break;
+      case 'page': burst(0.22, 0.25, 3000, 'bandpass'); break;
+      case 'tick': tone(3200, 0, 0.02, 0.05, 'square'); tone(3200, 0.12, 0.02, 0.04, 'square'); break;
     }
   }
 }

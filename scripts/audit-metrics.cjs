@@ -43,13 +43,12 @@ const url = process.argv[2] || 'http://localhost:4173/first-captain/?debug';
     });
     const vw = innerWidth;
     const vh = innerHeight;
-    const area = (sel) => {
-      const e = document.querySelector(sel);
-      if (!e) return 0;
+    const area = (sel) => [...document.querySelectorAll(sel)].reduce((a, e) => {
       const r = e.getBoundingClientRect();
-      return r.width * r.height;
-    };
-    const hud = ['.topbar', '.goals', '.bottom-left', '.speed'].reduce((a, s) => a + area(s), 0);
+      return a + r.width * r.height;
+    }, 0);
+    // Top bar, goals pill and the four dock tokens (the dock's fade strip is see-through).
+    const hud = ['.topbar', '.goals', '.dock .tok'].reduce((a, s) => a + area(s), 0);
     const n = G.npcs.find((x) => x.visible);
     const p = n.walker.rig.root.position;
     const cam = G.rig.camera;

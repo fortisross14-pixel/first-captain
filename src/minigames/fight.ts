@@ -49,6 +49,12 @@ export function runFight(root: HTMLElement, s: GameState, base: Enemy, intro: st
     </div>`;
   root.appendChild(el);
   const logEl = el.querySelector('.fight-log') as HTMLElement;
+  /** Screen shake and a flash of light (your blow) or ember (theirs). */
+  const jolt = (flash: 'flash-hit' | 'flash-hurt') => {
+    el.classList.remove('shake', 'flash-hit', 'flash-hurt');
+    void el.offsetWidth;
+    el.classList.add('shake', flash);
+  };
   const buttons = [...el.querySelectorAll<HTMLButtonElement>('.fight-actions button')];
 
   const log = (text: string, cls = '') => {
@@ -100,6 +106,7 @@ export function runFight(root: HTMLElement, s: GameState, base: Enemy, intro: st
         addNeed(s.needs, 'health', -d);
         log(`${enemy.name} hits you. −${d} health.`, 'hurt');
         sfx('hurt');
+        jolt('flash-hurt');
       } else log(`${enemy.name} swings and misses.`);
       guarding = false;
       if (s.needs.health <= 0) return finish('lost');
@@ -116,6 +123,7 @@ export function runFight(root: HTMLElement, s: GameState, base: Enemy, intro: st
           enemy.morale -= 5;
           log(`You hit ${enemy.name}. −${d}.`, 'good');
           sfx('hit');
+          jolt('flash-hit');
         } else log('You swing wide.');
       } else if (a === 'guard') {
         guarding = true;

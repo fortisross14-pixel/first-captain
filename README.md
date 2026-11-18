@@ -4,6 +4,7 @@ A dark gothic life-sim RPG set in a fictional Victorian London (1871): work, ren
 
 - Build plan and milestones: [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md)
 - Game dev playbook (principles and checks): [docs/GAME_DEV_PLAYBOOK.md](docs/GAME_DEV_PLAYBOOK.md)
+- Style guide: [docs/STYLE_GUIDE.md](docs/STYLE_GUIDE.md)
 - Latest audit: [docs/AUDIT_2026-11-18.md](docs/AUDIT_2026-11-18.md) · repeat it with `node scripts/audit-metrics.cjs` and the `game-audit` skill
 - Story and world design: the *Pale Lamps Story Bible* (Claude Docs)
 

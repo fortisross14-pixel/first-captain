@@ -1,4 +1,5 @@
 import { NEED_NAMES, SKILL_INFO, SKILLS, fullName, type GameState, type NeedId } from '../game/state';
+import { sfx } from '../engine/sfx';
 import type { Place } from '../world/location';
 
 export interface ListRow {
@@ -15,6 +16,15 @@ export interface Action {
 }
 
 const NEEDS: NeedId[] = ['hunger', 'rest', 'social', 'health'];
+
+/** Engraved emblems for the dock tokens. */
+const TOKEN = {
+  bag: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9h12l-1 11H7z"/><path d="M9 9V7a3 3 0 0 1 6 0v2"/><path d="M9.5 13h5"/></svg>',
+  people: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3.5 19c.6-3.6 2.8-5.2 5.5-5.2s4.9 1.6 5.5 5.2"/><path d="M15.5 5.6a3 3 0 0 1 0 5.2M17.5 14.2c1.6.6 2.6 2.1 3 4.8"/></svg>',
+  watch: '<svg viewBox="0 0 48 48" width="44" height="44"><circle cx="24" cy="26" r="19" class="w-case"/><circle cx="24" cy="26" r="15.5" class="w-face"/><rect x="21.5" y="2" width="5" height="4" rx="1.5" class="w-crown"/><g class="w-ticks">' +
+    Array.from({ length: 12 }, (_, i) => `<line x1="24" y1="12.5" x2="24" y2="${i % 3 === 0 ? 15.5 : 14.2}" transform="rotate(${i * 30} 24 26)"/>`).join('') +
+    '</g><line x1="24" y1="26" x2="24" y2="18" class="w-hour"/><line x1="24" y1="26" x2="24" y2="14" class="w-min"/><circle cx="24" cy="26" r="1.6" class="w-pin"/></svg>',
+};
 
 /** Small line icons so the needs need no text labels. */
 const svg = (d: string) => `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
@@ -35,7 +45,7 @@ export class Hud {
     root.insertAdjacentHTML(
       'beforeend',
       `<div class="hud" hidden>
-        <div class="topbar card">
+        <div class="topbar gs">
           <div class="tb-time"><div class="time"></div><div class="date"></div></div>
           <div class="tb-needs">${NEEDS.map(
             (n) => `<div class="need" data-need="${n}" role="img" aria-label="${NEED_NAMES[n]}" title="${NEED_NAMES[n]}">${ICONS[n]}<div class="bar"><i></i></div></div>`,
@@ -46,21 +56,36 @@ export class Hud {
           <span class="goals-first"></span>
           <span class="goals-rest"></span>
         </button>
-        <div class="bottom-left">
-          <button class="journal-btn" aria-label="Open journal">Journal</button>
-          <button class="bag-btn" aria-label="Open bag">Bag</button>
-          <button class="people-btn" aria-label="Open contacts">People</button>
-        </div>
-        <button class="speed" aria-label="Change time speed">1×</button>
-        <div class="toast" role="status"></div>
+        <nav class="dock" aria-label="Menus">
+          <button class="tok diary journal-btn" aria-label="Open journal">
+            <span class="book" aria-hidden="true"><span class="page p1"></span><span class="page p2"></span><span class="cover"></span><span class="ribbon"></span></span>
+            <span class="lab">Journal</span>
+          </button>
+          <button class="tok coin bag-btn" aria-label="Open bag">
+            <span class="coin3d" aria-hidden="true"><span class="face front">${TOKEN.bag}</span><span class="face back"><b class="bag-count"></b></span><span class="glint"></span></span>
+            <span class="lab">Bag</span>
+          </button>
+          <button class="tok coin people-btn" aria-label="Open people">
+            <span class="coin3d" aria-hidden="true"><span class="face front">${TOKEN.people}</span><span class="face back"><b class="people-count"></b></span><span class="glint"></span></span>
+            <span class="lab">People</span>
+          </button>
+          <button class="tok watch speed" aria-label="Change time speed">
+            <span class="watch3d" aria-hidden="true">${TOKEN.watch}</span>
+            <span class="lab speed-lab">1×</span>
+          </button>
+        </nav>
+        <div class="toast gs" role="status"></div>
+        <div class="floaters" aria-hidden="true"></div>
+        <div class="celebrate" aria-live="polite"></div>
         <div class="bubbles"></div>
-        <div class="panel" hidden>
+        <div class="panel gs ruled" hidden>
           <h2></h2>
           <p></p>
           <div class="actions"></div>
         </div>
         <div class="journal" hidden>
-          <div class="journal-sheet">
+          <div class="journal-sheet diary">
+            <span class="ribbon" aria-hidden="true"></span>
             <h2></h2>
             <div class="journal-body"></div>
             <div class="actions settings">
@@ -75,7 +100,7 @@ export class Hud {
           </div>
         </div>
         <div class="listsheet journal" hidden>
-          <div class="journal-sheet">
+          <div class="journal-sheet gs ruled">
             <h2></h2>
             <p class="meta list-sub"></p>
             <div class="list-rows"></div>
@@ -83,8 +108,9 @@ export class Hud {
           </div>
         </div>
         <div class="modal" hidden>
-          <div class="journal-sheet">
+          <div class="journal-sheet gs ruled">
             <h2></h2>
+            <div class="stamp-slot"></div>
             <div class="modal-body"></div>
             <div class="actions"><button class="primary modal-ok">Continue</button></div>
           </div>
@@ -94,16 +120,41 @@ export class Hud {
     );
     this.el = root.querySelector('.hud') as HTMLElement;
     const speed = this.q<HTMLButtonElement>('.speed');
-    speed.addEventListener('click', () => (speed.textContent = `${onSpeed()}×`));
-    this.q('.journal-btn').addEventListener('click', () => (this.journalOpen = true));
+    const play = (el: HTMLElement, cls: string, ms: number) => {
+      el.classList.remove(cls);
+      void el.offsetWidth;
+      el.classList.add(cls);
+      window.setTimeout(() => el.classList.remove(cls), ms);
+    };
+    speed.addEventListener('click', () => {
+      this.q('.speed-lab').textContent = `${onSpeed()}×`;
+      play(speed, 'whirl', 700);
+      sfx('tick');
+    });
+    const journalBtn = this.q('.journal-btn');
+    journalBtn.addEventListener('click', () => {
+      play(journalBtn, 'open', 700);
+      sfx('page');
+      window.setTimeout(() => (this.journalOpen = true), 260);
+    });
     this.q('.close-journal').addEventListener('click', () => (this.journalOpen = false));
-    this.q('.bag-btn').addEventListener('click', () => this.onBag?.());
+    const bag = this.q('.bag-btn');
+    bag.addEventListener('click', () => {
+      play(bag, 'flip', 800);
+      sfx('flip');
+      window.setTimeout(() => this.onBag?.(), 220);
+    });
     const goals = this.q('.goals');
     goals.addEventListener('click', () => {
       goals.setAttribute('aria-expanded', String(goals.getAttribute('aria-expanded') !== 'true'));
       this.renderGoals();
     });
-    this.q('.people-btn').addEventListener('click', () => this.onPeople?.());
+    const people = this.q('.people-btn');
+    people.addEventListener('click', () => {
+      play(people, 'flip', 800);
+      sfx('flip');
+      window.setTimeout(() => this.onPeople?.(), 220);
+    });
     this.q('.list-close').addEventListener('click', () => (this.q('.listsheet').hidden = true));
     // Tap the dark backdrop around a sheet to close it.
     for (const sel of ['.journal:not(.listsheet)', '.listsheet']) {
@@ -124,13 +175,16 @@ export class Hud {
 
   /** True while a menu covers the world and taps should not reach it. */
   get blocking(): boolean {
-    return !this.q('.journal').hidden || !this.q('.modal').hidden || !this.q('.listsheet').hidden;
+    return !this.q('.journal').hidden || !this.q('.modal').hidden || !this.q('.listsheet').hidden || this.q('.celebrate').children.length > 0;
   }
 
   /** A report the player must acknowledge, such as the end of a shift. */
-  modal(title: string, lines: string[]): Promise<void> {
+  modal(title: string, lines: string[], stamp = ''): Promise<void> {
     const m = this.q('.modal');
     m.querySelector('h2')!.textContent = title;
+    const slot = m.querySelector('.stamp-slot') as HTMLElement;
+    slot.textContent = stamp;
+    slot.className = `stamp-slot${stamp ? ' on' : ''}`;
     m.querySelector('.modal-body')!.replaceChildren(
       ...lines.map((l) => {
         const p = document.createElement('p');
@@ -202,7 +256,99 @@ export class Hud {
     el.hidden = false;
   }
 
+  private lastMoney: number | null = null;
+  private lastNeeds: Partial<Record<NeedId, number>> = {};
+  private celebrating: Promise<void> = Promise.resolve();
+
+  /** A number that floats up from a point on screen: money earned, hunger restored. */
+  floater(text: string, x: number, y: number, kind: 'gain' | 'loss'): void {
+    const f = document.createElement('div');
+    f.className = `floater ${kind}`;
+    f.textContent = text;
+    f.style.left = `${x}px`;
+    f.style.top = `${y}px`;
+    this.q('.floaters').appendChild(f);
+    window.setTimeout(() => f.remove(), 1600);
+  }
+
+  /**
+   * The big moments, queued so they never overlap.
+   * promotion: a moonlit broadsheet slams in with a PROMOTED stamp.
+   * goal: a ghost-lilac seal presses onto a handbill as fog crosses it.
+   * skill: a sigil draws itself in light around the new level.
+   * friend: a calling card turns over to show the new friendship and its reward.
+   */
+  celebrate(kind: 'promotion' | 'goal' | 'skill' | 'friend', kicker: string, title: string, sub: string): Promise<void> {
+    const run = async () => {
+      const host = this.q('.celebrate');
+      const el = document.createElement('div');
+      el.className = `cel cel-${kind}`;
+      const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+      const motes = Array.from({ length: 16 }, (_, i) => {
+        const a = (i / 16) * Math.PI * 2;
+        const r = 80 + (i % 3) * 34;
+        return `<span style="--dx:${Math.round(Math.cos(a) * r)}px;--dy:${Math.round(Math.sin(a) * r - 90)}px;animation-delay:${0.45 + (i % 5) * 0.06}s"></span>`;
+      }).join('');
+      const text = `<span class="k">${esc(kicker)}</span><span class="tt">${esc(title)}</span><span class="ss">${esc(sub)}</span>`;
+      const inner = {
+        promotion: `<div class="card"><div class="inner gs ruled"><span class="k">Saltwharf Gazette · Extra</span><span class="tt">${esc(title)}</span><span class="ss">${esc(sub)}</span></div><span class="stamp">${esc(kicker)}</span></div>`,
+        goal: `<div class="card"><div class="inner gs ruled">${text}</div><div class="wisp"></div><div class="seal">✦</div></div>`,
+        skill: `<svg class="sigil" viewBox="0 0 230 230" aria-hidden="true"><circle cx="115" cy="115" r="100"/><circle cx="115" cy="115" r="86"/><path d="M115 15 L201 165 L29 165 Z"/><path d="M115 215 L29 65 L201 65 Z"/></svg><div class="card">${text}</div>`,
+        friend: `<div class="card calling"><div class="inner gs ruled">${text}</div></div>`,
+      }[kind];
+      el.innerHTML = `${inner}<div class="motes">${motes}</div>`;
+      host.appendChild(el);
+      sfx(kind === 'skill' ? 'chime' : 'fanfare');
+      // Tap to skip; otherwise it fades by itself.
+      await new Promise<void>((res) => {
+        const done = () => {
+          el.classList.add('out');
+          window.setTimeout(() => {
+            el.remove();
+            res();
+          }, 350);
+        };
+        const t = window.setTimeout(done, kind === 'skill' ? 2300 : 2900);
+        el.addEventListener('click', () => {
+          window.clearTimeout(t);
+          done();
+        }, { once: true });
+      });
+    };
+    this.celebrating = this.celebrating.then(run);
+    return this.celebrating;
+  }
+
   update(state: GameState, district: string, date: string, time: string, rentDue: string, jobLine = ''): void {
+    // Pocket watch hands follow the game clock.
+    const [hh, mm] = time.split(':').map(Number);
+    const hour = this.q('.w-hour');
+    const min = this.q('.w-min');
+    hour?.setAttribute('transform', `rotate(${((hh % 12) + mm / 60) * 30} 24 26)`);
+    min?.setAttribute('transform', `rotate(${mm * 6} 24 26)`);
+    // Token backs show counts.
+    const bagN = state.inventory.reduce((a, i) => a + i.qty, 0);
+    const known = Object.values(state.relations ?? {}).filter((r) => r.met).length;
+    this.q('.bag-count').textContent = String(bagN);
+    this.q('.people-count').textContent = String(known);
+    // Floating deltas for money and big need changes.
+    if (this.lastMoney !== null && Math.abs(state.money - this.lastMoney) >= 0.005) {
+      const r = this.q('.tb-purse').getBoundingClientRect();
+      const d = state.money - this.lastMoney;
+      this.floater(`${d > 0 ? '+' : '−'}£${Math.abs(d).toFixed(2)}`, r.left + r.width / 2, r.bottom + 4, d > 0 ? 'gain' : 'loss');
+    }
+    this.lastMoney = state.money;
+    for (const n of NEEDS) {
+      const prev = this.lastNeeds[n];
+      const v = state.needs[n];
+      if (prev !== undefined && Math.abs(v - prev) >= 4) {
+        const icon = this.el.querySelector(`[data-need="${n}"]`) as HTMLElement;
+        const r = icon.getBoundingClientRect();
+        const d = Math.round(v - prev);
+        this.floater(`${d > 0 ? '+' : ''}${d}`, r.left + r.width / 2, r.bottom + 4, d > 0 ? 'gain' : 'loss');
+      }
+      this.lastNeeds[n] = v;
+    }
     const set = (sel: string, text: string) => {
       const e = this.q(sel);
       if (e.textContent !== text) e.textContent = text;

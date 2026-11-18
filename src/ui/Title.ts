@@ -6,9 +6,10 @@ export class Title {
     root.insertAdjacentHTML(
       'beforeend',
       `<div class="title-screen">
+        <div class="lampglow" aria-hidden="true"></div>
         <div class="title-inner">
           <div class="kicker">London · 1871</div>
-          <h1>The Pale Lamps</h1>
+          <h1 aria-label="The Pale Lamps">${[...'The Pale Lamps'].map((c, i) => `<span style="animation-delay:${(0.3 + i * 0.06).toFixed(2)}s">${c === ' ' ? '&nbsp;' : c}</span>`).join('')}</h1>
           <p class="sub">The city glows brighter every night, and the fog is getting worse.</p>
           <div class="title-buttons">
             ${hasSave ? '<button class="primary continue">Continue</button>' : ''}

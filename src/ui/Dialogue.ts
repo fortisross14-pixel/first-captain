@@ -17,7 +17,7 @@ export class Dialogue {
     root.insertAdjacentHTML(
       'beforeend',
       `<div class="dialogue-catch" hidden></div>
-      <div class="dialogue" hidden>
+      <div class="dialogue gs ruled" hidden>
         <div class="speaker"></div>
         <div class="text"></div>
         <div class="choices"></div>
