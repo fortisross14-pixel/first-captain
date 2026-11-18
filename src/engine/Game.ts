@@ -34,7 +34,7 @@ import { playCargo } from '../minigames/cargo';
 import { NEED_NAMES, SKILLS, SKILL_INFO, loadGame, newGame, saveGame, type Character, type GameState, type LocationId, type NeedId } from '../game/state';
 import { Creator } from '../ui/Creator';
 import { Dialogue, type Line } from '../ui/Dialogue';
-import { Hud, type Action, type ListRow } from '../ui/Hud';
+import { Hud, type Action, type ListRow, type PieItem } from '../ui/Hud';
 import { Title } from '../ui/Title';
 import { buildHesterRoom } from '../world/hesterRoom';
 import type { Location, Place } from '../world/location';
@@ -1538,20 +1538,48 @@ export class Game {
     const traits = knownTraits(p, r);
     const v = VOICES[p.id];
     const doing = npc.act && npc.act !== 'watch' ? ` ${npc.act === 'sick' || npc.act === 'confused' ? 'Today: ' : 'Busy '}${ACTIVITY_TEXT[npc.act]}.` : '';
-    const description = `${p.role}.${doing} ${relationLabel(r)}.${traits.length ? ` ${traits.join(', ')}.` : ` ${v.hint}`}`;
     const tired = r.today >= DAILY_LIMIT + (hasPerk(s, 'charisma', 6) ? 2 : 0);
-    const actions: Action[] = INTERACTIONS.map((i) => ({
-      label: i.label,
-      disabled: tired || (i.id === 'gift' && s.inventory.length === 0),
-      onClick: () => {
-        this.hud.hidePlace();
-        if (i.id === 'gift') this.chooseGift(npc);
-        else void this.socialise(npc, i);
-      },
-    }));
-    actions.unshift(...this.perkActions(npc));
-    const place: Place = { id: `npc:${p.id}`, name: p.name, description: tired ? `${description} They've had enough of you for today.` : description, door: { x: 0, z: 0 }, faceTo: { x: 0, z: 0 } };
-    this.hud.showPlace(place, actions);
+    // Sims-style: a pie of bubbles around their head, grouped so it never shows a dozen at once.
+    const say = (id: string): PieItem => {
+      const i = INTERACTIONS.find((x) => x.id === id)!;
+      return {
+        label: i.label,
+        disabled: tired || (i.id === 'gift' && s.inventory.length === 0),
+        onClick: () => {
+          this.hud.hidePlace();
+          if (i.id === 'gift') this.chooseGift(npc);
+          else void this.socialise(npc, i);
+        },
+      };
+    };
+    const asPie = (a: Action): PieItem => {
+      const m = a.label.match(/^(.*?) \((.*)\)$/);
+      return { label: m ? m[1] : a.label, sub: m ? m[2] : undefined, disabled: a.disabled, primary: a.primary, onClick: a.onClick };
+    };
+    const perks = this.perkActions(npc);
+    const romanceExtra = perks.filter((a) => a.label.startsWith('Walk by the river'));
+    const businessExtra = perks.filter((a) => a.label.startsWith('Sell to Silas'));
+    const askExtra = perks.filter((a) => !romanceExtra.includes(a) && !businessExtra.includes(a));
+    const ask = [...this.lessonActions(npc), ...this.parishActions(npc), ...askExtra].map(asPie);
+    const favours = this.favourActions(npc).map((a) => ({ ...asPie(a), icon: 'favour' as const, primary: !a.disabled }));
+    const items: PieItem[] = [
+      ...favours,
+      { label: 'Talk', icon: 'talk', children: ['chat', 'joke', 'gossip', 'debate', 'brag'].map(say) },
+      { label: 'Kind', icon: 'kind', children: ['compliment', 'confide', 'gift'].map(say) },
+      { label: 'Romance', icon: 'romance', children: [say('flirt'), ...romanceExtra.map(asPie)] },
+      { label: 'Business', icon: 'business', children: [say('business'), ...businessExtra.map(asPie)] },
+      { label: 'Mean', icon: 'mean', children: [say('insult')] },
+      ...(ask.length ? [{ label: 'Ask', icon: 'ask' as const, children: ask }] : []),
+    ];
+    const head = new THREE.Vector3(npc.walker.position.x, 1.5, npc.walker.position.y).project(this.rig.camera);
+    this.hud.showPie({
+      name: p.name,
+      relation: relationLabel(r),
+      note: tired ? `${p.role}.${doing} They've had enough of you for today.` : `${p.role}.${doing}${traits.length ? ` ${traits.join(', ')}.` : ` ${v.hint}`}`,
+      portrait: this.portraitOf(p.name),
+      x: (head.x * 0.5 + 0.5) * window.innerWidth,
+      y: (-head.y * 0.5 + 0.5) * window.innerHeight,
+    }, items);
   }
 
   /** Things only friends, sweethearts and certain people offer. */
@@ -1585,7 +1613,6 @@ export class Game {
     if (id === 'silas' && this.friend(id)) {
       out.push({ label: 'Sell to Silas (70%)', onClick: () => this.sellToSilas() });
     }
-    out.push(...this.favourActions(npc), ...this.lessonActions(npc), ...this.parishActions(npc));
     if (id === 'hale' && isSunday(dayIndex(s.minutes)) && this.clock.hour >= 8 && this.clock.hour < 12) {
       out.push(once('service', 'Attend the open-air service (1 hour)', () => {
         addNeed(s.needs, 'social', 12);

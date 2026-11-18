@@ -31,6 +31,7 @@ All tokens live at the top of `src/style.css`; the theme itself is the "Gilt & C
 - **The dock**: four gilt hexagon medallions (Journal, Bag, People, the pocket watch) that turn a sixth when tapped; counts sit in a small gilt badge.
 - **Tabs**: ribbon tabs; the active one is brass.
 - **Cameo**: an oval portrait in a triple gilt and navy ring, rendered from the speaker's own 3D model (`src/ui/Portraits.ts`). Narration has no cameo. Unknown speakers show a script monogram.
+- **The interaction pie**: the person's cameo at the centre; navy medallion bubbles for groups, ivory pill bubbles for actions, brass for what matters now (a favour you can finish). At most about eight bubbles in a ring; groups open a second ring and the centre turns into a back button. A name card (script name, relationship, role and what they're doing) sits below, or to the left in landscape.
 - **Ways out**: a small gilt hexagon with a door and arrow (or a house, for home) floats over every exit (`src/world/doorIcon.ts`).
 
 ## Motion

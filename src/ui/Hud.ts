@@ -17,6 +17,29 @@ export interface Action {
 
 const NEEDS: NeedId[] = ['hunger', 'rest', 'social', 'health'];
 
+/** A bubble in the interaction pie; one with children opens a ring of its own. */
+export type PieIcon = 'talk' | 'kind' | 'romance' | 'business' | 'mean' | 'ask' | 'favour';
+export interface PieItem {
+  label: string;
+  sub?: string;
+  icon?: PieIcon;
+  primary?: boolean;
+  disabled?: boolean;
+  onClick?: () => void;
+  children?: PieItem[];
+}
+
+const PIE_ICONS: Record<PieIcon, string> = {
+  talk: '<path d="M4 6h16v9H10l-4 3v-3H4z"/>',
+  kind: '<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/><path d="M9 11h6"/>',
+  romance: '<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>',
+  business: '<circle cx="12" cy="12" r="8"/><path d="M14.5 9c-.5-1-1.5-1.5-2.5-1.5-1.5 0-2.5.8-2.5 2s1 1.7 2.5 2 2.5.9 2.5 2.1-1 2-2.5 2-2.2-.6-2.6-1.5M12 6v1.5M12 16.5V18"/>',
+  mean: '<path d="M13 3 6 13h5l-1 8 7-10h-5z"/>',
+  ask: '<path d="M9 9a3 3 0 1 1 4 2.8c-.7.3-1 .9-1 1.7V15"/><circle cx="12" cy="18.5" r=".6"/><circle cx="12" cy="12" r="9"/>',
+  favour: '<path d="M4 10h16v10H4zM3 7h18v3H3zM12 7v13"/><path d="M12 7c-1.5-3-5-3-5-1s3 1 5 1c2 0 5 1 5-1s-3.5-2-5 1"/>',
+};
+const pieIcon = (i: PieIcon) => `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${PIE_ICONS[i]}</svg>`;
+
 /** Engraved emblems for the dock tokens. */
 const TOKEN = {
   journal: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h6a2 2 0 0 1 2 2v13a2 2 0 0 0-2-2H4z"/><path d="M20 5h-6a2 2 0 0 0-2 2v13a2 2 0 0 1 2-2h6z"/></svg>',
@@ -79,6 +102,7 @@ export class Hud {
         <div class="floaters" aria-hidden="true"></div>
         <div class="celebrate" aria-live="polite"></div>
         <div class="bubbles"></div>
+        <div class="pie" hidden><div class="pie-ring"></div><div class="pie-card"></div></div>
         <div class="panel gs ruled" hidden>
           <h2></h2>
           <p></p>
@@ -186,7 +210,7 @@ export class Hud {
 
   /** True while a menu covers the world and taps should not reach it. */
   get blocking(): boolean {
-    return !this.q('.journal').hidden || !this.q('.modal').hidden || !this.q('.listsheet').hidden || this.q('.celebrate').children.length > 0;
+    return !this.q('.pie').hidden || !this.q('.journal').hidden || !this.q('.modal').hidden || !this.q('.listsheet').hidden || this.q('.celebrate').children.length > 0;
   }
 
   /** A report the player must acknowledge, such as the end of a shift. */
@@ -453,6 +477,84 @@ export class Hud {
 
   hidePlace(): void {
     this.q('.panel').hidden = true;
+    this.q('.pie').hidden = true;
+  }
+
+  /**
+   * The Sims-style interaction pie: a cameo of the person in the middle, a ring of
+   * bubbles around them; groups open a second ring, and the middle takes you back.
+   */
+  showPie(info: { name: string; relation: string; note: string; portrait: string | null; x: number; y: number }, items: PieItem[]): void {
+    this.q('.panel').hidden = true;
+    const pie = this.q('.pie');
+    const ring = pie.querySelector('.pie-ring') as HTMLElement;
+    const card = pie.querySelector('.pie-card') as HTMLElement;
+    const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+    card.innerHTML = `<b>${esc(info.name)}</b><span>${esc(info.relation)}</span><p>${esc(info.note)}</p>`;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const render = (list: PieItem[], group: PieItem | null) => {
+      const n = list.length + (group ? 0 : 1);
+      const big = !group;
+      const wide = vw > vh * 1.25;
+      const short = wide && vh < 560;
+      let r = Math.min(big ? 118 : 128, Math.max(92, n * (big ? 17 : 21)));
+      if (short) r = Math.min(r, Math.max(78, (vh - 120) / 2 - 36));
+      // Keep the whole ring on screen, clear of the top bar, the dock and the name card.
+      const card = wide ? Math.min(vw * 0.4, 420) + 16 : 0;
+      const lo = wide ? card + r + 44 : r + 46;
+      const hi = vw - r - 44 - (wide ? 100 : 0);
+      const cx = Math.max(lo, Math.min(Math.max(lo, hi), info.x));
+      const cy = Math.max(r + (short ? 92 : 96), Math.min(vh - r - (wide ? 40 : 235), info.y));
+      ring.style.left = `${cx}px`;
+      ring.style.top = `${cy}px`;
+      const hub = document.createElement('button');
+      hub.className = `pie-hub${group ? ' back' : ''}`;
+      hub.innerHTML = group
+        ? `<span class="bk">‹</span><span class="gl">${esc(group.label)}</span>`
+        : `${info.portrait ? `<img src="${info.portrait}" alt="">` : ''}`;
+      hub.setAttribute('aria-label', group ? 'Back' : info.name);
+      hub.addEventListener('click', (e) => {
+        e.stopPropagation();
+        sfx('click');
+        if (group) render(items, null);
+      });
+      const bubbles = list.map((it, i) => {
+        const b = document.createElement('button');
+        b.className = `pie-b${it.icon ? ' ic' : ''}${it.primary ? ' primary' : ''}${it.children ? ' grp' : ''}`;
+        b.disabled = !!it.disabled || (!!it.children && it.children.every((c) => c.disabled));
+        b.innerHTML = `${it.icon ? pieIcon(it.icon) : ''}<span class="t">${esc(it.label)}</span>${it.sub ? `<span class="s">${esc(it.sub)}</span>` : ''}`;
+        const a = -Math.PI / 2 + (i / n) * Math.PI * 2;
+        b.style.setProperty('--x', `${Math.round(Math.cos(a) * r)}px`);
+        b.style.setProperty('--y', `${Math.round(Math.sin(a) * r)}px`);
+        b.style.animationDelay = `${i * 0.03}s`;
+        b.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (it.children) {
+            sfx('page');
+            render(it.children, it);
+          } else it.onClick?.();
+        });
+        return b;
+      });
+      if (!group) {
+        const bye = document.createElement('button');
+        bye.className = 'pie-b ic bye';
+        bye.innerHTML = '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg><span class="t">Goodbye</span>';
+        const a = -Math.PI / 2 + (list.length / n) * Math.PI * 2;
+        bye.style.setProperty('--x', `${Math.round(Math.cos(a) * r)}px`);
+        bye.style.setProperty('--y', `${Math.round(Math.sin(a) * r)}px`);
+        bye.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.hidePlace();
+        });
+        bubbles.push(bye);
+      }
+      ring.replaceChildren(hub, ...bubbles);
+    };
+    render(items, null);
+    pie.onclick = () => this.hidePlace();
+    pie.hidden = false;
   }
 
   /** A speech bubble at a screen position, for a passer-by's greeting. */
