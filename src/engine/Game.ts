@@ -90,7 +90,7 @@ export class Game {
   /** Your family at home in Hester's room, in the evenings. */
   private homeNpcs: Npc[] = [];
   private readonly portraits: Portraits;
-  private readonly doorIcons: { sprite: THREE.Sprite; y: number }[] = [];
+  private readonly doorIcons: { sprite: THREE.Sprite; y: number; loc: LocationId; place: string; to: [LocationId, string] }[] = [];
   private ambientTimer = 4;
   private chatTimer = 12;
   private chat: { a: Npc; b: Npc; lines: [string, string][]; i: number; t: number; spread: import('../game/world').Fact | null } | null = null;
@@ -191,14 +191,14 @@ export class Game {
     this.portraits = new Portraits(this.renderer);
     this.dialogue.portraitFor = (name) => this.portraitOf(name);
     // Ways in and out are marked: the stairs down from Hester's room, and her door from the street.
-    const icon = (loc: Location, kind: 'exit' | 'home', x: number, y: number, z: number) => {
+    const icon = (loc: LocationId, kind: 'exit' | 'home', x: number, y: number, z: number, place: string, to: [LocationId, string]) => {
       const sp = makeDoorIcon(kind);
       sp.position.set(x, y, z);
-      loc.scene.add(sp);
-      this.doorIcons.push({ sprite: sp, y });
+      this.locations[loc].scene.add(sp);
+      this.doorIcons.push({ sprite: sp, y, loc, place, to });
     };
-    icon(this.locations.hesterRoom, 'exit', 0.45, 1.55, 1.5);
-    icon(this.locations.saltwharf, 'home', 11.5, 2.7, 8.95);
+    icon('hesterRoom', 'exit', 0.45, 1.55, 1.5, 'door', ['saltwharf', 'hester']);
+    icon('saltwharf', 'home', 11.5, 2.7, 8.95, 'hester', ['hesterRoom', 'door']);
     new Input(this.renderer.domElement, (x, y) => this.tap(x, y), (f) => this.rig.zoomBy(f));
 
     window.addEventListener('resize', () => this.resize());
@@ -320,6 +320,18 @@ export class Game {
     this.raycaster.setFromCamera(ndc, this.rig.camera);
 
     for (const n of this.npcs) n.held = false;
+    // The door icons: a generous target; tapping one walks you there and through.
+    for (const d of this.doorIcons) {
+      if (d.loc !== this.location.id) continue;
+      const pr = d.sprite.position.clone().project(this.rig.camera);
+      const sx = (pr.x * 0.5 + 0.5) * rect.width + rect.left;
+      const sy = (-pr.y * 0.5 + 0.5) * rect.height + rect.top;
+      if (Math.hypot(sx - clientX, sy - clientY) > 48) continue;
+      if (d.to[0] === 'saltwharf' || this.state!.housed) {
+        this.exitThrough(d.place, d.to);
+        return;
+      }
+    }
     if (this.location.id === 'saltwharf' && this.tully.rig.root.visible && this.raycaster.intersectObject(this.tully.rig.root, true).length) {
       this.player.walkTo(this.tully.cell);
       return;
@@ -392,6 +404,10 @@ export class Game {
     }
     const p = new THREE.Vector3();
     if (!this.raycaster.ray.intersectPlane(this.groundPlane, p)) return;
+    if (this.location.id === 'hesterRoom' && p.x < 0.9 && p.z > 0.6 && p.z < 2.4) {
+      this.exitThrough('door', ['saltwharf', 'hester']);
+      return;
+    }
     const cell = this.location.grid.nearestWalkable(Math.floor(p.x), Math.floor(p.z), 3);
     this.hud.hidePlace();
     if (!cell) {
@@ -400,6 +416,16 @@ export class Game {
     }
     if (this.player.walkTo(cell)) this.showMarker(cell.x + 0.5, cell.z + 0.5);
     else this.hud.toast("You can't find a way there.", 1400);
+  }
+
+  /** Walk to a door and straight through it. */
+  private exitThrough(placeId: string, to: [LocationId, string]): void {
+    const place = this.location.places.find((p) => p.id === placeId);
+    if (!place || !this.player) return;
+    this.hud.hidePlace();
+    const go = () => void this.goTo(to[0], to[1]);
+    if (this.player.walkTo(place.door, go)) this.showMarker(place.door.x + 0.5, place.door.z + 0.5);
+    else go();
   }
 
   private goToPlace(place: Place): void {
