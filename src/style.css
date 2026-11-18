@@ -404,3 +404,29 @@ button:disabled { cursor: default; }
 .coin3d, .watch3d { width: 40px; height: 40px; }
 .watch3d svg { width: 40px; height: 40px; }
 .goals { min-height: 36px; }
+
+/* --- A living world ------------------------------------------------------- */
+/* Unread letters: a lilac wax dot on the diary. */
+.journal-btn { position: relative; }
+.journal-btn[data-letters]:not([data-letters=""])::after { content: attr(data-letters); position: absolute; top: -2px; right: 6px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px; display: grid; place-items: center;
+  font: 600 12px var(--f-display); color: #f4f0ff; background: radial-gradient(circle at 35% 30%, #d2caf5, var(--lilac) 55%, var(--lilac-deep)); box-shadow: 0 0 10px rgba(155, 143, 208, .9); animation: pulse 1.8s infinite; }
+/* Danger: the edges darken and go ember; being followed tightens it. */
+.atmo .vignette { transition: background .8s; }
+.atmo.danger .vignette { background: radial-gradient(ellipse at 50% 48%, transparent 40%, rgba(40, 14, 8, .45) 80%, rgba(10, 4, 2, .8) 100%); }
+.atmo.stalked .vignette { background: radial-gradient(ellipse at 50% 48%, transparent 28%, rgba(60, 16, 8, .55) 70%, rgba(10, 4, 2, .9) 100%); animation: heartbeat 1s infinite; }
+@keyframes heartbeat { 0%, 100% { opacity: 1; } 15% { opacity: .75; } 30% { opacity: 1; } 45% { opacity: .82; } }
+/* A letter: pale writing paper, a hand in italic. */
+.journal-sheet.letter { color: #1c2638; clip-path: none; border-radius: 2px; transform: rotate(-.6deg);
+  background: repeating-linear-gradient(180deg, transparent 0 29px, rgba(70, 60, 122, .18) 29px 30px), radial-gradient(circle at 80% 15%, rgba(155, 143, 208, .2), transparent 50%), linear-gradient(180deg, #eef5fc, #d9e6f3);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, .65); outline: none; }
+.journal-sheet.letter h2 { color: #1f1a44; text-shadow: none; }
+.journal-sheet.letter .meta { color: var(--lilac-deep); font: italic 500 15px var(--f-display); }
+.journal-sheet.letter .modal-body p { font: italic 500 19px/1.45 var(--f-display); color: #1c2638; white-space: pre-line; }
+.journal-sheet.letter .modal button.primary, .journal-sheet.letter button.primary { color: var(--vane); background: linear-gradient(180deg, #5a4f92, var(--lilac-deep)); }
+/* The Gazette: a cheap broadsheet with stacked headlines. */
+.journal-sheet.gazette { text-align: center; }
+.journal-sheet.gazette h2 { font: 600 34px/1 var(--f-display); font-style: normal; letter-spacing: .02em; border-bottom: 3px double var(--rule); padding-bottom: 8px; }
+.journal-sheet.gazette .meta { font: 600 13px var(--f-display); letter-spacing: .2em; font-variant: small-caps; }
+.journal-sheet.gazette .modal-body p { font: 600 17px/1.25 var(--f-display); letter-spacing: .02em; padding: 10px 0; border-bottom: 1px solid var(--rule); margin: 0; }
+.journal-sheet.gazette .modal-body p:first-child { font-size: 21px; }
+.journal-sheet.gazette .modal-body p:last-child { color: var(--ember); border-bottom: 0; }

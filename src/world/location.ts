@@ -25,5 +25,9 @@ export interface Location {
   camera: { bounds: { minX: number; maxX: number; minZ: number; maxZ: number }; view: number; offsetZ: number };
   /** Fade buildings that hide the player. */
   fadeOccluders: boolean;
+  /** Street lamps, for safety near the light. */
+  lamps?: { x: number; z: number }[];
+  /** Optional objects shown only once owned (furniture), with the tiles they block. */
+  extras?: Record<string, { obj: THREE.Object3D; tiles: { x: number; z: number }[] }>;
   update(hour: number, t: number): void;
 }

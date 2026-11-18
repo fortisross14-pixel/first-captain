@@ -170,6 +170,48 @@ export function buildHesterRoom(): Location {
   place('pembleton', 'Mr. Pembleton', 'Late of this parish. Very late.', ghost, { x: 4, z: 2 }, { x: 5.5, z: 2.5 });
   grid.block(5, 2);
 
+  // --- Furniture you can buy (hidden until owned) ---------------------------
+  const extras: Location['extras'] = {};
+  const extra = (id: string, obj: THREE.Object3D, tiles: { x: number; z: number }[], placeDef?: [string, string, { x: number; z: number }, { x: number; z: number }]) => {
+    obj.visible = false;
+    if (placeDef) place(id, placeDef[0], placeDef[1], obj, placeDef[2], placeDef[3]);
+    else scene.add(obj);
+    extras[id] = { obj, tiles };
+  };
+  const rug = new THREE.Group();
+  rug.add(box(2.6, 0.03, 1.7, mat(0x6a2a32), 3.4, 0.02, 2.6));
+  rug.add(box(2.2, 0.035, 1.3, mat(0x2e3a6a), 3.4, 0.025, 2.6));
+  rug.add(box(1.2, 0.04, 0.5, mat(0xb08a3e), 3.4, 0.03, 2.6));
+  extra('rug', rug, []);
+  const curtains = new THREE.Group();
+  for (const dx of [-0.75, 0.75]) curtains.add(box(0.35, 1.7, 0.08, mat(0x5a1f2e), 3.5 + dx, 1.85, D - 0.09));
+  curtains.add(box(1.9, 0.12, 0.1, mat(C.brass, 0.4, 0.7), 3.5, 2.75, D - 0.09));
+  extra('curtains', curtains, []);
+  const shelf = new THREE.Group();
+  shelf.add(box(0.8, 1.9, 0.35, mat(C.woodDark), 5.5, 0.95, 4.78));
+  const bookCols = [0x6a2a2a, 0x2e4a3a, 0x3a3a6a, 0x7a5a2a, 0x4a2a4a, 0x2a3a4a];
+  for (let row = 0; row < 3; row++) for (let i = 0; i < 5; i++) {
+    shelf.add(box(0.12, 0.42, 0.25, mat(bookCols[(i + row * 2) % bookCols.length]), 5.22 + i * 0.14, 0.42 + row * 0.6, 4.72));
+  }
+  extra('bookshelf', shelf, [{ x: 5, z: 4 }], ['Bookshelf', 'Sermons, sea stories, a ladies\' almanac for 1849 and three volumes on the drainage of the Fens. Hester read them all.', { x: 5, z: 3 }, { x: 5.5, z: 4.8 }]);
+  const mirror = new THREE.Group();
+  mirror.add(box(0.5, 0.7, 0.05, mat(C.brass, 0.4, 0.7), 4.5, 1.95, D - 0.04));
+  mirror.add(box(0.4, 0.6, 0.03, new THREE.MeshStandardMaterial({ color: 0x9fb6cc, roughness: 0.05, metalness: 0.9, flatShading: true }), 4.5, 1.95, D - 0.07));
+  extra('mirror', mirror, [], ['Looking-glass', 'Speckled at the edges. It is kinder than most mirrors.', { x: 4, z: 3 }, { x: 4.5, z: 4.8 }]);
+  const bench = new THREE.Group();
+  bench.add(box(1.0, 0.08, 0.6, mat(C.wood), 3.5, 0.8, 4.55));
+  for (const dx of [-0.42, 0.42]) bench.add(box(0.08, 0.78, 0.5, mat(C.woodDark), 3.5 + dx, 0.39, 4.55));
+  bench.add(box(0.25, 0.12, 0.15, mat(0x8a6a4a), 3.3, 0.9, 4.5));
+  bench.add(box(0.05, 0.05, 0.3, mat(C.iron, 0.6, 0.5), 3.75, 0.86, 4.5));
+  extra('workbench', bench, [{ x: 3, z: 4 }], ['Workbench', 'A vice, a gouge, a pot of glue and a pile of river driftwood.', { x: 3, z: 3 }, { x: 3.5, z: 4.6 }]);
+  const cat = new THREE.Group();
+  const fur = mat(0x5a5a62);
+  cat.add(box(0.36, 0.18, 0.2, fur, 0.7, 0.72, 4.45));
+  cat.add(box(0.16, 0.15, 0.16, fur, 0.92, 0.8, 4.45));
+  for (const dz of [-0.05, 0.05]) cat.add(box(0.04, 0.06, 0.03, fur, 0.96, 0.9, 4.45 + dz));
+  cat.add(box(0.26, 0.04, 0.04, fur, 0.46, 0.68, 4.52));
+  extra('cat', cat, [], ['Grey cat', 'A thin grey cat who has decided this is her room now. She has not decided about you.', { x: 1, z: 3 }, { x: 0.8, z: 4.4 }]);
+
   // Lighting
   const hemi = new THREE.HemisphereLight(0xb0b8c8, 0x4a3828, 1.4);
   scene.add(hemi);
@@ -211,6 +253,7 @@ export function buildHesterRoom(): Location {
     },
     camera: { bounds: { minX: 3.5, maxX: 3.5, minZ: 4.8, maxZ: 4.8 }, view: 8.2, offsetZ: 0 },
     fadeOccluders: false,
+    extras,
     update,
   };
 }

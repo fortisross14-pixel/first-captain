@@ -8,7 +8,11 @@ A dark gothic life-sim RPG set in a fictional Victorian London (1871): work, ren
 - Latest audit: [docs/AUDIT_2026-11-18.md](docs/AUDIT_2026-11-18.md) · repeat it with `node scripts/audit-metrics.cjs` and the `game-audit` skill
 - Story and world design: the *Pale Lamps Story Bible* (Claude Docs)
 
-## Current state: M7, the Saltwharf vertical slice is complete
+## Current state: M8, a living world
+
+Gossip, jealousy and revenge; letters and the Gazette; readable danger, Black Jack Tully and Fight Night; furniture and outfits people react to.
+
+### Earlier: M7, the Saltwharf vertical slice
 
 **Play it:** https://fortisross14-pixel.github.io/first-captain/
 

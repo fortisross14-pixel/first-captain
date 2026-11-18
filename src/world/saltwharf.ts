@@ -311,6 +311,7 @@ export function buildSaltwharf(): Location {
     },
     camera: { bounds: { minX: 5, maxX: MAP_W - 5, minZ: 9, maxZ: MAP_H - 6 }, view: 14, offsetZ: 2 },
     fadeOccluders: true,
+    lamps: lamps.filter((l) => !l.vane).map((l) => ({ x: l.position.x, z: l.position.z })),
     update,
   };
 }

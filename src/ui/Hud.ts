@@ -109,6 +109,7 @@ export class Hud {
         </div>
         <div class="modal" hidden>
           <div class="journal-sheet gs ruled">
+            <p class="meta modal-sub" hidden></p>
             <h2></h2>
             <div class="stamp-slot"></div>
             <div class="modal-body"></div>
@@ -179,9 +180,15 @@ export class Hud {
   }
 
   /** A report the player must acknowledge, such as the end of a shift. */
-  modal(title: string, lines: string[], stamp = ''): Promise<void> {
+  modal(title: string, lines: string[], stamp = '', variant: '' | 'letter' | 'gazette' = '', subtitle = ''): Promise<void> {
     const m = this.q('.modal');
     m.querySelector('h2')!.textContent = title;
+    const sheet = m.querySelector('.journal-sheet') as HTMLElement;
+    sheet.classList.toggle('letter', variant === 'letter');
+    sheet.classList.toggle('gazette', variant === 'gazette');
+    const sub = m.querySelector('.modal-sub') as HTMLElement;
+    sub.textContent = subtitle;
+    sub.hidden = !subtitle;
     const slot = m.querySelector('.stamp-slot') as HTMLElement;
     slot.textContent = stamp;
     slot.className = `stamp-slot${stamp ? ' on' : ''}`;
@@ -330,6 +337,8 @@ export class Hud {
     const bagN = state.inventory.reduce((a, i) => a + i.qty, 0);
     const known = Object.values(state.relations ?? {}).filter((r) => r.met).length;
     this.q('.bag-count').textContent = String(bagN);
+    const unread = state.letters?.filter((l) => !l.read).length ?? 0;
+    this.q('.journal-btn').dataset.letters = unread ? String(unread) : '';
     this.q('.people-count').textContent = String(known);
     // Floating deltas for money and big need changes.
     if (this.lastMoney !== null && Math.abs(state.money - this.lastMoney) >= 0.005) {

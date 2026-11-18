@@ -1,6 +1,9 @@
 import type { Look } from '../actors/characterModel';
 import type { Employment } from './jobs';
 import type { Relation } from './social';
+import type { Outfit } from './items';
+import type { Letter } from './letters';
+import type { Fact, Pending } from './world';
 
 export const SKILLS = ['study', 'strength', 'arts', 'charisma', 'cunning', 'occult'] as const;
 export type SkillId = (typeof SKILLS)[number];
@@ -81,6 +84,16 @@ export interface GameState {
   lastWitnessDay: number;
   /** Owed to the hospital; taken from your next money. */
   debt: number;
+  outfit: Outfit;
+  facts: Fact[];
+  pending: Pending[];
+  letters: Letter[];
+  /** Fight Night: bouts won, and whether you hold the title. */
+  ladder: number;
+  champion: boolean;
+  /** The street the Gazette warns about today. */
+  hotZone: string;
+  hesterLetters: number;
   /** Progress toward the next level of each skill. */
   skillXp: Record<SkillId, number>;
   /** Employer id → first day they will hire you again. */
@@ -129,6 +142,14 @@ export function newGame(character: Character): GameState {
     lastRobberyDay: -1,
     lastWitnessDay: -1,
     debt: 0,
+    outfit: 'plain',
+    facts: [],
+    pending: [],
+    letters: [],
+    ladder: 0,
+    champion: false,
+    hotZone: 'court',
+    hesterLetters: 0,
     skillXp: zeroSkills(),
     bans: {},
   };

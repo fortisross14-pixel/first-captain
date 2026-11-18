@@ -134,6 +134,22 @@ The P1 list from `docs/AUDIT_2026-11-18.md`, done: money sinks and upgrades, rel
 
 The style chosen from four proposals is in `docs/STYLE_GUIDE.md`: torn midnight-paper panels, ticket buttons, a diary, flipping coins and Hester's pocket watch in the dock, celebrations for promotions, goals, skills and friends, floating money and need deltas, fight shake, drifting fog over the world, and the title screen condensing out of the fog.
 
+## M8 ✅ A living world
+
+- [x] **Memory and gossip** (`src/game/world.ts`): what you do becomes facts (courting, wronging, helping, promotions, Fight Night wins, eviction) known to whoever saw it. Every night gossip spreads through five circles (docks, the Copper Cup, the church, the street, the Kin), fastest through Ruby, Old Mag and Jem, barely at all through Rudd. The People screen shows what each person has heard.
+- [x] **Consequences:**
+  - courting two people: when one hears, they confront you next time you meet (apologise, lie, choose them, or brazen it out); avoid them for two days and they write instead;
+  - wronging someone the Kin protect (Silas, Ruby): an unsigned warning letter, then two of the Kin wait for you that night;
+  - friends of someone you wronged cool on you;
+  - friends hear of your promotion and write to congratulate you.
+- [x] **Letters** (`src/game/letters.ts`): read them at Hester's door; a lilac badge on the diary counts unread. Congratulations in each friend's voice, love notes, threats from rivals, hospital reminders, and Hester's own letters (story breadcrumbs, one a week via Mrs. Pell).
+- [x] **The Saltwharf Gazette** (£0.01 at the market): world news, local news drawn from what you've done, and a warning that names the night's most dangerous street, which really is doubled.
+- [x] **Readable danger** (`src/game/danger.ts`): seven zones with their own danger by hour; lamps halve it. Entering a dangerous street warns you and the screen's edges darken. Robberies are telegraphed: a figure follows you, and reaching a lamp or a door makes it turn away.
+- [x] **Black Jack Tully**, a named villain in the alley behind Moss's from 22:00: pay his toll, fight him (hard), or back away.
+- [x] **Fight Night** (`src/game/fightnight.ts`), Saturdays 20:00–23:00 at the boxing yard: five named opponents ending with Iron Nell Hartigan, purses, the crowd, the Gazette, and the title *the Saltwharf Terror*, which people greet you by.
+- [x] **Furniture** from Moss (rug, curtains, bookshelf, looking-glass, workbench) appears in Hester's room. Comfort tops up Social at home; the bookshelf boosts Study, the glass first impressions, the workbench makes trinkets for Arts & Crafts. A stray cat moves into a comfortable room. Pembleton comments on everything.
+- [x] **Outfits** from Rag & Bone (docker's jacket, Sunday best, respectable coat) change your 3D model, your odds with each class, and how likely you are to be robbed. Everyone you know reacts the first time they see you in new clothes; Lizzie recognises her own stitching.
+
 ## After the slice
 
 More districts, factions, the main story and the Fog Clock, businesses, marriage, children and aging.

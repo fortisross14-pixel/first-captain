@@ -27,6 +27,10 @@ export class Grid {
     if (this.inBounds(x, z)) this.blocked[z * this.w + x] = 1;
   }
 
+  unblock(x: number, z: number): void {
+    if (this.inBounds(x, z)) this.blocked[z * this.w + x] = 0;
+  }
+
   blockRect(x: number, z: number, w: number, d: number): void {
     for (let iz = z; iz < z + d; iz++) for (let ix = x; ix < x + w; ix++) this.block(ix, iz);
   }

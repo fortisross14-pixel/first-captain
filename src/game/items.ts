@@ -1,6 +1,9 @@
 import { addNeed } from './needs';
 import type { GameState, NeedId } from './state';
 
+export type Outfit = 'plain' | 'work' | 'sunday' | 'coat';
+export const OUTFIT_NAMES: Record<Outfit, string> = { plain: 'Your travelling clothes', work: "Docker's jacket", sunday: 'Sunday best', coat: 'Respectable coat' };
+
 export interface ItemDef {
   id: string;
   name: string;
@@ -12,6 +15,10 @@ export interface ItemDef {
   blurb: string;
   /** Bought once and kept for good, not carried in the bag. */
   upgrade?: boolean;
+  /** Furniture appears in Hester's room. */
+  furniture?: boolean;
+  /** Clothes you can wear. */
+  outfit?: Outfit;
 }
 
 export const ITEMS: Record<string, ItemDef> = {
@@ -30,7 +37,16 @@ export const ITEMS: Record<string, ItemDef> = {
   chest: { id: 'chest', name: 'Sea chest', price: 0.5, upgrade: true, blurb: 'Four more bag slots.' },
   gloves: { id: 'gloves', name: 'Dock gloves', price: 0.35, upgrade: true, blurb: 'Cargo Stacking plays as if your Strength were 3 higher.' },
   apron: { id: 'apron', name: "Barman's apron", price: 0.3, upgrade: true, blurb: 'Order Juggling plays as if your Charisma were 3 higher.' },
-  coat: { id: 'coat', name: 'Respectable coat', price: 1.2, upgrade: true, blurb: 'People take you more seriously: better odds in conversation.' },
+  coat: { id: 'coat', name: 'Respectable coat', price: 1.2, upgrade: true, outfit: 'coat', blurb: 'Wear it and people take you seriously: better odds in conversation. Robbers notice it too.' },
+  work: { id: 'work', name: "Docker's jacket", price: 0.3, upgrade: true, outfit: 'work', blurb: 'Dockers trust you in it; Cargo Stacking plays as if Strength were 1 higher.' },
+  sunday: { id: 'sunday', name: 'Sunday best', price: 0.8, upgrade: true, outfit: 'sunday', blurb: 'Respectable folk warm to you; the market mocks you; robbers think you are rich.' },
+  trinket: { id: 'trinket', name: 'Carved trinket', price: 0.12, blurb: 'A little ship carved from driftwood. Moss will buy it.' },
+  // Second-hand furniture from Moss, for Hester's room.
+  rug: { id: 'rug', name: 'Turkey rug', price: 0.4, upgrade: true, furniture: true, blurb: 'Comfort: the room tops up Social while you are home.' },
+  curtains: { id: 'curtains', name: 'Velvet curtains', price: 0.35, upgrade: true, furniture: true, blurb: 'Comfort; and darker nights mean deeper sleep.' },
+  bookshelf: { id: 'bookshelf', name: 'Bookshelf of old books', price: 0.7, upgrade: true, furniture: true, blurb: 'Read from it any time: half as much Study practice again.' },
+  mirror: { id: 'mirror', name: 'Looking-glass', price: 0.45, upgrade: true, furniture: true, blurb: 'Tidy yourself each morning: better first impressions all day.' },
+  workbench: { id: 'workbench', name: 'Workbench', price: 0.9, upgrade: true, furniture: true, blurb: 'Carve trinkets to sell: Arts & Crafts practice.' },
   scarf: { id: 'scarf', name: 'Wool scarf', price: 0.25, upgrade: true, blurb: 'Sleeping rough costs no Health and rests a little better.' },
   boots: { id: 'boots', name: 'Good boots', price: 0.6, upgrade: true, blurb: 'You walk a quarter faster.' },
 };
@@ -46,8 +62,8 @@ export interface Shop {
 export const SHOPS: Record<string, Shop> = {
   market: { name: 'Saltwharf Market', keeper: 'the stallholders', stock: ['potato', 'apple', 'bread', 'eelpie', 'meatpie'], buys: 0 },
   hester: { name: "Pell's Chandlery", keeper: 'Mrs. Pell', stock: ['candle', 'candle2', 'coal', 'bandage', 'tonic', 'mattress', 'chest'], buys: 0 },
-  clothier: { name: 'Rag & Bone Clothiers', keeper: 'Lizzie Barlow', stock: ['scarf', 'gloves', 'apron', 'boots', 'coat'], buys: 0 },
-  pawnbroker: { name: 'Moss the Pawnbroker', keeper: 'Moss', stock: [], buys: 0.4 },
+  clothier: { name: 'Rag & Bone Clothiers', keeper: 'Lizzie Barlow', stock: ['work', 'sunday', 'coat', 'scarf', 'gloves', 'apron', 'boots'], buys: 0 },
+  pawnbroker: { name: 'Moss the Pawnbroker', keeper: 'Moss', stock: ['rug', 'curtains', 'mirror', 'bookshelf', 'workbench'], buys: 0.4 },
 };
 
 /** Item slots: Strength makes for a bigger load. */
