@@ -229,11 +229,11 @@ export function buildHesterRoom(): Location {
 
   const update = (hour: number, t: number) => {
     const day = THREE.MathUtils.smoothstep(hour, 5.5, 7.5) * (1 - THREE.MathUtils.smoothstep(hour, 17, 19));
-    windowLight.intensity = 0.35 + day * 2.2;
+    windowLight.intensity = 0.8 + day * 2.0;
     windowLight.color.setHex(day > 0.3 ? 0xd8dce0 : 0x6f84b0);
     glass.emissiveIntensity = 0.15 + day * 0.8;
     glass.emissive.setHex(day > 0.3 ? 0xa8b4c0 : 0x2a3a5a);
-    hemi.intensity = 1.0 + day * 0.7;
+    hemi.intensity = 1.6 + day * 0.6;
     const night = 1 - day;
     candleLight.intensity = night * (9 + Math.sin(t * 9) * 0.6 + Math.sin(t * 23) * 0.4);
     (candle.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.3 + night * 2;

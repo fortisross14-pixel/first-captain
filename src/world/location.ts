@@ -12,6 +12,17 @@ export interface Place {
   faceTo: { x: number; z: number };
 }
 
+/** A building on the district map. */
+export interface MapRect {
+  x: number;
+  z: number;
+  w: number;
+  d: number;
+  label: string;
+  kind: 'shop' | 'house' | 'church' | 'open';
+  placeId?: string;
+}
+
 export interface Location {
   id: LocationId;
   name: string;
@@ -30,6 +41,8 @@ export interface Location {
   /** Optional objects shown only once owned (furniture), with the tiles they block. */
   extras?: Record<string, { obj: THREE.Object3D; tiles: { x: number; z: number }[] }>;
   update(hour: number, t: number): void;
+  /** The district map: buildings and street names. */
+  map?: { w: number; h: number; rects: MapRect[]; streets: { x: number; z: number; label: string }[] };
   /** Today's weather, for the light and the fog. */
   setWeather?(w: 'clear' | 'rain' | 'fog'): void;
 }

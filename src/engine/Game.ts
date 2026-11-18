@@ -46,6 +46,8 @@ import { buildHesterRoom } from '../world/hesterRoom';
 import type { Location, Place } from '../world/location';
 import { buildSaltwharf } from '../world/saltwharf';
 import { makeDoorIcon } from '../world/doorIcon';
+import { INTERIORS, buildInterior, isOpen } from '../world/interior';
+import { OLD_HOMES } from '../world/saltwharfHomes';
 import { Portraits } from '../ui/Portraits';
 import { CameraRig } from './CameraRig';
 import { Clock } from './Clock';
@@ -89,6 +91,8 @@ export class Game {
   private readonly life: Life;
   /** Your family at home in Hester's room, in the evenings. */
   private homeNpcs: Npc[] = [];
+  /** Keepers behind their counters, one per interior. */
+  private keepers = new Map<string, Npc>();
   private readonly portraits: Portraits;
   private readonly doorIcons: { sprite: THREE.Sprite; y: number; loc: LocationId; place: string; to: [LocationId, string] }[] = [];
   private ambientTimer = 4;
@@ -130,17 +134,27 @@ export class Game {
     this.renderer.shadowMap.enabled = !low;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.toneMappingExposure = 1.3;
     container.appendChild(this.renderer.domElement);
     // Drifting fog and a vignette over the world: cheap, compositor-only layers.
     container.insertAdjacentHTML('beforeend', '<div class="atmo" aria-hidden="true"><i class="fog f1"></i><i class="fog f2"></i><div class="vignette"></div></div>');
 
-    this.locations = { saltwharf: buildSaltwharf(), hesterRoom: buildHesterRoom() };
+    this.locations = { saltwharf: buildSaltwharf(), hesterRoom: buildHesterRoom() } as Record<LocationId, Location>;
+    for (const def of INTERIORS) this.locations[`int:${def.id}`] = buildInterior(def);
     this.location = this.locations.saltwharf;
     for (const r of RESIDENTS) {
       const npc = new Npc(r, this.locations.saltwharf.grid);
       this.locations.saltwharf.scene.add(npc.walker.rig.root);
       this.npcs.push(npc);
+    }
+    for (const def of INTERIORS) {
+      const res = AUTHORED_RESIDENTS.find((r) => r.id === def.keeper);
+      const loc = this.locations[`int:${def.id}`];
+      if (!res) continue;
+      const at = { x: Math.floor(def.w / 2), z: def.d - 1 };
+      const npc = new Npc({ ...res, home: at, schedule: [{ from: def.open[0], to: def.open[1], x: at.x, z: at.z, act: def.kind === 'tavern' ? 'count' : def.kind === 'office' ? 'read' : 'count' }] }, loc.grid);
+      loc.scene.add(npc.walker.rig.root);
+      this.keepers.set(def.id, npc);
     }
     this.life = new Life(this.locations.saltwharf.scene, this.locations.saltwharf.grid, {
       bubble: (x, z, name, text) => this.bubbleAt(x, z, name, text),
@@ -170,6 +184,7 @@ export class Game {
     this.hud.renderJournal = () => this.renderJournal();
     this.hud.onBag = () => this.openBag();
     this.hud.onPeople = () => this.openContacts();
+    this.hud.onMap = (v) => this.openMap(v);
     const soundLabel = () => `Sound: ${this.sound.enabled ? 'on' : 'off'}`;
     const qualityLabel = (q: string) => `Graphics: ${q}`;
     this.hud.setSettingLabels(soundLabel(), qualityLabel(this.quality));
@@ -199,6 +214,7 @@ export class Game {
     };
     icon('hesterRoom', 'exit', 0.45, 1.55, 1.5, 'door', ['saltwharf', 'hester']);
     icon('saltwharf', 'home', 11.5, 2.7, 8.95, 'hester', ['hesterRoom', 'door']);
+    for (const def of INTERIORS) icon(`int:${def.id}`, 'exit', def.w / 2, 1.3, 0.25, 'exit', ['saltwharf', def.id]);
     new Input(this.renderer.domElement, (x, y) => this.tap(x, y), (f) => this.rig.zoomBy(f));
 
     window.addEventListener('resize', () => this.resize());
@@ -303,7 +319,13 @@ export class Game {
     this.busy = true;
     this.hud.hidePlace();
     await this.hud.fade(true);
-    const e = this.locations[id].entries[entry];
+    const loc = this.locations[id];
+    let e = loc.entries[entry];
+    if (!e) {
+      // Coming out of a building: stand on its doorstep.
+      const pl = loc.places.find((p) => p.id === entry);
+      e = pl ? { x: pl.door.x + 0.5, z: pl.door.z + 0.5, faceX: pl.door.x + 0.5, faceZ: pl.door.z - 2 } : loc.entries[Object.keys(loc.entries)[0]];
+    }
     this.enterLocation(id, e.x, e.z, e.faceX, e.faceZ);
     await this.hud.fade(false);
     this.busy = false;
@@ -378,8 +400,9 @@ export class Game {
         }
       }
     }
-    if (this.location.id === 'hesterRoom') {
-      const vis = this.homeNpcs.filter((n) => n.visible);
+    if (this.location.id !== 'saltwharf') {
+      const keeper = this.location.id.startsWith('int:') ? this.keepers.get(this.location.id.slice(4)) : undefined;
+      const vis = [...this.homeNpcs, ...(keeper ? [keeper] : [])].filter((n) => n.visible && n.walker.rig.root.parent === this.location.scene);
       const hit = this.raycaster.intersectObjects(vis.map((n) => n.walker.rig.root), true)[0];
       if (hit) {
         let o: THREE.Object3D | null = hit.object;
@@ -408,6 +431,10 @@ export class Game {
       this.exitThrough('door', ['saltwharf', 'hester']);
       return;
     }
+    if (this.location.id.startsWith('int:') && p.z < 0.5) {
+      this.exitThrough('exit', ['saltwharf', this.location.id.slice(4)]);
+      return;
+    }
     const cell = this.location.grid.nearestWalkable(Math.floor(p.x), Math.floor(p.z), 3);
     this.hud.hidePlace();
     if (!cell) {
@@ -416,6 +443,118 @@ export class Game {
     }
     if (this.player.walkTo(cell)) this.showMarker(cell.x + 0.5, cell.z + 0.5);
     else this.hud.toast("You can't find a way there.", 1400);
+  }
+
+  /** A house door: who lives here, and knocking for them. */
+  private showHouse(place: Place): void {
+    const s = this.state!;
+    const key = place.id === 'tenements' ? 'court' : place.id.slice(6);
+    const day = dayIndex(s.minutes);
+    const h = Math.floor(this.clock.hour);
+    const people = s.people.filter((p) => p.alive && p.home === key && p.district === 'Saltwharf');
+    const met = (id: string) => !!s.relations?.[id]?.met;
+    const actions: Action[] = [];
+    for (const p of people) {
+      const age = ageOf(p, day);
+      const npc = this.npcs.find((n) => n.res.id === p.id);
+      const known = met(p.id);
+      const who = known ? this.nameOf(p.id) : age < 16 ? `the ${p.last} ${p.gender === 'man' ? 'boy' : 'girl'}` : p.gender === 'man' ? `Mr. ${p.last}` : p.spouse || p.widowed ? `Mrs. ${p.last}` : `Miss ${p.last}`;
+      if (age < 3) continue;
+      actions.push({
+        label: `Knock for ${known ? this.short(p.id) : who}${!known && people.filter((q) => q.last === p.last && q.gender === p.gender && ageOf(q, day) >= 16 === age >= 16).length > 1 ? ` (${age})` : ''}`,
+        onClick: () => {
+          this.hud.hidePlace();
+          sfx('drop');
+          const out = npc ? npc.visible || this.stopFor(npc.res, h) !== null : true;
+          if (!npc || out || h >= 22 || h < 7) {
+            const l = this.lifeOf(p.id);
+            void this.dialogue.say({ speaker: '', text: h >= 22 || h < 7 ? 'A light goes on upstairs, then off again. Nobody comes down at this hour.' : `Nobody answers.${known && l.now !== 'Indoors somewhere' ? ` ${l.now}.` : ''}` });
+            return;
+          }
+          npc.callOut(place.door);
+          npc.walker.faceToward({ x: this.player!.position.x, z: this.player!.position.y });
+          s.known[p.id] = { ...(s.known[p.id] ?? {}), home: true };
+          this.hud.toast(`${known ? this.first(p.id) : `Someone`} opens the door.`, 2000);
+          this.approach(npc);
+        },
+      });
+    }
+    const names = people.map((p) => (met(p.id) ? this.first(p.id) : null)).filter(Boolean);
+    const desc = people.length
+      ? `${place.description} The ${[...new Set(people.map((p) => p.last))].slice(0, 3).join(', ')} famil${new Set(people.map((p) => p.last)).size > 1 ? 'ies live' : 'y lives'} here${names.length ? ` (you know ${names.join(', ')})` : ''}.`
+      : `${place.description} Empty, and to let. A card in the window: "Apply Mr. Grubb."`;
+    if (place.id === 'tenements') actions.push(...this.streetActions('tenements', (label, fn, opts) => ({ label, onClick: () => { this.hud.hidePlace(); void fn(); }, ...opts })));
+    this.hud.showPlace({ ...place, description: desc }, actions);
+  }
+
+  // --- The map --------------------------------------------------------------
+
+  private openMap(view: 'london' | 'district'): void {
+    if (!this.state) return;
+    if (view === 'london') {
+      const D: [string, string, number, number, string, boolean][] = [
+        ['inkwell', 'Inkwell Row', 175, 70, 'North. Clerks, presses, scholars: the newspaper office, the library, the Society for Psychical Inquiry.', false],
+        ['greymourne', 'Greymourne Necropolis', 292, 62, 'North, on the hill. A gothic cemetery; undertakers and stonemasons. The dead do not all stay put.', false],
+        ['mayfield', 'Mayfield', 62, 140, 'West. Elite, glittering, cruel: tailors, jewellers, salons, the Velvet Court, and Vane House.', false],
+        ['market', 'Lantern Market', 185, 178, 'Centre. The busy hub: grocers, the music hall, the theatre and the omnibus depot.', false],
+        ['saltwharf', 'Saltwharf Docks', 292, 250, 'East, on the river. Poor, foggy and honest. You live here.', true],
+        ['hollow', 'Hollow Lane', 300, 330, 'East. The rookery: fences, fight pits, black markets, and the Kin\'s tunnels.', false],
+        ['ironmonger', 'Ironmonger\'s Cross', 145, 322, 'South. Smoke, steel and factories; the Lamplighters\' Guild hall.', false],
+        ['undercroft', 'The Undercroft', 190, 395, 'Beneath. The drowned streets of older Londons. Nothing for sale; things that want out.', false],
+      ];
+      const svg = `<svg viewBox="0 0 360 420" class="map-london">
+        <defs><pattern id="mh" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="rgba(201,162,74,.12)" stroke-width="1"/></pattern></defs>
+        <rect width="360" height="420" fill="#efe6d2"/><rect width="360" height="420" fill="url(#mh)"/>
+        <path d="M-10 215 C 60 190, 110 250, 180 225 S 300 200, 370 240 L 370 270 C 300 232, 250 262, 180 255 S 60 222, -10 245 Z" fill="#9fb0bc" stroke="#5a6a7a" stroke-width="1.2"/>
+        <text x="40" y="236" class="river">The Thames</text>
+        <path d="M120 375 Q190 350 260 375 Q 230 410 190 412 Q 140 410 120 375 Z" fill="none" stroke="#6a5a48" stroke-dasharray="4 4"/>
+        ${D.map(([id, name, x, y, , open]) => `<g data-id="${id}" class="dist${open ? ' open' : ''}"><rect x="${x - 52}" y="${y - 17}" width="104" height="34" rx="5"/><text x="${x}" y="${y + 1}">${name}</text>${open ? `<text x="${x}" y="${y + 13}" class="here">you are here</text>` : `<text x="${x}" y="${y + 13}" class="here">not yet open</text>`}</g>`).join('')}
+        <text x="180" y="24" class="title">London, 1871</text>
+      </svg>`;
+      this.hud.showMap('london', svg, (id) => {
+        const d = D.find((x) => x[0] === id);
+        if (!d) return null;
+        return { title: d[1], text: d[4] + (d[5] ? '' : ' (Coming in a later district.)'), go: d[5] ? () => this.openMap('district') : undefined };
+      });
+      return;
+    }
+    const loc = this.locations.saltwharf;
+    const m = loc.map!;
+    const K = 10;
+    const X = (x: number) => (m.w - x) * K;
+    const Y = (z: number) => (m.h - z) * K;
+    const where = (() => {
+      if (this.location.id === 'saltwharf') return this.player!.position;
+      const id = this.location.id === 'hesterRoom' ? 'hester' : this.location.id.slice(4);
+      const pl = loc.places.find((p) => p.id === id);
+      return pl ? new THREE.Vector2(pl.door.x + 0.5, pl.door.z + 0.5) : this.player!.position;
+    })();
+    const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+    const rects = m.rects.map((r) => `<g data-id="${r.placeId}" class="b ${r.kind}"><rect x="${X(r.x + r.w)}" y="${Y(r.z + r.d)}" width="${r.w * K}" height="${r.d * K}"/><text x="${X(r.x + r.w / 2)}" y="${Y(r.z + r.d / 2) + 3}">${esc(r.label)}</text></g>`).join('');
+    const svg = `<svg viewBox="0 0 ${m.w * K} ${m.h * K}" class="map-district">
+      <rect width="${m.w * K}" height="${m.h * K}" fill="#d8cfb8"/>
+      <rect x="0" y="${Y(4)}" width="${m.w * K}" height="${4 * K}" fill="#9fb0bc"/>
+      <rect x="0" y="${Y(7)}" width="${m.w * K}" height="${3 * K}" fill="#c8bca0"/>
+      <text x="${m.w * K / 2}" y="${Y(1.6)}" class="river">The Thames</text>
+      ${rects}
+      ${m.streets.map((t) => `<text x="${X(t.x) - (t.label.length * 2.6)}" y="${Y(t.z)}" class="street">${esc(t.label)}</text>`).join('')}
+      <circle cx="${X(where.x)}" cy="${Y(where.y)}" r="7" class="you"/><circle cx="${X(where.x)}" cy="${Y(where.y)}" r="13" class="you-ring"/>
+      <g class="compass" transform="translate(${m.w * K - 26} 30)"><circle r="16"/><path d="M0 12 L5 -2 L0 2 L-5 -2 Z"/><text y="-5">N</text></g>
+    </svg>`;
+    this.hud.showMap('district', svg, (id) => {
+      const pl = loc.places.find((p) => p.id === id);
+      if (!pl) return null;
+      const inside = INTERIORS.find((d) => d.id === id);
+      const hours = inside ? ` Open ${String(inside.open[0]).padStart(2, '0')}:00–${inside.open[1] === 24 ? 'midnight' : `${inside.open[1]}:00`}${isOpen(inside, this.clock.hour) ? ' (open now)' : ' (closed now)'}.` : '';
+      return {
+        title: pl.name, text: `${pl.description}${hours}`,
+        go: () => {
+          if (this.location.id === 'saltwharf') return this.goToPlace(pl);
+          const from = this.location.id === 'hesterRoom' ? 'hester' : this.location.id.slice(4);
+          void this.goTo('saltwharf', from).then(() => this.goToPlace(pl));
+        },
+      };
+    });
   }
 
   /** Walk to a door and straight through it. */
@@ -431,6 +570,16 @@ export class Game {
   private goToPlace(place: Place): void {
     const player = this.player!;
     this.hud.hidePlace();
+    const inside = this.location.id === 'saltwharf' ? INTERIORS.find((d) => d.id === place.id) : undefined;
+    if (inside && isOpen(inside, this.clock.hour)) {
+      if (player.walkTo(place.door, () => void this.goTo(`int:${inside.id}`, 'door'))) this.showMarker(place.door.x + 0.5, place.door.z + 0.5);
+      return;
+    }
+    if (place.id.startsWith('house:') || place.id === 'tenements') {
+      const ok = player.walkTo(place.door, () => { player.faceToward(place.faceTo); this.showHouse(place); });
+      if (ok) this.showMarker(place.door.x + 0.5, place.door.z + 0.5);
+      return;
+    }
     const ok = player.walkTo(place.door, () => {
       player.faceToward(place.faceTo);
       this.hud.showPlace(place, this.actionsFor(place));
@@ -458,8 +607,31 @@ export class Game {
       ...opts,
     });
 
+    if (this.location.id.startsWith('int:')) {
+      const bid = this.location.id.slice(4);
+      if (place.id === 'exit') return [act('Go out to the street', () => this.goTo('saltwharf', bid), { primary: true })];
+      if (place.id === 'stairs') return [act('Up to your room', () => s.housed ? this.goTo('hesterRoom', 'door') : this.hud.toast('Grubb has changed the lock on your door.'), { primary: true })];
+      if (place.id === 'counter') {
+        const keeper = this.keepers.get(bid);
+        const acts = this.streetActions(bid, act).filter((a) => !a.label.startsWith('Go up'));
+        if (keeper?.visible) acts.push(act(`Talk to ${this.short(keeper.res.id)}`, () => this.approach(keeper)));
+        return acts;
+      }
+    }
     if (this.location.id === 'saltwharf') {
-      switch (place.id) {
+      if (place.id === 'tenements' || place.id.startsWith('house:')) return [];
+      if (place.id === 'church') return [act('Father Hale is usually at the market cross in the mornings', () => undefined, { disabled: true })];
+      const inside = INTERIORS.find((d) => d.id === place.id);
+      const closed = inside && !isOpen(inside, this.clock.hour) ? [act(`Closed. Opens at ${String(inside.open[0]).padStart(2, '0')}:00`, () => undefined, { disabled: true })] : [];
+      return [...closed, ...this.streetActions(place.id, act)];
+    }
+    return this.roomActions(place, act);
+  }
+
+  private streetActions(id: string, act: (label: string, fn: () => void | Promise<void>, opts?: Partial<Action>) => Action): Action[] {
+    const s = this.state!;
+    {
+      switch (id) {
         case 'hester':
           return [
             s.housed
@@ -518,7 +690,10 @@ export class Game {
           return [];
       }
     }
+  }
 
+  private roomActions(place: Place, act: (label: string, fn: () => void | Promise<void>, opts?: Partial<Action>) => Action): Action[] {
+    const s = this.state!;
     switch (place.id) {
       case 'bed':
         return [
@@ -1399,11 +1574,16 @@ export class Game {
     const s = this.state!;
     if (!s.people.length) s.people = [...authoredRecords(AUTHORED_RESIDENTS), ...generatePopulation(Math.floor(Math.random() * 1e9))];
     const day = dayIndex(s.minutes);
+    // Addresses from older saves move into the new houses.
+    for (const p of s.people) {
+      const opts = OLD_HOMES[p.home];
+      if (opts) p.home = opts[[...p.last].reduce((a, c) => a + c.charCodeAt(0), 0) % opts.length];
+    }
     const cast: Resident[] = [];
     for (const res of AUTHORED_RESIDENTS) {
       const p = this.rec(res.id);
       if (p && !p.alive) continue;
-      if (p && p.home !== (AUTHORED[res.id]?.home ?? p.home)) res.home = HOMES[p.home]?.door ?? res.home;
+      if (p) res.home = HOMES[p.home]?.door ?? res.home;
       cast.push(res);
     }
     for (const p of s.people) {
@@ -2148,13 +2328,12 @@ export class Game {
       const pct = Math.max(0, Math.min(100, st));
       const blockers = joinBlockers(s, f, this.respectable());
       const status = mine
-        ? `<b>${esc(def.ranks[rankIn(s, f)])}</b> · this week: ${esc(def.duty)}${F.dutyDone ? ' (done)' : ` (by ${this.clock.formatShortDate(new Date(1871, 9, 1 + F.dutyDue))})`}${f === 'kin' && F.debtor ? ` · collect from ${esc(this.nameOf(F.debtor))}` : ''}`
-        : (F.expelled[f] ?? -1) > day ? 'They threw you out.' : blockers.length ? `To join: ${esc(blockers.join(', '))}` : f === 'society' ? 'By invitation only.' : `You could join: ask ${esc(def.members.map((m) => this.short(m)).join(' or '))}.`;
+        ? `<b>${esc(def.ranks[rankIn(s, f)])}</b>. ${F.dutyDone ? 'Duty done this week.' : `Duty: ${esc(f === 'kin' && F.debtor ? `collect from ${this.short(F.debtor)}` : def.duty.split(':')[0].split('(')[0].trim())}.`}`
+        : (F.expelled[f] ?? -1) > day ? 'They threw you out.' : blockers.length ? `To join: ${esc(blockers.slice(0, 2).join(', '))}` : f === 'society' ? 'By invitation only.' : `Ask ${esc(def.members.slice(0, 2).map((m) => this.short(m)).join(' or '))} to join.`;
       return `<div class="skillrow"><div class="sk-h"><span>${esc(def.name)}${mine ? ' ❦' : ''}</span><b>${st}</b></div><div class="sk-bar"><i style="width:${pct}%"></i></div>
         <div class="sk-sub">${status}</div>
-        <div class="sk-sub">${esc(def.cls === 'low' ? 'Low' : def.cls === 'middle' ? 'Middling' : 'High')} · rules: ${esc(def.rules.join('; '))}</div>
-        <div class="sk-sub">Perks: ${esc(def.perks.join('; '))}</div></div>`;
-    }).join('') + '<p class="meta">One faction at a time. Joining one cools its rivals. Standing comes from what you do and how members feel about you.</p>';
+        <details><summary>Rules and perks</summary><p>${esc(def.rules.join('. '))}.</p><p>${esc(def.perks.join('. '))}.</p></details></div>`;
+    }).join('') + '<p class="meta">One at a time. Joining one cools its rivals.</p>';
   }
 
   // --- A family of your own --------------------------------------------------
@@ -2451,8 +2630,20 @@ export class Game {
     });
   }
 
-  /** Who of your family is home right now. */
+  /** Who of your family is home right now; who is behind the counter. */
   private updateHome(dt: number): void {
+    if (this.location.id.startsWith('int:') && this.state) {
+      const id = this.location.id.slice(4);
+      const k = this.keepers.get(id);
+      const def = INTERIORS.find((d) => d.id === id)!;
+      if (k) {
+        const p = this.rec(k.res.id);
+        const day = dayIndex(this.state.minutes);
+        const there = isOpen(def, this.clock.hour) && (!p || p.alive) && !((this.state.life.sick[k.res.id] ?? -1) >= day) && !((this.state.life.missing[k.res.id] ?? -1) >= day);
+        k.follow(there ? k.res.schedule[0] : null, false);
+        k.update(dt, this.elapsed);
+      }
+    }
     if (this.location.id !== 'hesterRoom' || !this.state) return;
     const h = Math.floor(this.clock.hour);
     for (const n of this.homeNpcs) {

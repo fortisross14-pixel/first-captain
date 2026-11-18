@@ -43,6 +43,7 @@ const pieIcon = (i: PieIcon) => `<svg viewBox="0 0 24 24" width="26" height="26"
 
 /** Engraved emblems for the dock tokens. */
 const TOKEN = {
+  map: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z"/><path d="M9 4v14M15 6v14"/></svg>',
   journal: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h6a2 2 0 0 1 2 2v13a2 2 0 0 0-2-2H4z"/><path d="M20 5h-6a2 2 0 0 0-2 2v13a2 2 0 0 1 2-2h6z"/></svg>',
   bag: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9h12l-1 11H7z"/><path d="M9 9V7a3 3 0 0 1 6 0v2"/><path d="M9.5 13h5"/></svg>',
   people: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3.5 19c.6-3.6 2.8-5.2 5.5-5.2s4.9 1.6 5.5 5.2"/><path d="M15.5 5.6a3 3 0 0 1 0 5.2M17.5 14.2c1.6.6 2.6 2.1 3 4.8"/></svg>',
@@ -72,6 +73,10 @@ export class Hud {
       `<div class="hud" hidden>
         <div class="topbar gs">
           <div class="tb-time"><div class="time"></div><div class="date"></div></div>
+          <button class="tok watch speed" aria-label="Change time speed">
+            <span class="hex" aria-hidden="true"><span class="hexin">${TOKEN.watch}</span></span>
+            <span class="lab speed-lab">1×</span>
+          </button>
           <div class="tb-needs">${NEEDS.map(
             (n) => `<div class="need" data-need="${n}" role="img" aria-label="${NEED_NAMES[n]}" title="${NEED_NAMES[n]}">${ICONS[n]}<div class="bar"><i></i></div></div>`,
           ).join('')}</div>
@@ -94,11 +99,19 @@ export class Hud {
             <span class="hex" aria-hidden="true"><span class="hexin">${TOKEN.people}</span><b class="cnt people-count"></b></span>
             <span class="lab">People</span>
           </button>
-          <button class="tok watch speed" aria-label="Change time speed">
-            <span class="hex" aria-hidden="true"><span class="hexin">${TOKEN.watch}</span></span>
-            <span class="lab speed-lab">1×</span>
+          <button class="tok map-btn" aria-label="Open the map">
+            <span class="hex" aria-hidden="true"><span class="hexin">${TOKEN.map}</span></span>
+            <span class="lab">Map</span>
           </button>
         </nav>
+        <div class="mapview" hidden>
+          <div class="map-sheet">
+            <div class="tabs map-tabs"><button data-map="london" aria-selected="false">London</button><button data-map="district" aria-selected="true">Saltwharf</button></div>
+            <div class="map-body"></div>
+            <div class="map-card"></div>
+            <div class="actions"><button class="primary map-close">Close</button></div>
+          </div>
+        </div>
         <div class="toast gs" role="status"></div>
         <div class="floaters" aria-hidden="true"></div>
         <div class="celebrate" aria-live="polite"></div>
@@ -194,6 +207,15 @@ export class Hud {
       window.setTimeout(() => this.onPeople?.(), 220);
     });
     this.q('.list-close').addEventListener('click', () => (this.q('.listsheet').hidden = true));
+    const mapBtn = this.q('.map-btn');
+    mapBtn.addEventListener('click', () => {
+      play(mapBtn, 'flip', 800);
+      sfx('page');
+      this.onMap?.('district');
+    });
+    this.q('.map-close').addEventListener('click', () => (this.q('.mapview').hidden = true));
+    this.el.querySelectorAll<HTMLButtonElement>('.map-tabs button').forEach((b) => b.addEventListener('click', () => { sfx('page'); this.onMap?.(b.dataset.map as 'london' | 'district'); }));
+    this.q('.mapview').addEventListener('click', (e) => { if (e.target === this.q('.mapview')) this.q('.mapview').hidden = true; });
     // Tap the dark backdrop around a sheet to close it.
     for (const sel of ['.journal:not(.listsheet)', '.listsheet']) {
       const el = this.q(sel);
@@ -213,7 +235,7 @@ export class Hud {
 
   /** True while a menu covers the world and taps should not reach it. */
   get blocking(): boolean {
-    return !this.q('.pie').hidden || !this.q('.journal').hidden || !this.q('.modal').hidden || !this.q('.listsheet').hidden || this.q('.celebrate').children.length > 0;
+    return !this.q('.mapview').hidden || !this.q('.pie').hidden || !this.q('.journal').hidden || !this.q('.modal').hidden || !this.q('.listsheet').hidden || this.q('.celebrate').children.length > 0;
   }
 
   /** A report the player must acknowledge, such as the end of a shift. */
@@ -259,6 +281,38 @@ export class Hud {
 
   renderJournal: (() => void) | null = null;
   onBag: (() => void) | null = null;
+  onMap: ((view: 'london' | 'district') => void) | null = null;
+
+  /** The map: an SVG, a card for what you tapped, and a button to go there. */
+  showMap(view: 'london' | 'district', svg: string, onPick: (id: string) => { title: string; text: string; go?: () => void } | null): void {
+    const m = this.q('.mapview');
+    m.querySelectorAll<HTMLButtonElement>('.map-tabs button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.map === view)));
+    const body = m.querySelector('.map-body') as HTMLElement;
+    body.innerHTML = svg;
+    const card = m.querySelector('.map-card') as HTMLElement;
+    card.innerHTML = view === 'london' ? '<b>London, 1871</b><span>Tap a district.</span>' : '<b>Saltwharf Docks</b><span>Tap a building to walk there.</span>';
+    body.querySelectorAll<SVGElement>('[data-id]').forEach((el) => el.addEventListener('click', () => {
+      const info = onPick(el.dataset.id!);
+      if (!info) return;
+      sfx('click');
+      body.querySelectorAll('.picked').forEach((x) => x.classList.remove('picked'));
+      el.classList.add('picked');
+      card.replaceChildren();
+      const b = document.createElement('b');
+      b.textContent = info.title;
+      const t = document.createElement('span');
+      t.textContent = info.text;
+      card.append(b, t);
+      if (info.go) {
+        const go = document.createElement('button');
+        go.className = 'primary';
+        go.textContent = view === 'london' ? 'Open' : 'Walk there';
+        go.addEventListener('click', () => { if (view !== 'london') m.hidden = true; info.go!(); });
+        card.appendChild(go);
+      }
+    }));
+    m.hidden = false;
+  }
   onPeople: (() => void) | null = null;
   /** Toggle handlers return the button's new label. */
   onSound: (() => string) | null = null;

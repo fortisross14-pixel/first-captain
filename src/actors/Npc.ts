@@ -123,6 +123,15 @@ export class Npc {
     return ok;
   }
 
+  /** Come out of the house when someone knocks: stand at the door until spoken to. */
+  callOut(cell: { x: number; z: number }): void {
+    this.walker.teleport(this.grid, cell.x + 0.5, cell.z + 0.5);
+    this.walker.rig.root.visible = true;
+    this.held = true;
+    this.visiting = false;
+    this.stopKey = '';
+  }
+
   release(): void {
     this.visiting = false;
     this.stopKey = '';

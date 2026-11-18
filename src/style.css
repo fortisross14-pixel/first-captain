@@ -390,7 +390,7 @@ button:disabled { cursor: default; }
 
 /* --- Atmosphere over the 3D world -------------------------------------------- */
 .atmo { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 1; }
-.atmo .vignette { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 48%, transparent 55%, rgba(4, 6, 10, .55) 100%); }
+.atmo .vignette { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 48%, transparent 62%, rgba(4, 6, 10, .38) 100%); }
 .atmo .fog { position: absolute; left: -50%; width: 200%; height: 45%; opacity: .5; will-change: transform;
   background: radial-gradient(ellipse 30% 60% at 20% 50%, rgba(190, 215, 240, .10), transparent 70%), radial-gradient(ellipse 25% 50% at 60% 40%, rgba(190, 215, 240, .08), transparent 70%), radial-gradient(ellipse 30% 60% at 90% 60%, rgba(190, 215, 240, .09), transparent 70%); }
 .atmo .f1 { bottom: 0; animation: drift 46s linear infinite; }
@@ -728,3 +728,60 @@ button:disabled { cursor: default; }
 .tok.watch.stopped .lab { color: #bfe4ff; }
 @keyframes watchcold { 50% { filter: drop-shadow(0 0 10px #bfe4ff) brightness(.8); } }
 .fogclock i { background: linear-gradient(90deg, #8a96a0, #4a5a6a 60%, #1a2230) !important; }
+
+/* --- The speed watch in the top bar; the map ---------------------------------------- */
+.topbar .tok.watch { min-width: 0; min-height: 0; padding: 0 2px; gap: 0; margin-left: -4px; display: grid; justify-items: center; }
+.topbar .tok.watch .hex { width: 40px; height: 35px; }
+.topbar .tok.watch .hexin { width: 34px; height: 30px; }
+.topbar .tok.watch .hexin svg { width: 28px; height: 28px; }
+.topbar .tok.watch .lab { font: 400 11px/1 var(--f-display); margin-top: 1px; }
+.topbar { gap: 6px; }
+@media (max-width: 380px) { .topbar .tok.watch .lab { display: none; } }
+.mapview { position: absolute; inset: 0; z-index: 30; display: grid; place-items: center; padding: 14px; background: radial-gradient(ellipse at center, rgba(4, 7, 14, .55), rgba(4, 7, 14, .88)); animation: fadein .25s ease-out both; }
+.map-sheet { width: min(100%, 520px); max-height: 100%; overflow: auto; padding: 14px 14px 12px; color: var(--ink); background: var(--hatch-ink), linear-gradient(180deg, #f7f0df, var(--ivory));
+  box-shadow: inset 0 0 0 1px rgba(122, 90, 30, .5), 0 0 0 8px var(--sheet), 0 0 0 9px var(--gilt), 0 0 0 12px var(--sheet-lo), 0 18px 40px rgba(0, 0, 0, .7); border-radius: 3px; animation: paste .35s ease-out both; }
+.map-tabs { margin-top: 0; }
+.map-body svg { display: block; width: 100%; height: auto; max-height: 62vh; margin-top: 8px; border: 1px solid rgba(122, 90, 30, .6); }
+.map-body text { font-family: var(--f-display); text-anchor: middle; fill: #2a2620; pointer-events: none; }
+.map-body .title { font: 400 22px var(--f-script); fill: #1a2a52; }
+.map-body .river { font-style: italic; font-size: 13px; fill: #3a4a5a; text-anchor: start; }
+.map-body .dist rect { fill: #e4d9c0; stroke: #8a7a5a; stroke-width: 1; }
+.map-body .dist text { font-size: 11px; }
+.map-body .dist .here { font-size: 8.5px; font-style: italic; fill: #7a6a4a; }
+.map-body .dist.open rect { fill: #17264a; stroke: var(--gilt); stroke-width: 2; filter: drop-shadow(0 0 6px rgba(201, 162, 74, .7)); }
+.map-body .dist.open text { fill: var(--gilt-hi); }
+.map-body .dist.open .here { fill: #e8d6a8; }
+.map-body [data-id] { cursor: pointer; }
+.map-body .picked rect { stroke: #a2261c !important; stroke-width: 3 !important; }
+.map-body .b rect { stroke: #3a2e22; stroke-width: 1; }
+.map-body .b.shop rect { fill: #c9a24a; }
+.map-body .b.house rect { fill: #9a7a5a; }
+.map-body .b.church rect { fill: #a9b3c6; }
+.map-body .b.open rect { fill: rgba(122, 90, 30, .15); stroke-dasharray: 4 3; }
+.map-body .b text { font-size: 10px; fill: #1b1a24; }
+.map-body .b.house text { font-size: 9px; fill: #f0e6d0; }
+.map-body .street { font-size: 11px; font-style: italic; fill: #5a4a32; text-anchor: start; }
+.map-body .you { fill: #a2261c; stroke: #fff; stroke-width: 2; }
+.map-body .you-ring { fill: none; stroke: #a2261c; stroke-width: 2; animation: youpulse 1.6s ease-out infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes youpulse { from { opacity: 1; transform: scale(.6); } to { opacity: 0; transform: scale(1.6); } }
+.map-body .compass circle { fill: rgba(239, 230, 210, .9); stroke: #8a6a2a; }
+.map-body .compass path { fill: #1a2a52; }
+.map-body .compass text { font-size: 9px; fill: #1a2a52; }
+.map-card { display: grid; gap: 4px; margin-top: 10px; padding: 8px 2px 2px; border-top: 1px solid rgba(201, 162, 74, .6); }
+.map-card b { font: 400 20px var(--f-sc); color: var(--sheet); }
+.map-card span { font: italic 400 14.5px/1.35 var(--f-body); color: #3a3428; }
+.map-card button { justify-self: start; margin-top: 4px; }
+.mapview .actions { display: flex; justify-content: flex-end; margin-top: 10px; }
+@media (min-aspect-ratio: 5/4) {
+  .mapview { padding-right: calc(112px + env(safe-area-inset-right)); }
+  .map-sheet { width: min(72vw, 760px); display: grid; grid-template-columns: 1.6fr 1fr; gap: 0 14px; }
+  .map-sheet .map-tabs, .map-sheet .map-body { grid-column: 1; }
+  .map-sheet .map-card { grid-column: 2; grid-row: 1 / span 3; align-content: start; border-top: 0; border-left: 1px solid rgba(201, 162, 74, .6); padding: 4px 0 0 12px; margin: 0; }
+  .map-sheet .actions { grid-column: 2; }
+  .map-body svg { max-height: 74vh; }
+}
+.map-card button, .mapview .actions button { min-height: 44px; padding: 0 18px; border-radius: 3px; font: 400 16px var(--f-display); color: #0e1a36;
+  background: radial-gradient(ellipse at 40% 20%, #fbecbd, #d9b862 45%, #a07a32 100%); box-shadow: inset 0 0 0 1px #7a5a1e, 0 2px 5px rgba(0, 0, 0, .4); }
+.journal-body details { margin: 2px 0 0; font: italic 400 13px/1.35 var(--f-body); color: #5a4e38; }
+.journal-body details summary { cursor: pointer; color: #6a4e1a; font-style: normal; }
+.journal-body details p { margin: 3px 0; font-size: 13px; }

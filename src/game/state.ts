@@ -46,7 +46,7 @@ export interface Needs {
 export type NeedId = keyof Needs;
 export const NEED_NAMES: Record<NeedId, string> = { hunger: 'Hunger', rest: 'Rest', social: 'Social', health: 'Health' };
 
-export type LocationId = 'saltwharf' | 'hesterRoom';
+export type LocationId = 'saltwharf' | 'hesterRoom' | `int:${string}`;
 export type TutorialStep = 'intro' | 'explore' | 'done';
 
 export interface GameState {

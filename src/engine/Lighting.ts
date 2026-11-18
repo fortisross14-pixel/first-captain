@@ -55,22 +55,22 @@ export class Lighting {
     const ang = ((hour - 6) / 12) * Math.PI;
     const c = this.sun.target.position;
     this.sun.position.set(c.x + Math.cos(ang) * 30, 8 + Math.sin(Math.max(0.15, ang)) * 30, c.z - 18);
-    this.sun.intensity = (0.55 + day * 1.7) * (1 - this.wet * 0.4 - this.murk * 0.3);
+    this.sun.intensity = (0.95 + day * 1.6) * (1 - this.wet * 0.4 - this.murk * 0.3);
     this.sun.color.setHSL(0.09, 0.5 * dusk + 0.15, 0.75 - 0.15 * dusk);
-    if (night > 0.6) this.sun.color.setHex(0x7f96c0); // moonlight
+    if (night > 0.6) this.sun.color.setHex(0x9fb2d8); // moonlight
 
-    this.hemi.intensity = 1.0 + day * 0.6;
-    this.hemi.color.setHSL(0.6, 0.25 - day * 0.1, 0.42 + day * 0.33);
+    this.hemi.intensity = 1.55 + day * 0.45;
+    this.hemi.color.setHSL(0.6, 0.22 - day * 0.08, 0.55 + day * 0.22);
 
     const dayFog = new THREE.Color(0x8a928e);
     const duskFog = new THREE.Color(0x8a6a5a);
-    const nightFog = new THREE.Color(0x1a2230);
+    const nightFog = new THREE.Color(0x263044);
     this.sky.copy(nightFog).lerp(dayFog, day).lerp(duskFog, Math.min(0.6, dusk * 0.5));
     this.sky.lerp(new THREE.Color(0x5a6268), this.wet * 0.35 * day).lerp(new THREE.Color(night > 0.5 ? 0x2a3038 : 0xa8aca8), this.murk * 0.5);
     this.fog.color.copy(this.sky);
     // Fog thickens at night and creeps closer to the camera; a fog bank closes right in.
-    this.fog.near = this.cameraDistance - 6 - night * 4 - this.murk * 10;
-    this.fog.far = this.cameraDistance + 34 - night * 14 - this.murk * 20 - this.wet * 6;
+    this.fog.near = this.cameraDistance - 4 - night * 2 - this.murk * 10;
+    this.fog.far = this.cameraDistance + 40 - night * 8 - this.murk * 20 - this.wet * 6;
 
     const lampGlow = Math.max(smooth(16.8, 18.5, hour), 1 - smooth(5.8, 7.5, hour));
     glow.gasLamp.emissiveIntensity = lampGlow * 2.4;
@@ -78,7 +78,7 @@ export class Lighting {
     glow.windowLit.emissiveIntensity = 0.1 + lampGlow * 0.9;
     for (const l of this.lampLights) {
       const flicker = l.vane ? 1 : 0.92 + Math.sin(t * 7 + l.seed) * 0.04 + Math.sin(t * 13 + l.seed * 3) * 0.04;
-      l.light.intensity = lampGlow * (l.vane ? 26 : 18) * flicker;
+      l.light.intensity = lampGlow * (l.vane ? 30 : 24) * flicker;
     }
   }
 }

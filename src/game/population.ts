@@ -3,6 +3,7 @@ import type { Activity, Resident, Stop } from './residents';
 import type { Gender, Attraction, GameState } from './state';
 import type { SocialClass, Trait } from './social';
 import type { Voice } from './voices';
+import { HOME_DOORS, HOUSES } from '../world/saltwharfHomes';
 
 /**
  * A city of lives. Everyone in London the game knows about: the residents written by
@@ -48,19 +49,7 @@ export const SALTWHARF_CAP = 56;
 export const ageOf = (p: { birth: number }, day: number) => Math.floor((day - p.birth) / DAYS_PER_YEAR);
 
 /** Homes in Saltwharf: the door they go in by. */
-export const HOMES: Record<string, { name: string; door: { x: number; z: number } }> = {
-  court: { name: 'Gull Court tenements', door: { x: 3, z: 16 } },
-  rope: { name: 'a room on Rope Walk', door: { x: 14, z: 16 } },
-  backw: { name: 'Back Lane, the west end', door: { x: 9, z: 24 } },
-  backe: { name: 'Back Lane, by the yard', door: { x: 21, z: 24 } },
-  cup: { name: 'rooms over the Copper Cup', door: { x: 18, z: 8 } },
-  moss: { name: 'rooms over Moss\'s', door: { x: 19, z: 16 } },
-  rag: { name: 'the attic over Rag & Bone', door: { x: 24, z: 16 } },
-  hester: { name: 'Hester\'s building', door: { x: 11, z: 8 } },
-  church: { name: 'St. Botolph\'s clergy house', door: { x: 0, z: 12 } },
-  hollow: { name: 'Hollow Lane', door: { x: 31, z: 12 } },
-  arch: { name: 'the Gull Court archway', door: { x: 7, z: 21 } },
-};
+export const HOMES = HOME_DOORS;
 
 export interface JobKind {
   name: string;
@@ -246,7 +235,7 @@ export function generatePopulation(seed: number): PersonRec[] {
   };
 
   // Saltwharf: about 32 generated, alongside the 16 written by hand.
-  const homes = ['court', 'court', 'court', 'court', 'rope', 'rope', 'backw', 'backw', 'backe', 'backe', 'court', 'rope', 'backw', 'backe', 'court', 'backe'];
+  const homes = ['court', 'court', 'hester', ...HOUSES.map((x) => x.key)];
   for (const h of homes) {
     if (out.length >= 32) break;
     household('Saltwharf', h);

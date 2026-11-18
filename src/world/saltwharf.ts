@@ -1,18 +1,23 @@
 import * as THREE from 'three';
 import { Lighting } from '../engine/Lighting';
 import { Grid } from './grid';
-import type { Location, Place } from './location';
+import type { Location, MapRect, Place } from './location';
+import { HOUSES } from './saltwharfHomes';
 import { mergeSubtree } from './merge';
 import { C, mat } from './materials';
 import {
   makeBarge, makeBarrel, makeBollard, makeBuilding, makeCrateStack, makeFence, makeLamp,
-  makePawnBalls, makePunchingBag, makeStall, rng, type BuildingStyle,
+  makePawnBalls, makePunchingBag, makeSign, makeStall, rng, type BuildingStyle,
 } from './props';
 
-export const MAP_W = 32;
-export const MAP_H = 26;
+export const MAP_W = 44;
+export const MAP_H = 40;
 
-/** Rows 0–3 are the Thames, 4–6 the quay, 7–8 Quay Street, 9–14 the north block, 15–16 Rope Walk, 17–22 the south block. */
+/**
+ * Rows 0–3 are the Thames, 4–6 the quay, 7–8 Quay Street, 9–14 the north block, 15–16 Rope Walk,
+ * 17–22 the south block, 23–26 Back Lane, 27–31 its houses, 32–34 Church Street, 35–39 St. Botolph's and more houses.
+ * The east end (x 31–43) holds Hollow Lane's mouth and more houses.
+ */
 const WATER_ROWS = 4;
 const QUAY_END = 7;
 
@@ -152,6 +157,7 @@ export function buildSaltwharf(): Location {
   }
 
   // --- Buildings ----------------------------------------------------------
+  const mapRectsLater: MapRect[] = [];
   BUILDINGS.forEach((def, i) => {
     const doorOffset = def.doorX + 0.5 - (def.x + def.w / 2);
     const b = makeBuilding(def.w, def.d, def.h, def.style, 100 + i * 17, { doorOffset, faceNorth: def.faceNorth, sign: def.sign });
@@ -166,6 +172,8 @@ export function buildSaltwharf(): Location {
       door: { x: def.doorX, z: doorZ },
       faceTo: { x: def.doorX + 0.5, z: def.faceNorth ? def.z : def.z + def.d },
     });
+    const short: Record<string, string> = { warehouse: 'Warehouse', hester: 'Chandlery', coppercup: 'Copper Cup', dockoffice: 'Dock Office', tenements: 'Gull Court', pawnbroker: 'Moss\'s', clothier: 'Rag & Bone' };
+    mapRectsLater.push({ x: def.x, z: def.z, w: def.w, d: def.d, label: short[def.id] ?? def.name, kind: def.id === 'tenements' ? 'house' : 'shop', placeId: def.id });
     if (def.id === 'pawnbroker') {
       const balls = makePawnBalls();
       balls.position.set(def.doorX + 1.3, 2.9, def.z);
@@ -183,12 +191,50 @@ export function buildSaltwharf(): Location {
     b.position.set(x + w / 2, 0, z + d / 2);
     root.add(b);
   };
-  for (let x = -6; x < MAP_W + 6; x += 4) backdrop(x, 25, 4, 5);
-  for (let z = 7; z < 25; z += 5) {
+  for (let x = -6; x < MAP_W + 6; x += 4) backdrop(x, MAP_H, 4, 5);
+  for (let z = 7; z < MAP_H; z += 5) {
     backdrop(-6, z, 6, 5);
-    backdrop(MAP_W, z, 6, 5);
+    if (z < 10 || z > 14) backdrop(MAP_W, z, 6, 5);
   }
-  for (let x = 0; x < MAP_W; x++) grid.block(x, 25);
+  // Hollow Lane: the rookery's mouth, east of the houses. A dark archway, and the lane beyond.
+  backdrop(MAP_W, 10, 6, 1);
+  backdrop(MAP_W, 14, 6, 1);
+  const arch = makeSign('HOLLOW LANE', 2.6, '#1a1214', '#b8a070');
+  arch.position.set(MAP_W + 0.05, 3.2, 12.5);
+  arch.rotation.y = -Math.PI / 2;
+  root.add(arch);
+
+  // --- Houses: every family has a door --------------------------------------
+  const mapRects: MapRect[] = [];
+  HOUSES.forEach((hd, i) => {
+    const hgt = 4.6 + (i % 3) * 0.9;
+    const b = makeBuilding(hd.w, hd.d, hgt, { wall: hd.wall, roof: i % 2 ? C.roofSlate : C.roofTile, roofType: 'gable', trim: C.timber }, 400 + i * 23, { doorOffset: hd.doorX + 0.5 - (hd.x + hd.w / 2), faceNorth: true });
+    b.position.set(hd.x + hd.w / 2, 0, hd.z + hd.d / 2);
+    b.userData.placeId = `house:${hd.key}`;
+    root.add(b);
+    tappables.push(b);
+    grid.blockRect(hd.x, hd.z, hd.w, hd.d);
+    places.push({ id: `house:${hd.key}`, name: hd.name, description: 'A narrow terraced house: two rooms up, two down, and a family in each.', door: { x: hd.doorX, z: hd.z - 1 }, faceTo: { x: hd.doorX + 0.5, z: hd.z } });
+    mapRects.push({ x: hd.x, z: hd.z, w: hd.w, d: hd.d, label: hd.name.replace(/ (Back Lane|Church Street|Quay Street|Rope Walk)$/, ''), kind: 'house', placeId: `house:${hd.key}` });
+  });
+
+  // St. Botolph-by-the-River: the church, its spire, and the clergy house door.
+  const church = new THREE.Group();
+  church.userData.placeId = 'church';
+  const nave = makeBuilding(9, 5, 6.2, { wall: C.stone, roof: C.roofSlate, roofType: 'gable', trim: 0x4a4440 }, 777, { doorOffset: -0.5, faceNorth: true, sign: 'ST. BOTOLPH' });
+  nave.position.set(5.5, 0, 37.5);
+  church.add(nave);
+  const tower = new THREE.Mesh(new THREE.BoxGeometry(2, 9, 2), mat(C.stone));
+  tower.position.set(2, 4.5, 36.5);
+  const spire = new THREE.Mesh(new THREE.ConeGeometry(1.5, 4.5, 4), mat(C.roofSlate));
+  spire.position.set(2, 11.2, 36.5);
+  spire.rotation.y = Math.PI / 4;
+  church.add(tower, spire);
+  root.add(church);
+  tappables.push(church);
+  grid.blockRect(1, 35, 9, 5);
+  places.push({ id: 'church', name: 'St. Botolph-by-the-River', description: 'A soot-black church older than the docks, with a spire you can see from the river. Father Hale keeps the door open, and the poor box empty.', door: { x: 5, z: 34 }, faceTo: { x: 5.5, z: 35 } });
+  mapRects.push({ x: 1, z: 35, w: 9, d: 5, label: 'St. Botolph\'s', kind: 'church', placeId: 'church' });
 
   // --- Market corner and boxing yard -------------------------------------
   const stalls: [number, number, number, number[]][] = [
@@ -258,6 +304,7 @@ export function buildSaltwharf(): Location {
     [2, 6, false], [9, 6, false], [16, 6, false], [23, 6, false], [30, 6, false],
     [5, 15, false], [13, 15, false], [20, 15, false], [27, 15, true],
     [4, 23, false], [16, 23, false], [26, 23, false],
+    [36, 6, false], [42, 15, false], [33, 23, false], [10, 32, false], [24, 32, false], [38, 32, false],
   ];
   for (const [x, z, vane] of lampTiles) {
     const { group, lightY } = makeLamp(vane);
@@ -309,7 +356,19 @@ export function buildSaltwharf(): Location {
     entries: {
       hester: { x: 11.5, z: 8.5, faceX: 11.5, faceZ: 6 },
     },
-    camera: { bounds: { minX: 5, maxX: MAP_W - 5, minZ: 9, maxZ: MAP_H - 6 }, view: 14, offsetZ: 2 },
+    camera: { bounds: { minX: 5, maxX: MAP_W - 5, minZ: 4, maxZ: MAP_H - 5 }, view: 14, offsetZ: 2 },
+    map: {
+      w: MAP_W, h: MAP_H,
+      rects: [
+        ...mapRectsLater, ...mapRects,
+        { x: 8, z: 17, w: 9, d: 6, label: 'Market', kind: 'open', placeId: 'market' },
+        { x: 27, z: 16, w: 4, d: 7, label: 'Boxing yard', kind: 'open', placeId: 'boxing' },
+      ],
+      streets: [
+        { x: 1, z: 5, label: 'The quay' }, { x: 2, z: 7.6, label: 'Quay Street' }, { x: 2, z: 15.6, label: 'Rope Walk' },
+        { x: 2, z: 24.6, label: 'Back Lane' }, { x: 13, z: 33.6, label: 'Church Street' }, { x: 43.6, z: 12.4, label: '‹ Hollow Lane' },
+      ],
+    },
     fadeOccluders: true,
     lamps: lamps.filter((l) => !l.vane).map((l) => ({ x: l.position.x, z: l.position.z })),
     update,

@@ -237,6 +237,15 @@ Renamed in M13 to match the Story Bible (the Dockers' Brotherhood became the Lam
 - [x] **Act I**: learn the drowned sailor's name (Mag, Rudd, Father Hale, Nell or the Society know it), find his medal at Moss's, find him on the quay after ten at night, and end it one of three ways: **steel** (fight him; the Lamplighters help), **word** (his name and his medal, with Occult and Charisma), or **coin** (pay the Kin to take him away; the clock goes back less). Act I pushes the clock back, brings the missing home, and Pembleton tells you what Hester was. Mrs. Ashby's card points to Act II in Mayfield.
 - [x] Until Acts II–IV exist (they need Mayfield, Inkwell Row, Greymourne and the Undercroft), the clock slows after Act I and stops at 70.
 
+## M14 ✅ Saltwharf, opened up
+
+- [x] **The district is bigger**: 44 × 40 tiles instead of 32 × 26. Back Lane widened to four tiles, with a row of terraced houses behind it; Church Street and St. Botolph-by-the-River with its spire; houses along the east end of Quay Street and Rope Walk; the dark mouth of Hollow Lane. The camera now reaches the quay.
+- [x] **Everyone lives somewhere real**: sixteen houses (Back Lane, Church Street, Quay Street, Rope Walk) plus Gull Court, rooms over the Copper Cup, Moss's and Rag & Bone, the clergy house and Hester's building. Tap a house to see who lives there and knock: if they're home they come out to talk; if not, you're told where they likely are. Empty houses are to let.
+- [x] **Walk into buildings**: the Copper Cup, Pell's Chandlery (with the stairs up to your room), Moss's, Rag & Bone and the Dock Hiring Office have interiors with the keeper behind the counter, open by the hour. The counter offers what the building always did; the keeper can be talked to; a gilt door icon takes you out.
+- [x] **A map**: the Map medallion replaces the speed watch in the dock (the watch moves to the top bar). London shows all eight districts from the Story Bible (only Saltwharf open yet); Saltwharf shows every building, drawn the way the camera sees it, with you on it; tap one to read about it (and its hours) and walk there.
+- [x] **More light**: brighter exposure, sky and moonlight, gentler night fog, stronger lamps, a lighter vignette.
+- [x] **Shorter Standing page**: one line per faction, rules and perks folded away.
+
 ## Next
 
 The next districts (Lantern Market, then Mayfield) and Act II, "The Social Season"; businesses.
