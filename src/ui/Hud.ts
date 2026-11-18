@@ -16,6 +16,17 @@ export interface Action {
 }
 
 const NEEDS: NeedId[] = ['hunger', 'rest', 'social', 'health'];
+const NEED_HINTS: Record<NeedId, string> = {
+  hunger: 'Bread from your larder, hot potatoes at the market (£0.02), supper at the Copper Cup, or cook at your stove.',
+  rest: 'Sleep in your bed. An armchair, the warehouse step or a pew in St. Botolph\'s will do for an hour.',
+  social: 'Talk to anyone. A pint or supper at the Copper Cup, or the Sunday service.',
+  health: 'Bandages and tonic at Pell\'s, a hot broth, or Dr. Quill. Rain, fights and the foreshore hurt.',
+};
+/** One number for how you are: the lowest need weighs most. */
+export const wellbeing = (n: Record<NeedId, number>) => {
+  const v = NEEDS.map((k) => n[k]);
+  return Math.round(Math.min(...v) * 0.6 + (v.reduce((a, b) => a + b, 0) / v.length) * 0.4);
+};
 
 /** A bubble in the interaction pie; one with children opens a ring of its own. */
 export type PieIcon = 'talk' | 'kind' | 'romance' | 'business' | 'mean' | 'ask' | 'favour' | 'family';
@@ -77,10 +88,16 @@ export class Hud {
             <span class="hex" aria-hidden="true"><span class="hexin">${TOKEN.watch}</span></span>
             <span class="lab speed-lab">1×</span>
           </button>
-          <div class="tb-needs">${NEEDS.map(
-            (n) => `<div class="need" data-need="${n}" role="img" aria-label="${NEED_NAMES[n]}" title="${NEED_NAMES[n]}">${ICONS[n]}<div class="bar"><i></i></div></div>`,
-          ).join('')}</div>
+          <button class="wellbeing" aria-label="How you are" aria-expanded="false">
+            <svg viewBox="0 0 40 40" aria-hidden="true"><circle class="wb-track" cx="20" cy="20" r="16"/><circle class="wb-fill" cx="20" cy="20" r="16" pathLength="100" stroke-dasharray="100 100" transform="rotate(-90 20 20)"/></svg>
+            <span class="wb-num"></span><span class="wb-icon"></span>
+          </button>
+          <button class="goals-btn" aria-label="Goals" aria-expanded="false"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h11a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H8"/><path d="M6 4a2 2 0 0 0-2 2v1h4V6a2 2 0 0 0-2-2z"/><path d="M8 20a2 2 0 0 1-2-2V7M10 9h6M10 12h6M10 15h4"/></svg><span class="goals-n"></span></button>
           <div class="tb-purse"><div class="money"></div><div class="rent"></div></div>
+        </div>
+        <div class="needs-pop" hidden role="dialog" aria-label="How you are">
+          <h3>How you are</h3>
+          ${NEEDS.map((n) => `<div class="need-row" data-need="${n}"><span class="ni">${ICONS[n]}</span><div class="nt"><div class="nh"><b>${NEED_NAMES[n]}</b><span class="nv"></span></div><div class="bar"><i></i></div><div class="nhint">${NEED_HINTS[n]}</div></div></div>`).join('')}
         </div>
         <button class="goals" aria-expanded="false" hidden>
           <span class="goals-first"></span>
@@ -204,9 +221,30 @@ export class Hud {
       window.setTimeout(() => this.onBag?.(), 220);
     });
     const goals = this.q('.goals');
-    goals.addEventListener('click', () => {
-      goals.setAttribute('aria-expanded', String(goals.getAttribute('aria-expanded') !== 'true'));
+    const setGoalsOpen = (open: boolean) => {
+      goals.setAttribute('aria-expanded', String(open));
+      this.q('.goals-btn').setAttribute('aria-expanded', String(open));
+      this.goalsPeek = false;
       this.renderGoals();
+    };
+    goals.addEventListener('click', () => setGoalsOpen(goals.getAttribute('aria-expanded') !== 'true'));
+    this.q('.goals-btn').addEventListener('click', () => {
+      sfx('page');
+      this.needsOpen = false;
+      setGoalsOpen(goals.getAttribute('aria-expanded') !== 'true');
+    });
+    this.q('.wellbeing').addEventListener('click', () => {
+      sfx('page');
+      setGoalsOpen(false);
+      this.needsOpen = !this.needsOpen;
+    });
+    this.q('.needs-pop').addEventListener('click', () => (this.needsOpen = false));
+    // Tapping anywhere else folds the needs and goals away again.
+    document.addEventListener('pointerdown', (e) => {
+      const t = e.target as HTMLElement;
+      if (t.closest('.needs-pop, .wellbeing, .goals, .goals-btn')) return;
+      if (this.needsOpen) this.needsOpen = false;
+      if (goals.getAttribute('aria-expanded') === 'true') setGoalsOpen(false);
     });
     const people = this.q('.people-btn');
     people.addEventListener('click', () => {
@@ -539,10 +577,9 @@ export class Hud {
       const prev = this.lastNeeds[n];
       const v = state.needs[n];
       if (prev !== undefined && Math.abs(v - prev) >= 4) {
-        const icon = this.el.querySelector(`[data-need="${n}"]`) as HTMLElement;
-        const r = icon.getBoundingClientRect();
+        const r = this.q('.wellbeing').getBoundingClientRect();
         const d = Math.round(v - prev);
-        this.floater(`${d > 0 ? '+' : ''}${d}`, r.left + r.width / 2, r.bottom + 4, d > 0 ? 'gain' : 'loss');
+        this.floater(`${NEED_NAMES[n]} ${d > 0 ? '+' : ''}${d}`, r.left + r.width / 2, r.bottom + 4, d > 0 ? 'gain' : 'loss');
       }
       this.lastNeeds[n] = v;
     }
@@ -550,7 +587,8 @@ export class Hud {
       const e = this.q(sel);
       if (e.textContent !== text) e.textContent = text;
     };
-    set('.date', `${date.replace(/ \d{4}$/, '')} · ${district}`);
+    set('.date', date.replace(/ \d{4}$/, ''));
+    void district;
     set('.time', time);
     set('.money', `£${state.money.toFixed(2)}`);
     this.jobLine = jobLine;
@@ -565,9 +603,24 @@ export class Hud {
       const v = state.needs[n];
       const row = this.el.querySelector(`[data-need="${n}"]`) as HTMLElement;
       (row.querySelector('i') as HTMLElement).style.width = `${v}%`;
-      row.setAttribute('aria-label', `${NEED_NAMES[n]} ${Math.round(v)}`);
-      row.classList.toggle('low', v < 25);
+      row.querySelector('.nv')!.textContent = `${Math.round(v)} · ${v < 15 ? 'very low' : v < 35 ? 'low' : v < 70 ? 'fair' : 'good'}`;
+      row.classList.toggle('low', v < 35);
     }
+    // The wheel: one number, and the icon of the worst need when something is wrong.
+    const wb = wellbeing(state.needs);
+    const worst = NEEDS.reduce((a, b) => (state.needs[b] < state.needs[a] ? b : a));
+    const wheel = this.q('.wellbeing');
+    (wheel.querySelector('.wb-fill') as SVGCircleElement).setAttribute('stroke-dasharray', `${wb} 100`);
+    const bad = state.needs[worst] < 25;
+    wheel.classList.toggle('bad', bad);
+    wheel.classList.toggle('fair', !bad && wb < 50);
+    set('.wb-num', bad ? '' : String(wb));
+    const ic = wheel.querySelector('.wb-icon') as HTMLElement;
+    if (ic.dataset.n !== (bad ? worst : '')) {
+      ic.dataset.n = bad ? worst : '';
+      ic.innerHTML = bad ? ICONS[worst] : '';
+    }
+    wheel.setAttribute('aria-label', `How you are: ${wb} of 100${bad ? `, ${NEED_NAMES[worst]} very low` : ''}`);
   }
 
   private jobLine = '';
@@ -580,11 +633,32 @@ export class Hud {
     this.renderGoals();
   }
 
+  private goalsPeek = false;
+  private peekTimer = 0;
+  private lastFirstGoal = '';
+
+  set needsOpen(open: boolean) {
+    this.q('.needs-pop').hidden = !open;
+    this.q('.wellbeing').setAttribute('aria-expanded', String(open));
+  }
+
+  get needsOpen(): boolean {
+    return !this.q('.needs-pop').hidden;
+  }
+
   private renderGoals(): void {
     const btn = this.q<HTMLButtonElement>('.goals');
     const lines = [...this.jobLine.split('\n').filter(Boolean), ...this.goalItems];
-    btn.hidden = lines.length === 0;
     const open = btn.getAttribute('aria-expanded') === 'true';
+    // The goals live behind the scroll icon; a new first goal peeks out for a few seconds.
+    if (lines[0] && lines[0] !== this.lastFirstGoal) {
+      this.lastFirstGoal = lines[0];
+      this.goalsPeek = true;
+      window.clearTimeout(this.peekTimer);
+      this.peekTimer = window.setTimeout(() => { this.goalsPeek = false; this.renderGoals(); }, 6000);
+    }
+    btn.hidden = lines.length === 0 || (!open && !this.goalsPeek);
+    this.q('.goals-n').textContent = lines.length ? String(lines.length) : '';
     this.q('.goals-first').textContent = lines[0] ?? '';
     this.q('.goals-rest').textContent = open ? lines.slice(1).join('\n') : lines.length > 1 ? `+${lines.length - 1}` : '';
   }

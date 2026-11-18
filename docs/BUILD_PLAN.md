@@ -294,6 +294,12 @@ Renamed in M13 to match the Story Bible (the Dockers' Brotherhood became the Lam
 - [x] **Friends**: a toggle on the street and in buildings puts a ring under everyone, from deep green (close friends) through yellow (acquaintances) to red (rivals), grey for strangers, with a legend. The district map shows the people you know who are out, by name and colour.
 - [x] **Back within budget**: the HUD is 15% of a portrait phone screen again, buttons are at least 44 px and text at least 13 px; a pool of six street lights follows the camera (was ten); the clock pauses under place panels, Decor and the prologue.
 
+## M19 ✅ A quieter HUD
+
+- [x] **Wellbeing wheel**: the four need icons become one gilt dial in the top bar, showing a single number (the lowest need counts most: 60% lowest, 40% average). It turns amber when things are slipping, and red with the icon of the worst need, pulsing, when one is very low. Tap it for "How you are": each need's value, a word for it (good, fair, low, very low) and what fixes it. Need changes float up by name from the dial.
+- [x] **Goals behind a scroll**: the goals pill is gone from the screen. A scroll icon with a count sits in the top bar; tap it for the list. A new top goal peeks out for six seconds, then folds away.
+- [x] **Smaller extras**: the date drops the district name (the map has it); the Friends toggle is a round icon; tapping anywhere else closes the needs and goals.
+
 ## Next
 
 The next districts (Lantern Market, then Mayfield) and Act II, "The Social Season"; businesses.
