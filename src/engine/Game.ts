@@ -4,7 +4,16 @@ import { Player } from '../actors/Player';
 import { createCharacter, type Look, type Rig } from '../actors/characterModel';
 import { GRADE_INFO, JOBS, autopilotGrade, dayIndex, gradeFor, minuteOfDay, weekday, type Grade } from '../game/jobs';
 import { addNeed, simulateNeeds } from '../game/needs';
-import { RESIDENTS, stopAt } from '../game/residents';
+import { RESIDENTS, stopAt, type Resident, type Stop } from '../game/residents';
+import { RECIPES, cookMult, ingredients, missing as recipeMissing } from '../game/food';
+import { LESSON_XP, MENTORS, PERKS, hasPerk, nextPerk, perkAt } from '../game/skills';
+
+const PERKS_OWNED = (s: GameState) => PERKS.filter((p) => s.character.skills[p.skill] >= p.level);
+import { HOLIDAYS, MOOD_PAY, MOOD_TEXT, WEATHER_TEXT, bossMood, holidayOn, isSunday, rollWeather, strikeStarts } from '../game/calendar';
+import { FUTURE_OFFICES, OFFICES, count as countVotes, officeTitle, pledgeChance, voters } from '../game/parish';
+import { ASKS, LOST_ZONES, PLACE_NAMES, READ_LETTERS, type Quest } from '../game/quests';
+import { ACTIVITY_TEXT, AMBIENT, CONFUSED_LINES, SICK_LINES, conversation } from '../game/talk';
+import { EVICTION_DAY, FUNERAL_DAY, Life, VANE_DONE, VANE_START } from './Life';
 import {
   DAILY_LIMIT, INTERACTIONS, interact, knownTraits, newRelation, relationLabel, type Interaction, type Relation,
 } from '../game/social';
@@ -21,7 +30,7 @@ import {
 import { playBar } from '../minigames/bar';
 import { ENEMIES, runFight, type Enemy } from '../minigames/fight';
 import { playCargo } from '../minigames/cargo';
-import { SKILLS, SKILL_INFO, loadGame, newGame, saveGame, type Character, type GameState, type LocationId, type NeedId } from '../game/state';
+import { NEED_NAMES, SKILLS, SKILL_INFO, loadGame, newGame, saveGame, type Character, type GameState, type LocationId, type NeedId } from '../game/state';
 import { Creator } from '../ui/Creator';
 import { Dialogue, type Line } from '../ui/Dialogue';
 import { Hud, type Action, type ListRow } from '../ui/Hud';
@@ -68,6 +77,14 @@ export class Game {
   private stalker: { walker: Player; t: number; retarget: number } | null = null;
   private readonly tully: Player;
   private dangerTimer = 0;
+  private readonly life: Life;
+  private ambientTimer = 4;
+  private chatTimer = 12;
+  private chat: { a: Npc; b: Npc; lines: [string, string][]; i: number; t: number; spread: import('../game/world').Fact | null } | null = null;
+  private askTimer = 20;
+  private headline: string | null = null;
+  private headlineDay = -1;
+  private asking: { npc: Npc; t: number; retarget: number } | null = null;
   private readonly sound = new Sound();
   private readonly quality: 'high' | 'low';
 
@@ -111,6 +128,13 @@ export class Game {
       this.locations.saltwharf.scene.add(npc.walker.rig.root);
       this.npcs.push(npc);
     }
+    this.life = new Life(this.locations.saltwharf.scene, this.locations.saltwharf.grid, {
+      bubble: (x, z, name, text) => this.bubbleAt(x, z, name, text),
+      bell: (n) => {
+        if (this.location.id !== 'saltwharf' || this.mode !== 'play') return;
+        for (let i = 0; i < Math.min(n, 12); i++) setTimeout(() => sfx('bell'), i * 1600);
+      },
+    }, this.locations.saltwharf.lamps ?? []);
     this.tully = new Player(this.locations.saltwharf.grid, { skin: 0xb08a6a, hair: 0x15110e, coat: 0x1e1a18, trousers: 0x1a1614, shirt: 0x5a2a22, boots: 0x0e0c0a, hat: 'cap', hatColor: 0x121010, build: 1.25 }, NOTORIOUS.where.x + 0.5, NOTORIOUS.where.z + 0.5);
     this.tully.rig.root.visible = false;
     this.tully.rig.root.userData.tully = true;
@@ -219,6 +243,7 @@ export class Game {
     this.mode = 'play';
     this.applyUpgrades();
     this.applyFurniture();
+    this.locations.saltwharf.setWeather?.(s.weather);
     if (s.outfit && s.outfit !== 'plain') this.dress(s.outfit);
     this.hud.visible = true;
     this.resize();
@@ -273,6 +298,14 @@ export class Game {
       return;
     }
     if (this.location.id === 'saltwharf') {
+      const tag = this.life.pick(this.raycaster);
+      if (tag) {
+        this.hud.hidePlace();
+        void this.lifeTapped(tag);
+        return;
+      }
+    }
+    if (this.location.id === 'saltwharf') {
       // People are small on a phone: a tap within about a tile of someone picks them.
       const ground = new THREE.Vector3();
       const visible = this.npcs.filter((n) => n.visible);
@@ -296,6 +329,14 @@ export class Game {
       if (npc) {
         this.approach(npc);
         return;
+      }
+      // Lost things are tiny: a tap near the glint picks it up.
+      if (this.raycaster.ray.intersectPlane(this.groundPlane, ground)) {
+        const q = this.state!.quests.find((x) => x.kind === 'lost' && !x.found && x.at && Math.hypot(x.at.x + 0.5 - ground.x, x.at.z + 0.5 - ground.z) < 1.0);
+        if (q) {
+          this.pickUpLost(q.id);
+          return;
+        }
       }
     }
     const solid = this.location.tappables.filter((o) => !this.faded.has(o) && o.visible);
@@ -362,18 +403,33 @@ export class Game {
           ];
         case 'tenements':
           return [act('Sleep rough in the archway', () => this.sleep('rough'), { primary: !s.housed })];
-        case 'dockoffice':
+        case 'dockoffice': {
+          const day = dayIndex(s.minutes);
+          const st = s.strike;
+          if (st && day >= st.day && day <= st.until) {
+            const e = employment(s, 'docks');
+            return [
+              act(st.side === 'picket' && this.usedToday('picket') ? 'On the picket line (tomorrow again)' : 'Join the picket (2 hours)', () => this.picket(), { primary: true, disabled: this.usedToday('picket') }),
+              ...(e ? [act('Cross the picket and work (double pay)', () => this.workShift('docks', true), { disabled: !canStartShift(s, 'docks') })] : []),
+            ];
+          }
           return this.jobActions('docks', act);
+        }
         case 'coppercup': {
           const free = this.friend('bessa') && !this.usedToday('bessa');
           return [
             ...this.jobActions('coppercup', act),
             act(free ? 'Free pint from Bessa' : 'Buy a drink · £0.02', () => this.tavernDrink(), { disabled: !free && s.money < 0.02 }),
-            act('Supper at a crowded table · £0.05', () => this.tavernSupper(), { disabled: s.money < 0.05 }),
+            act(holidayOn(dayIndex(s.minutes))?.id === 'martinmas' && !this.usedToday('goose') ? 'Martinmas goose, on the house' : 'Supper at a crowded table · £0.05', () => this.tavernSupper(), { disabled: s.money < 0.05 && !(holidayOn(dayIndex(s.minutes))?.id === 'martinmas' && !this.usedToday('goose')) }),
           ];
         }
-        case 'clothier':
-          return [act('Browse the rails', () => this.openShop('clothier'), { primary: true })];
+        case 'clothier': {
+          const fee = this.friend('lizzie') ? 0 : 0.05;
+          return [
+            act('Browse the rails', () => this.openShop('clothier'), { primary: true }),
+            act(s.wear[s.outfit] >= 100 ? 'Your clothes are in good repair' : `Have Lizzie mend what you're wearing (${this.condition()}) · ${fee ? `£${fee.toFixed(2)}` : 'free'}`, () => this.mend(true), { disabled: s.wear[s.outfit] >= 100 || s.money + 1e-9 < fee }),
+          ];
+        }
         case 'boxing': {
           const open = this.fightNightOpen();
           const b = this.nextBout();
@@ -388,6 +444,7 @@ export class Game {
           return [
             act('Browse the stalls', () => this.openShop('market'), { primary: true }),
             act('The Gazette · £0.01', () => this.readGazette(), { disabled: s.money < 0.01 }),
+            ...(s.parish.standing !== null ? [act(this.usedToday('speech') ? 'You spoke today; speak again tomorrow' : 'Climb on a crate and speak to the crowd (1 hour)', () => this.speech(), { disabled: this.usedToday('speech') })] : []),
           ];
         case 'pawnbroker':
           return [act('Sell to Moss', () => this.openShop('pawnbroker'), { primary: true })];
@@ -405,9 +462,8 @@ export class Game {
       case 'larder':
         return [act(`Eat stale bread (${s.larderBread} left)`, () => this.eatBread(), { disabled: s.larderBread <= 0 })];
       case 'stove': {
-        const coal = s.inventory.some((i) => i.id === 'coal');
-        const food = s.inventory.some((i) => i.id === 'bread' || i.id === 'potato');
-        return [act(coal && food ? 'Cook a hot supper' : coal ? 'Cook (needs bread or a potato)' : 'Cook (needs coal from the chandlery)', () => this.cook(), { primary: true, disabled: !coal || !food })];
+        const ready = RECIPES.filter((r) => !recipeMissing(s, r)).length;
+        return [act(ready ? `Cook (${ready} recipe${ready === 1 ? '' : 's'} you can make)` : 'Cook (see recipes)', () => this.cook(), { primary: true })];
       }
       case 'table': {
         const night = this.clock.hour >= 18 || this.clock.hour < 7;
@@ -426,6 +482,7 @@ export class Game {
         return [
           act('Wash your face', () => this.hud.toast('Cold water and carbolic. You feel almost respectable.')),
           act('Change clothes', () => this.chooseOutfit(), { primary: true }),
+          ...(hasPerk(s, 'arts', 6) && s.wear[s.outfit] < 100 ? [act(`Mend your clothes (${this.condition()}, 1 hour)`, () => this.mend(false))] : []),
         ];
       case 'trunk':
         return [act('Try the lid', () => this.dialogue.say(
@@ -467,6 +524,13 @@ export class Game {
 
   private tavernSupper(): void {
     const s = this.state!;
+    if (holidayOn(dayIndex(s.minutes))?.id === 'martinmas' && !this.usedToday('goose')) {
+      this.markUsed('goose');
+      addNeed(s.needs, 'hunger', 60);
+      addNeed(s.needs, 'social', 18);
+      this.hud.toast('Bessa carves the Martinmas goose with a cleaver and a speech. Hunger +60, Social +18.', 4000);
+      return;
+    }
     if (s.money < 0.05) return;
     s.money = Math.round((s.money - 0.05) * 100) / 100;
     addNeed(s.needs, 'hunger', 35);
@@ -499,6 +563,7 @@ export class Game {
     let p = ITEMS[itemId].price;
     if (keeper && this.friend(keeper)) p *= 0.8;
     if (keeper && this.rival(keeper)) p *= 1.3;
+    if (hasPerk(this.state!, 'charisma', 3)) p *= 0.95;
     return Math.max(0.01, Math.round(p * 100) / 100);
   }
 
@@ -558,8 +623,8 @@ export class Game {
           const def = ITEMS[it.id];
           rows.push({
             label: `${def.name} ×${it.qty}`,
-            sub: `Moss offers £${sellPrice(shop, it.id, rate).toFixed(2)}`,
-            actions: [{ label: 'Sell', onClick: () => { sell(s, shop, it.id, rate); sfx('coin'); render(); } }],
+            sub: `Moss offers £${sellPrice(shop, it.id, rate * (it.id === 'trinket' && hasPerk(s, 'arts', 10) ? 2 : 1)).toFixed(2)}`,
+            actions: [{ label: 'Sell', onClick: () => { sell(s, shop, it.id, rate * (it.id === 'trinket' && hasPerk(s, 'arts', 10) ? 2 : 1)); sfx('coin'); render(); } }],
           });
         }
         if (s.inventory.length === 0) rows.push({ label: 'You have nothing Moss wants.', sub: '', actions: [] });
@@ -575,17 +640,35 @@ export class Game {
     if (this.player && this.state) this.player.speedMult = owns(this.state, 'boots') ? 1.25 : 1;
   }
 
-  /** Cook at the stove: a scuttle of coal and bread or a potato make a hot supper. */
+  /** Cook at the stove: recipes from what's in your bag, better with Arts & Crafts. */
   private cook(): void {
     const s = this.state!;
-    const food = s.inventory.find((i) => i.id === 'bread' || i.id === 'potato');
-    if (!s.inventory.some((i) => i.id === 'coal') || !food) return;
-    removeItem(s, 'coal');
-    removeItem(s, food.id);
-    addNeed(s.needs, 'hunger', 55);
-    addNeed(s.needs, 'health', 5);
-    this.clock.minutes += 30;
-    this.hud.toast('The stove ticks and warms. A hot supper, the first in this room for months. Hunger +55.', 3500);
+    const render = () => {
+      const rows: ListRow[] = RECIPES.map((r) => {
+        const why = recipeMissing(s, r);
+        const fx = Object.entries(r.effects).map(([k, v]) => `${NEED_NAMES[k as NeedId]} +${Math.round(v! * cookMult(s))}`).join(', ');
+        return {
+          label: r.name,
+          sub: `${r.blurb}\n${r.needs.map((n) => n.replace('|', ' or ')).join(' + ')} + coal${r.arts ? ` · Arts ${r.arts}` : ''}${fx ? ` · ${fx}` : ''}`,
+          actions: [{
+            label: why ? why[0].toUpperCase() + why.slice(1) : 'Cook',
+            disabled: !!why || (!!r.dish && !canCarry(s, r.dish)),
+            onClick: () => {
+              for (const id of ingredients(s, r)) removeItem(s, id);
+              for (const [k, v] of Object.entries(r.effects)) addNeed(s.needs, k as NeedId, Math.round(v! * cookMult(s)));
+              if (r.dish) addItem(s, r.dish);
+              this.clock.minutes += 30;
+              const ups = gainXp(s, 'arts', 8);
+              sfx('pour');
+              this.hud.closeList();
+              this.hud.toast([r.eat, fx, ...ups].filter(Boolean).join(' '), 4000);
+            },
+          }],
+        };
+      });
+      this.hud.showList('Hester\'s stove', `Recipes · Arts & Crafts ${s.character.skills.arts}: food goes ${Math.round((cookMult(s) - 1) * 100)}% further · onions, eels and mutton at the market`, rows);
+    };
+    render();
   }
 
   /** Read at the table: Study practice. By the window in daylight, by candle at night. */
@@ -614,7 +697,7 @@ export class Game {
     addNeed(s.needs, 'rest', -3);
     this.clock.minutes += 60;
     s.minutes = this.clock.minutes;
-    const ups = gainXp(s, 'study', Math.round((night ? 18 : 12) * (shelf || owns(s, 'bookshelf') ? 1.5 : 1)));
+    const ups = gainXp(s, 'study', Math.round((night ? 18 : 12) * (shelf || owns(s, 'bookshelf') ? 1.5 : 1) * (hasPerk(s, 'study', 6) ? 1.25 : 1)));
     this.hud.toast(`An hour with Hester's books. Study practice.${ups.length ? ` ${ups.join(' ')}` : ''}`, 3500);
   }
 
@@ -634,7 +717,7 @@ export class Game {
       return;
     }
     simulateNeeds(s.needs, 1, 'awake');
-    addNeed(s.needs, 'rest', -10);
+    addNeed(s.needs, 'rest', hasPerk(s, 'strength', 3) ? -6 : -10);
     addNeed(s.needs, 'hunger', -5);
     this.clock.minutes += 60;
     s.minutes = this.clock.minutes;
@@ -744,6 +827,33 @@ export class Game {
     const rep = completeShift(s, jobId, grade, play, shiftDay);
     sfx('coin');
     const extras: string[] = [];
+    // The boss's temper, a strike, a raise won, the weather, and wear on your clothes.
+    const st = s.strike;
+    const scab = jobId === 'docks' && !!st && shiftDay >= st.day && shiftDay <= st.until;
+    const mood = bossMood(jobId, shiftDay, s);
+    let bonus = rep.pay * (MOOD_PAY[mood] - 1) + (jobId === 'docks' ? rep.pay * s.dockRaise : 0) + (scab ? rep.pay : 0);
+    bonus = Math.round(bonus * 100) / 100;
+    if (bonus !== 0 && !rep.fired) {
+      s.money = Math.round((s.money + bonus) * 100) / 100;
+      if (scab) extras.push(`Strike-breaker's rate: +£${rep.pay.toFixed(2)}`);
+      if (mood !== 'fair') extras.push(`${JOBS[jobId].boss.split(' ').pop()}'s ${mood === 'good' ? 'good humour' : 'foul temper'}: ${mood === 'good' ? '+' : '−'}£${Math.abs(Math.round(rep.pay * (MOOD_PAY[mood] - 1) * 100) / 100).toFixed(2)}`);
+      if (jobId === 'docks' && s.dockRaise) extras.push(`The raise the strike won: +£${(Math.round(rep.pay * s.dockRaise * 100) / 100).toFixed(2)}`);
+    }
+    if (scab && st) {
+      st.side = 'scab';
+      addFact(s, 'scab', ['nell', 'tom', 'hannah', 'rudd']);
+      for (const id of ['nell', 'tom', 'hannah']) {
+        const r = this.rel(id);
+        r.friendship = Math.max(0, r.friendship - 10);
+        r.rivalry = Math.min(100, r.rivalry + 12);
+      }
+      extras.push('The pickets spat as you passed. Nell, Tom and Hannah will not forget it.');
+    }
+    this.wearOut(jobId === 'docks' ? 7 : 4);
+    if (s.weather === 'rain' && jobId === 'docks' && !hasPerk(s, 'strength', 10)) {
+      addNeed(s.needs, 'health', -4);
+      extras.push('Soaked to the skin on the quay: Health −4');
+    }
     if (jobId === 'docks' && !rep.fired && this.friend('rudd')) {
       s.money = Math.round((s.money + 0.02) * 100) / 100;
       extras.push('Rudd slips you a tip: £0.02');
@@ -774,6 +884,23 @@ export class Game {
     if (rep.fired) await this.dialogue.say({ speaker: job.boss, text: job.lines.fired });
     this.busy = false;
     this.save();
+  }
+
+  /** The dock strike: stand with the dockers. */
+  private picket(): void {
+    const s = this.state!;
+    const st = s.strike;
+    if (!st || this.usedToday('picket')) return;
+    this.markUsed('picket');
+    if (st.side !== 'scab') st.side = 'picket';
+    simulateNeeds(s.needs, 2, 'awake');
+    addNeed(s.needs, 'social', 14);
+    this.clock.minutes += 120;
+    s.minutes = this.clock.minutes;
+    for (const id of ['nell', 'tom', 'hannah']) this.rel(id).friendship = Math.min(100, this.rel(id).friendship + 5);
+    this.rel('rudd').rivalry = Math.min(100, this.rel('rudd').rivalry + 3);
+    addFact(s, 'helped', ['nell', 'tom', 'hannah', 'jem'], 'nell');
+    this.hud.toast('Two hours at the gate in the cold, shouting at carts. Nell shares her tea. Dockers\' friendship +5, Social +14. Rudd is writing names down.', 4500);
   }
 
   /** A nudge half an hour before each shift. */
@@ -813,10 +940,213 @@ export class Game {
     const hour = Math.floor(this.clock.hour);
     const outside = this.location.id === 'saltwharf';
     for (const n of this.npcs) {
-      n.follow(stopAt(n.res, hour), outside);
+      n.follow(this.stopFor(n.res, hour), outside);
       n.update(dt, this.elapsed);
     }
-    if (outside && this.mode === 'play' && !this.busy && !this.dialogue.open) this.greetings();
+    if (outside && this.mode === 'play' && !this.busy && !this.dialogue.open) {
+      this.greetings();
+      this.ambient(dt);
+      this.updateChat(dt);
+      this.updateAsking(dt);
+    }
+  }
+
+  /** Has this resident moved to Saltwharf yet, and are they about (not missing)? */
+  private present(r: Resident): boolean {
+    const s = this.state;
+    const day = dayIndex(this.clock.minutes);
+    if (r.arrives && day < r.arrives) return false;
+    return !s || !((s.life.missing[r.id] ?? -1) >= day);
+  }
+
+  /** Where a resident is this hour: their routine, bent by sickness, invitations, feast days, strikes and rain. */
+  private stopFor(r: Resident, hour: number): Stop | null {
+    const s = this.state;
+    if (!s) return stopAt(r, hour);
+    const day = dayIndex(s.minutes);
+    if (!this.present(r)) return null;
+    if ((s.life.sick[r.id] ?? -1) >= day) return hour >= 9 && hour < 18 ? { from: 0, to: 24, x: r.home.x, z: r.home.z, act: 'sick' } : null;
+    const inv = s.quests.find((q) => q.kind === 'invite' && q.who === r.id && !q.done && s.minutes >= q.from! - 30 && s.minutes < q.to!);
+    if (inv?.place) {
+      const pl = this.locations.saltwharf.places.find((p) => p.id === inv.place);
+      if (pl) return { from: 0, to: 24, x: pl.door.x + 1, z: pl.door.z, act: 'watch' };
+    }
+    const hol = holidayOn(day);
+    if (hol?.id === 'bonfire' && hour >= 18 && hour < 23 && !['quill', 'silas'].includes(r.id)) {
+      const i = RESIDENTS.indexOf(r);
+      const a = (i / RESIDENTS.length) * Math.PI * 2;
+      return { from: 18, to: 23, x: Math.round(15.5 + Math.cos(a) * 2.6), z: Math.round(20.5 + Math.sin(a) * 2.2), act: 'watch' };
+    }
+    if (isSunday(day) && hour >= 9 && hour < 11 && ['pell', 'hannah', 'tom', 'lizzie'].includes(r.id)) {
+      const i = ['pell', 'hannah', 'tom', 'lizzie'].indexOf(r.id);
+      return { from: 9, to: 11, x: 11 + (i % 2) * 3, z: 22 + Math.floor(i / 2), act: 'watch' };
+    }
+    if (s.strike && day >= s.strike.day && day <= s.strike.until && hour >= 6 && hour < 15 && ['nell', 'tom'].includes(r.id)) {
+      return { from: 6, to: 15, x: r.id === 'nell' ? 25 : 27, z: 8, act: 'preach' };
+    }
+    const st = stopAt(r, hour);
+    if (st && s.weather === 'rain' && ['grubb', 'hale', 'quill', 'ashby', 'lizzie'].includes(r.id) && st.act !== 'mend') return null;
+    if (st && (s.life.confused[r.id] ?? -1) >= day) return { ...st, act: 'confused' };
+    return st;
+  }
+
+  /** A speech bubble over a point in the street. */
+  private bubbleAt(x: number, z: number, name: string, text: string): void {
+    if (this.location.id !== 'saltwharf' || this.mode !== 'play') return;
+    const pos = new THREE.Vector3(x, 1.8, z).project(this.rig.camera);
+    if (Math.abs(pos.x) > 1.1 || Math.abs(pos.y) > 1.1) return;
+    this.hud.bubble(name, text, (pos.x * 0.5 + 0.5) * window.innerWidth, (-pos.y * 0.5 + 0.5) * window.innerHeight);
+  }
+
+  private dist(n: Npc): number {
+    const p = this.player!.position;
+    return Math.hypot(n.walker.position.x - p.x, n.walker.position.y - p.y);
+  }
+
+  /** Street cries and muttering: what people say while they work. */
+  private ambient(dt: number): void {
+    this.ambientTimer -= dt;
+    if (this.ambientTimer > 0) return;
+    this.ambientTimer = 5 + Math.random() * 6;
+    const near = this.npcs.filter((n) => n.idle && n.act && this.dist(n) < 8 && n !== this.chat?.a && n !== this.chat?.b);
+    if (!near.length) return;
+    const n = near[Math.floor(Math.random() * near.length)];
+    const act = n.act!;
+    const pool = act === 'sick' ? SICK_LINES : act === 'confused' ? CONFUSED_LINES : act === 'preach' && this.state!.strike ? ['Fair pay for fair work!', 'Don\'t cross the line, mate!', 'Out! Out! All out!'] : AMBIENT[n.res.id]?.[act] ?? AMBIENT[n.res.id]?.['*'];
+    if (!pool?.length) return;
+    const met = this.state!.relations?.[n.res.id]?.met;
+    this.bubbleAt(n.walker.position.x, n.walker.position.y, met ? this.short(n.res.id) : '', pool[Math.floor(Math.random() * pool.length)]);
+  }
+
+  /** Neighbours stop and talk to each other; if you're close you overhear, and news moves. */
+  private updateChat(dt: number): void {
+    const s = this.state!;
+    const c = this.chat;
+    if (c) {
+      if (c.a.held || c.b.held) {
+        this.endChat();
+        return;
+      }
+      if (c.a.walker.moving) return;
+      c.t -= dt;
+      if (c.t > 0) return;
+      if (c.i === 0) {
+        c.a.walker.faceToward({ x: c.b.walker.position.x, z: c.b.walker.position.y });
+        c.b.walker.faceToward({ x: c.a.walker.position.x, z: c.a.walker.position.y });
+      }
+      if (c.i >= c.lines.length) {
+        this.endChat();
+        return;
+      }
+      const [who, text] = c.lines[c.i];
+      const n = who === c.a.res.id ? c.a : c.b;
+      this.bubbleAt(n.walker.position.x, n.walker.position.y, this.short(who), text);
+      c.i++;
+      c.t = 3.0;
+      if (c.i === 1 && c.spread && !c.spread.knowers.includes(c.b.res.id)) {
+        c.spread.knowers.push(c.b.res.id);
+        if (this.dist(n) < 7) this.hud.toast(`You overhear ${this.first(c.a.res.id)} telling ${this.first(c.b.res.id)} about you.`, 3200);
+      }
+      return;
+    }
+    this.chatTimer -= dt;
+    if (this.chatTimer > 0) return;
+    this.chatTimer = 14 + Math.random() * 14;
+    const idle = this.npcs.filter((n) => n.idle && this.dist(n) < 13 && n.act !== 'sick' && n !== this.asking?.npc);
+    const pairs: [Npc, Npc][] = [];
+    for (const a of idle) for (const b of idle) {
+      if (a === b) continue;
+      const d = Math.hypot(a.walker.position.x - b.walker.position.x, a.walker.position.y - b.walker.position.y);
+      if (d < 11 && d > 0.5) pairs.push([a, b]);
+    }
+    if (!pairs.length) return;
+    const shared = pairs.filter(([a, b]) => Object.values(CIRCLES).some((cl) => cl.includes(a.res.id) && cl.includes(b.res.id)));
+    const [a, b] = (shared.length ? shared : pairs)[Math.floor(Math.random() * (shared.length || pairs.length))];
+    const day = dayIndex(s.minutes);
+    const fact = s.facts.filter((f) => f.knowers.includes(a.res.id) && !f.knowers.includes(b.res.id) && day - f.day <= 5).at(-1) ?? null;
+    const ctx = {
+      weather: s.weather,
+      sick: Object.keys(s.life.sick).filter((k) => s.life.sick[k] >= day),
+      missing: Object.keys(s.life.missing).filter((k) => s.life.missing[k] >= day),
+      strike: !!s.strike && day >= s.strike.day && day <= s.strike.until,
+      holiday: holidayOn(day)?.id ?? null,
+      vane: day >= VANE_START && day < VANE_DONE + 4,
+      fact,
+    };
+    const conv = conversation(s, a.res.id, b.res.id, s.character.first, (id) => this.nameOf(id), ctx);
+    const cb = b.walker.cell;
+    const spot = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dz]) => ({ x: cb.x + dx, z: cb.z + dz })).find((p) => this.location.grid.isWalkable(p.x, p.z));
+    if (!spot) return;
+    b.visiting = true;
+    b.walker.stop();
+    if (!a.visit(spot, () => undefined)) {
+      b.release();
+      return;
+    }
+    this.chat = { a, b, lines: conv.lines, i: 0, t: 0.4, spread: conv.spreads };
+  }
+
+  private endChat(): void {
+    const c = this.chat;
+    if (!c) return;
+    if (!c.a.held) c.a.release();
+    if (!c.b.held) c.b.release();
+    this.chat = null;
+  }
+
+  /** Now and then someone you know walks over with a favour to ask. */
+  private updateAsking(dt: number): void {
+    const s = this.state!;
+    const p = this.player!;
+    const a = this.asking;
+    if (a) {
+      a.t += dt;
+      a.retarget -= dt;
+      const d = this.dist(a.npc);
+      if (a.npc.held || a.t > 25) {
+        if (!a.npc.held) a.npc.release();
+        this.asking = null;
+        return;
+      }
+      if (d < 1.8 && !p.moving && !this.hud.blocking) {
+        this.asking = null;
+        a.npc.held = true;
+        a.npc.visiting = false;
+        a.npc.walker.stop();
+        a.npc.walker.faceToward({ x: p.position.x, z: p.position.y });
+        p.faceToward({ x: a.npc.walker.position.x, z: a.npc.walker.position.y });
+        void this.request(a.npc).then(() => {
+          a.npc.held = false;
+          a.npc.release();
+        });
+        return;
+      }
+      if (a.retarget <= 0) {
+        a.retarget = 1.5;
+        const c = p.cell;
+        const spot = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1]].map(([dx, dz]) => ({ x: c.x + dx, z: c.z + dz })).find((q) => this.location.grid.isWalkable(q.x, q.z));
+        if (spot) a.npc.walker.walkTo(spot);
+      }
+      return;
+    }
+    this.askTimer -= dt * (hasPerk(s, 'charisma', 10) ? 2 : 1);
+    if (this.askTimer > 0 || this.hud.blocking || p.moving && Math.random() < 0.5) return;
+    this.askTimer = 30 + Math.random() * 30;
+    if (s.quests.filter((q) => !q.done).length >= 3) return;
+    const day = dayIndex(s.minutes);
+    const who = this.npcs.filter((n) => {
+      const r = s.relations?.[n.res.id];
+      return n.idle && r?.met && r.friendship >= 8 && r.rivalry < 25 && ASKS[n.res.id]?.length && s.used[`ask:${n.res.id}`] !== day
+        && !s.quests.some((q) => q.who === n.res.id && !q.done) && this.dist(n) < 12 && n.act !== 'sick' && n !== this.chat?.a && n !== this.chat?.b;
+    });
+    if (!who.length) return;
+    const n = who[Math.floor(Math.random() * who.length)];
+    s.used[`ask:${n.res.id}`] = day;
+    const c = p.cell;
+    const spot = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dz]) => ({ x: c.x + dx, z: c.z + dz })).find((q) => this.location.grid.isWalkable(q.x, q.z));
+    if (!spot || !n.visit(spot, () => undefined)) return;
+    this.bubbleAt(n.walker.position.x, n.walker.position.y, this.short(n.res.id), `${s.character.first}! A moment?`);
+    this.asking = { npc: n, t: 0, retarget: 1.5 };
   }
 
   /** People you know say hello as you pass, once a day; close friends sometimes give you something. */
@@ -834,7 +1164,10 @@ export class Game {
       const v = VOICES[n.res.id];
       const reaction = this.outfitReaction(n.res.id);
       const champ = s.champion && r.rivalry < 25 && Math.random() < 0.4 ? [`Make way for ${CHAMPION_TITLE}!`, `There goes ${CHAMPION_TITLE}.`] : null;
-      const lines = reaction ? [reaction] : champ ?? (r.rivalry >= 25 ? v.rival : r.friendship >= 10 ? v.friend : null);
+      const title = officeTitle(s, s.character.gender === 'woman');
+      const ragged = s.wear[s.outfit] < 15 && Math.random() < 0.4 ? ['You look like you slept in a hedge.', 'Lord, what happened to your clothes?', 'Lizzie\'d weep to see that coat.'] : null;
+      const office = title && r.rivalry < 25 && Math.random() < 0.35 ? [`Morning, ${title}!`, `There's our ${title}.`, `${title}! When are you fixing the drains?`] : null;
+      const lines = reaction ? [reaction] : ragged ?? office ?? champ ?? (r.rivalry >= 25 ? v.rival : r.friendship >= 10 ? v.friend : null);
       if (!lines) continue;
       s.used[key] = day;
       const pos = new THREE.Vector3(n.walker.position.x, 1.8, n.walker.position.y).project(this.rig.camera);
@@ -850,6 +1183,237 @@ export class Game {
           this.hud.toast(`${n.res.name.split(' ')[0]} presses a ${ITEMS[gift].name.toLowerCase()} into your hand.`, 3500);
         }
       }
+    }
+  }
+
+  // --- Favours: neighbours come to you -------------------------------------
+
+  private async request(npc: Npc): Promise<void> {
+    const s = this.state!;
+    const id = npc.res.id;
+    const me = s.character.first;
+    const day = dayIndex(s.minutes);
+    const asks = ASKS[id] ?? [];
+    const ask = asks[Math.floor(Math.random() * asks.length)];
+    if (!ask) return;
+    const r = this.rel(id);
+    const name = npc.res.name;
+    const line = ask.line.replace('{me}', me);
+    const qid = (s.quests.at(-1)?.id ?? 0) + 1;
+    if (ask.kind === 'read') {
+      const c = await this.dialogue.ask({ speaker: name, text: line }, ['Let me see it. (Study 2)', 'I can\'t, sorry.']);
+      if (c !== 0) return;
+      if (s.character.skills.study < 2) {
+        r.friendship = Math.min(100, r.friendship + 1);
+        await this.dialogue.say({ speaker: '', text: 'The hand is cramped and the ink has run. You can\'t make it out either. They take it back, embarrassed for you both.' });
+        return;
+      }
+      const [letter, after] = READ_LETTERS[id] ?? ['A few lines about the weather and a cousin\'s bad leg.', 'They thank you, and fold it away carefully.'];
+      r.friendship = Math.min(100, r.friendship + 7);
+      const ups = gainXp(s, 'study', 8);
+      this.note('helped', id, undefined, [id]);
+      await this.dialogue.say({ speaker: 'You', text: letter }, { speaker: '', text: [after, 'Friendship +7', ...ups].join('\n') });
+      return;
+    }
+    const opts = ask.kind === 'invite' ? ['I\'ll be there.', 'I can\'t, sorry.'] : ['Leave it with me.', 'Not today.'];
+    const c = await this.dialogue.ask({ speaker: name, text: line }, opts);
+    if (c !== 0) {
+      r.friendship = Math.max(0, r.friendship - 1);
+      return;
+    }
+    const q: Quest = { id: qid, kind: ask.kind, who: id, until: day + 1, text: '' };
+    if (ask.kind === 'fetch') {
+      q.item = ask.item;
+      q.text = `Bring ${this.short(id)} ${ask.item!.map((i) => this.itemPhrase(i)).join(' or ')}`;
+    } else if (ask.kind === 'lost') {
+      const z = LOST_ZONES[ask.zone!];
+      let at = { x: z.x0, z: z.z0 };
+      for (let k = 0; k < 30; k++) {
+        const x = z.x0 + Math.floor(Math.random() * (z.x1 - z.x0 + 1));
+        const zz = z.z0 + Math.floor(Math.random() * (z.z1 - z.z0 + 1));
+        if (this.locations.saltwharf.grid.isWalkable(x, zz)) { at = { x, z: zz }; break; }
+      }
+      q.at = at;
+      q.thing = ask.thing;
+      q.until = day + 2;
+      q.text = `Find ${ask.thing!.replace(/^(his|her|my|the) /, `${this.short(id)}'s `)} (look for a glint)`;
+    } else if (ask.kind === 'invite') {
+      let start = dayStart(day) + ask.hour! * 60;
+      if (s.minutes > start - 30) start += DAY;
+      q.from = start;
+      q.to = start + 90;
+      q.place = ask.place;
+      q.until = dayIndex(start);
+      q.text = `Meet ${this.short(id)} at ${PLACE_NAMES[ask.place!] ?? ask.place} at ${String(ask.hour).padStart(2, '0')}:00${dayIndex(start) > day ? ' tomorrow' : ''}`;
+    }
+    s.quests.push(q);
+    sfx('page');
+    this.hud.toast(`Favour: ${q.text}.`, 3500);
+    this.refreshObjectives();
+  }
+
+  private itemPhrase(id: string): string {
+    const n = ITEMS[id]?.name.toLowerCase() ?? id;
+    return /^[aeiou]/.test(n) ? `an ${n}` : `a ${n}`;
+  }
+
+  /** A favour done: friendship, a little money, and people hear of it. */
+  private async favourDone(q: Quest, npc: Npc | null, text: string, pay: number): Promise<void> {
+    const s = this.state!;
+    q.done = true;
+    s.quests = s.quests.filter((x) => x !== q);
+    const r = this.rel(q.who);
+    const before = r.friendship;
+    r.friendship = Math.min(100, r.friendship + 9);
+    if (pay > 0) s.money = Math.round((s.money + pay) * 100) / 100;
+    addNeed(s.needs, 'social', 8);
+    this.note('helped', q.who, undefined, [q.who]);
+    sfx('chime');
+    await this.dialogue.say({ speaker: this.nameOf(q.who), text: [text, `Friendship +9${pay > 0 ? ` · £${pay.toFixed(2)}` : ''}`].join('\n') });
+    await this.hud.celebrate('goal', 'Favour done', this.nameOf(q.who), 'Word gets round that you help people.');
+    if (before < 30 && r.friendship >= 30) await this.hud.celebrate('friend', 'A new friend', this.nameOf(q.who), VOICES[q.who].perk.replace(/^Friend: /, ''));
+    if (npc?.held) this.showPerson(npc);
+    this.refreshObjectives();
+  }
+
+  /** Invitations are kept by being there; favours left undone go sour. */
+  private checkQuests(): void {
+    const s = this.state!;
+    const day = dayIndex(s.minutes);
+    for (const q of [...s.quests]) {
+      if (q.kind === 'invite') {
+        if (s.minutes > q.to!) {
+          s.quests = s.quests.filter((x) => x !== q);
+          const r = this.rel(q.who);
+          r.friendship = Math.max(0, r.friendship - 4);
+          sendLetter(s, this.nameOf(q.who), 'You never came', `I waited at ${PLACE_NAMES[q.place!] ?? q.place}. I waited a long time.\n\n${this.first(q.who)}`);
+          this.refreshObjectives();
+          continue;
+        }
+        if (this.busy || this.dialogue.open || this.hud.blocking || this.location.id !== 'saltwharf' || s.minutes < q.from!) continue;
+        const pl = this.locations.saltwharf.places.find((p) => p.id === q.place);
+        const npc = this.npcs.find((n) => n.res.id === q.who);
+        if (!pl || !npc?.visible) continue;
+        const p = this.player!.position;
+        if (Math.hypot(pl.door.x + 0.5 - p.x, pl.door.z + 0.5 - p.y) < 3.2 && this.dist(npc) < 4) void this.keepInvite(q, npc);
+      } else if (q.until < day) {
+        s.quests = s.quests.filter((x) => x !== q);
+        const r = this.rel(q.who);
+        r.friendship = Math.max(0, r.friendship - 2);
+        this.hud.toast(`${this.short(q.who)} gave up waiting on you.`, 3000);
+        this.refreshObjectives();
+      }
+    }
+  }
+
+  private async keepInvite(q: Quest, npc: Npc): Promise<void> {
+    const s = this.state!;
+    q.done = true;
+    npc.held = true;
+    this.busy = true;
+    this.player!.stop();
+    const id = q.who;
+    const scenes: Record<string, string> = {
+      jem: 'Jem buys one round, makes a speech about it, then somehow you buy the next three. He sings. Everybody sings.',
+      ruby: `Ruby drinks gin like water and tells you who has been asking about you: "A Vane man. White gloves. Asked where Hester's ${s.character.gender === 'man' ? 'nephew' : 'niece'} sleeps."`,
+      lizzie: 'You walk Lizzie through the lanes. Halfway she takes your arm, and doesn\'t let go until the lamp at the yard.',
+      nell: 'Nell spars with you until you can\'t lift your arms, then buys you a pie and tells you you\'ll do.',
+    };
+    addNeed(s.needs, 'social', 22);
+    if (id === 'nell') gainXp(s, 'strength', 14);
+    this.clock.minutes += 60;
+    s.minutes = this.clock.minutes;
+    this.busy = false;
+    await this.favourDone(q, npc, scenes[id] ?? 'An hour of good company.', 0);
+    npc.held = false;
+  }
+
+  /** Pick up a lost thing from the gutter. */
+  private pickUpLost(id: number): void {
+    const s = this.state!;
+    const q = s.quests.find((x) => x.id === id);
+    if (!q || !q.at) return;
+    const go = () => {
+      q.found = true;
+      q.text = `Return ${q.thing!.replace(/^(his|her|my|the) /, `${this.short(q.who)}'s `)} to ${this.short(q.who)}`;
+      sfx('chime');
+      this.hud.toast(`You found ${q.thing!.replace(/^(his|her|my) /, 'the ')}. Take it back to ${this.short(q.who)}.`, 3500);
+      this.refreshObjectives();
+    };
+    if (!this.player!.walkTo(q.at, go)) go();
+    else this.showMarker(q.at.x + 0.5, q.at.z + 0.5);
+  }
+
+  // --- Ambient people and things: crier, ghosts, mourners, the fire ------
+
+  private async lifeTapped(tag: string): Promise<void> {
+    const s = this.state!;
+    const day = dayIndex(s.minutes);
+    if (tag.startsWith('lost:')) return this.pickUpLost(Number(tag.slice(5)));
+    const at = this.life.where(tag);
+    const p = this.player!;
+    if (at && Math.hypot(at.x + 0.5 - p.position.x, at.z + 0.5 - p.position.y) > 2.5) {
+      const spot = this.location.grid.nearestWalkable(at.x, at.z + 1, 2);
+      if (spot && p.walkTo(spot, () => void this.lifeTapped(tag))) {
+        this.showMarker(spot.x + 0.5, spot.z + 0.5);
+        return;
+      }
+    }
+    if (tag === 'crier') {
+      const heads = gazette(s, day, ZONES.find((z) => z.id === s.hotZone)?.name ?? 'Gull Court', [], `${s.character.first} ${s.character.last}`);
+      await this.dialogue.say({ speaker: 'The crier', text: `"Oyez! ${heads[0]}! And: ${heads[1]}!" He rings his bell in your face. "For the rest, the Gazette. One penny."` });
+    } else if (tag.startsWith('ghost:')) {
+      const g = this.life.ghost(Number(tag.slice(6)));
+      if (!hasPerk(s, 'occult', 6) && holidayOn(day)?.id !== 'hallows') {
+        await this.dialogue.say({ speaker: g.name, text: 'It passes through you, cold as river water. It doesn\'t seem to know you\'re there. (The dead answer at Occult 6.)' });
+        return;
+      }
+      const key = `ghost:${tag}`;
+      const ups = s.used[key] === day ? [] : gainXp(s, 'occult', 12);
+      s.used[key] = day;
+      await this.dialogue.say({ speaker: g.name, text: [`"${g.lines[Math.floor(Math.random() * g.lines.length)]}"`, ...ups].join('\n') });
+    } else if (tag === 'funeral') {
+      if (this.usedToday('funeral')) return;
+      const c = await this.dialogue.ask({ speaker: 'A mourner', text: 'Old Sam Pike. Mended nets on the quay forty years. The fog had his wits at the end; he didn\'t know his own daughter.' }, ['Walk with the mourners (half an hour)', 'Doff your hat and let them pass']);
+      this.markUsed('funeral');
+      if (c === 0) {
+        addNeed(s.needs, 'social', 10);
+        this.clock.minutes += 30;
+        for (const id of ['hale', 'pell', 'hannah']) this.rel(id).friendship = Math.min(100, this.rel(id).friendship + 2);
+        this.note('helped', 'pell', undefined, ['pell', 'hale']);
+        this.hud.toast('You walk behind the coffin to the corner of the Highway. Nobody speaks. Social +10.', 4000);
+      }
+    } else if (tag === 'evict') {
+      if (this.usedToday('okafor')) return;
+      const c = await this.dialogue.ask({ speaker: 'Mr. Okafor', text: 'Grubb put the rent up a shilling. Then another. Then the lock. He\'s let our room to a man from the Vane Company. Can you believe it?' }, ['Give them £0.05 for the road', 'Help carry their things', 'I\'m sorry.']);
+      this.markUsed('okafor');
+      if (c === 0 && s.money >= 0.05) {
+        s.money = Math.round((s.money - 0.05) * 100) / 100;
+        addNeed(s.needs, 'social', 8);
+        this.rel('grubb').rivalry = Math.min(100, this.rel('grubb').rivalry + 2);
+        addFact(s, 'helped', ['mag', 'ruby', 'hannah'], 'mag');
+        await this.dialogue.say({ speaker: 'Mrs. Okafor', text: '"God keep you." She presses your hand. "Watch Grubb. He\'s selling to the lamp men, house by house."' });
+      } else if (c === 1) {
+        addNeed(s.needs, 'rest', -8);
+        gainXp(s, 'strength', 8);
+        this.clock.minutes += 45;
+        addFact(s, 'helped', ['mag', 'ruby', 'hannah'], 'mag');
+        this.hud.toast('You load a bedstead, two chairs and a lifetime onto the cart. Strength practice.', 3500);
+      }
+    } else if (tag === 'vane') {
+      const c = await this.dialogue.ask({ speaker: 'A Vane Company man', text: '"Mr. Vane\'s compliments. Light for all, free of charge. Your building, Hester\'s, isn\'t it? We\'d like to put a lamp on the stair. No cost. Just sign here."' }, ['Sign', 'No.', 'What does Mr. Vane get out of it?']);
+      if (c === 0) await this.dialogue.say({ speaker: 'A Vane Company man', text: '"Splendid." He folds the paper away before you can read it. Somewhere upstairs, you would swear, Pembleton groans.' });
+      else if (c === 2) await this.dialogue.say({ speaker: 'A Vane Company man', text: '"Gets? Nothing. Mr. Vane is a philanthropist." His smile does not reach his eyes, which are very pale.' });
+      else await this.dialogue.say({ speaker: 'A Vane Company man', text: '"As you like. We\'ll ask again. We always ask again."' });
+    } else if (tag === 'bonfire') {
+      if (this.usedToday('bonfire')) return void this.hud.toast('You\'ve had your hour by the fire. Your face is still hot.');
+      this.markUsed('bonfire');
+      addNeed(s.needs, 'social', 22);
+      addNeed(s.needs, 'hunger', 15);
+      this.clock.minutes += 60;
+      for (const n of this.npcs) if (n.visible && this.dist(n) < 7 && s.relations?.[n.res.id]?.met) this.rel(n.res.id).friendship = Math.min(100, this.rel(n.res.id).friendship + 2);
+      sfx('chime');
+      await this.hud.celebrate('goal', 'Bonfire Night', 'Remember, remember', 'An hour by the fire with half of Saltwharf. Jem\'s Guy looks exactly like Mr. Grubb. Social +22.');
     }
   }
 
@@ -893,8 +1457,9 @@ export class Game {
     }
     const traits = knownTraits(p, r);
     const v = VOICES[p.id];
-    const description = `${p.role}. ${relationLabel(r)}.${traits.length ? ` ${traits.join(', ')}.` : ` ${v.hint}`}`;
-    const tired = r.today >= DAILY_LIMIT;
+    const doing = npc.act && npc.act !== 'watch' ? ` ${npc.act === 'sick' || npc.act === 'confused' ? 'Today: ' : 'Busy '}${ACTIVITY_TEXT[npc.act]}.` : '';
+    const description = `${p.role}.${doing} ${relationLabel(r)}.${traits.length ? ` ${traits.join(', ')}.` : ` ${v.hint}`}`;
+    const tired = r.today >= DAILY_LIMIT + (hasPerk(s, 'charisma', 6) ? 2 : 0);
     const actions: Action[] = INTERACTIONS.map((i) => ({
       label: i.label,
       disabled: tired || (i.id === 'gift' && s.inventory.length === 0),
@@ -940,6 +1505,16 @@ export class Game {
     if (id === 'silas' && this.friend(id)) {
       out.push({ label: 'Sell to Silas (70%)', onClick: () => this.sellToSilas() });
     }
+    out.push(...this.favourActions(npc), ...this.lessonActions(npc), ...this.parishActions(npc));
+    if (id === 'hale' && isSunday(dayIndex(s.minutes)) && this.clock.hour >= 8 && this.clock.hour < 12) {
+      out.push(once('service', 'Attend the open-air service (1 hour)', () => {
+        addNeed(s.needs, 'social', 12);
+        addNeed(s.needs, 'rest', 4);
+        for (const p of ['hale', 'pell', 'hannah']) this.rel(p).friendship = Math.min(100, this.rel(p).friendship + 3);
+        this.clock.minutes += 60;
+        this.hud.toast('Hymns in the drizzle, a sermon on the Flood, and Mrs. Pell\'s approving nod. Social +12.', 4000);
+      }));
+    }
     if (r.romance >= 30) {
       out.push(once(`walk:${id}`, 'Walk by the river together', () => {
         r.romance = Math.min(100, r.romance + 6);
@@ -951,6 +1526,227 @@ export class Game {
       }));
     }
     return out;
+  }
+
+  /** Finishing favours: bring what was asked, return what was lost, visit the sick. */
+  private favourActions(npc: Npc): Action[] {
+    const s = this.state!;
+    const id = npc.res.id;
+    const out: Action[] = [];
+    for (const q of s.quests.filter((x) => x.who === id && !x.done)) {
+      if (q.kind === 'fetch') {
+        const have = q.item!.find((i) => s.inventory.some((x) => x.id === i));
+        out.push({
+          label: have ? `Give ${this.itemPhrase(have)} (favour)` : `They want ${q.item!.map((i) => this.itemPhrase(i)).join(' or ')}`,
+          primary: !!have, disabled: !have,
+          onClick: () => {
+            removeItem(s, have!);
+            this.hud.hidePlace();
+            const pay = Math.round((ITEMS[have!].price * 1.5 + 0.01) * 100) / 100;
+            void this.favourDone(q, npc, `"${VOICES[id].friend[0]}" They take it gratefully.`, pay);
+          },
+        });
+      }
+      if (q.kind === 'lost' && q.found) {
+        out.push({
+          label: `Return ${q.thing!.replace(/^(his|her|my) /, 'the ')}`, primary: true,
+          onClick: () => {
+            this.hud.hidePlace();
+            const lines: Record<string, string> = {
+              jem: '"ME PURSE! You beauty!" He counts it twice. "All there. You\'re honest. That\'s rare round here. Have a pie. Have two. No, one."',
+              ruby: 'Ruby holds the ring to the light for a long time. "I owe you," she says. "I don\'t say that. Remember I said it."',
+              silas: 'Silas weighs the parcel in his hand. "Unopened. Good." He tucks a coin into your pocket without seeming to move.',
+              mag: '"My feather!" Mag sticks it in her hat. "The dead will be pleased. I\'ll tell them it was you."',
+              rudd: 'Rudd flicks through the tally book, nods once. From Rudd, that is a parade.',
+              bessa: '"My key! Don\'t tell a soul where you found it, love." She winks. "Drinks are on you. I mean on me."',
+            };
+            void this.favourDone(q, npc, lines[id] ?? 'They take it back as if you\'d handed them a piece of themselves.', id === 'silas' ? 0.08 : 0.04);
+          },
+        });
+      }
+    }
+    if (npc.act === 'sick' && !this.usedToday(`sick:${id}`)) {
+      const remedy = ['broth', 'stew', 'tonic', 'bandage'].find((i) => s.inventory.some((x) => x.id === i));
+      out.push({
+        label: remedy ? `Bring them ${this.itemPhrase(remedy)}` : 'Sit with them a while',
+        primary: true,
+        onClick: () => {
+          this.markUsed(`sick:${id}`);
+          this.hud.hidePlace();
+          const r = this.rel(id);
+          if (remedy) {
+            removeItem(s, remedy);
+            r.friendship = Math.min(100, r.friendship + (remedy === 'broth' || remedy === 'stew' ? 12 : 8));
+            s.life.sick[id] = Math.min(s.life.sick[id], dayIndex(s.minutes));
+            this.note('helped', id, undefined, [id, 'quill']);
+            void this.dialogue.say({ speaker: npc.res.name, text: `They take it with shaking hands. "You didn't have to." By evening the fever is breaking.\nFriendship +${remedy === 'broth' || remedy === 'stew' ? 12 : 8}` });
+          } else {
+            r.friendship = Math.min(100, r.friendship + 3);
+            addNeed(s.needs, 'social', 5);
+            void this.dialogue.say({ speaker: npc.res.name, text: '*cough* "Kind of you to sit." (Broth from the stove would do more good.)\nFriendship +3' });
+          }
+        },
+      });
+    }
+    return out;
+  }
+
+  /** Lessons from the mentor for each skill. */
+  private lessonActions(npc: Npc): Action[] {
+    const s = this.state!;
+    const r = this.rel(npc.res.id);
+    const out: Action[] = [];
+    for (const [skill, m] of Object.entries(MENTORS) as [keyof typeof MENTORS, (typeof MENTORS)['study']][]) {
+      if (m.who !== npc.res.id || r.friendship < 10 || npc.act === 'sick') continue;
+      const free = r.friendship >= 30;
+      const fee = free ? 0 : m.fee;
+      const key = `lesson:${skill}`;
+      out.push({
+        label: this.usedToday(key) ? `${m.label} (tomorrow)` : `${m.label} (1 hour${fee ? ` · £${fee.toFixed(2)}` : ', free for a friend'})`,
+        disabled: this.usedToday(key) || s.money + 1e-9 < fee || s.needs.rest < 12,
+        onClick: () => {
+          this.markUsed(key);
+          s.money = Math.round((s.money - fee) * 100) / 100;
+          simulateNeeds(s.needs, 1, 'awake');
+          addNeed(s.needs, 'rest', -6);
+          this.clock.minutes += 60;
+          s.minutes = this.clock.minutes;
+          const ups = gainXp(s, skill, Math.round(LESSON_XP * (hasPerk(s, 'study', 6) ? 1.25 : 1)));
+          r.friendship = Math.min(100, r.friendship + 2);
+          this.hud.hidePlace();
+          void this.dialogue.say({ speaker: npc.res.name, text: [m.text, `${SKILL_INFO[skill].name} lesson`, ...ups].join('\n') }).then(() => npc.held && this.showPerson(npc));
+        },
+      });
+    }
+    return out;
+  }
+
+  // --- The parish: standing for the Vestry ---------------------------------
+
+  private parishActions(npc: Npc): Action[] {
+    const s = this.state!;
+    const id = npc.res.id;
+    const out: Action[] = [];
+    const office = OFFICES[s.parish.rank];
+    if (id === 'hale' && s.parish.standing === null && office) {
+      out.push({ label: `Stand for ${office.name} (£${office.deposit.toFixed(2)} deposit)`, onClick: () => void this.standForOffice() });
+    }
+    if (s.parish.standing !== null && office && voters(RESIDENTS).some((r) => r.id === id) && id !== office.rival && !s.parish.pledges.includes(id)) {
+      const key = `vote:${id}`;
+      out.push({
+        label: s.used[key] !== undefined ? 'They\'ll think about your candidacy' : 'Ask for their vote',
+        disabled: s.used[key] !== undefined,
+        onClick: () => {
+          s.used[key] = dayIndex(s.minutes);
+          const r = this.rel(id);
+          const chance = pledgeChance(s, npc.res, r.friendship, r.rivalry, this.dressBonus(id));
+          this.hud.hidePlace();
+          if (Math.random() < chance) {
+            s.parish.pledges.push(id);
+            void this.dialogue.say({ speaker: npc.res.name, text: `"${id === 'mag' ? 'Mag votes for the one the gulls like.' : 'You\'ll have my vote. Don\'t make me regret it.'}"\nPledged: ${s.parish.pledges.length}` }).then(() => npc.held && this.showPerson(npc));
+          } else {
+            void this.dialogue.say({ speaker: npc.res.name, text: `"${r.rivalry >= 25 ? 'Vote for you? I\'d sooner vote for the river.' : 'I\'ll think about it. Grubb\'s been round too, you know, with his hat in his hand and his other hand out.'}"` }).then(() => npc.held && this.showPerson(npc));
+          }
+        },
+      });
+    }
+    return out;
+  }
+
+  private async standForOffice(): Promise<void> {
+    const s = this.state!;
+    const office = OFFICES[s.parish.rank];
+    if (!office) return;
+    const friends = RESIDENTS.filter((r) => (s.relations?.[r.id]?.friendship ?? 0) >= 30).length;
+    const lacks = [
+      ...(s.character.skills.study < office.study ? [`Study ${office.study} (you have ${s.character.skills.study})`] : []),
+      ...(friends < office.friends ? [`${office.friends} friends in the parish (you have ${friends})`] : []),
+      ...(!s.housed ? ['a roof: only ratepayers may stand'] : []),
+      ...(s.money < office.deposit ? [`£${office.deposit.toFixed(2)} for the deposit`] : []),
+    ];
+    if (lacks.length) {
+      await this.dialogue.say({ speaker: 'Father Ambrose Hale', text: `"${office.text}" He looks at you over his spectacles. "But the parish will want ${lacks.join(', ')}."` });
+      return;
+    }
+    const rival = this.nameOf(office.rival);
+    const c = await this.dialogue.ask({ speaker: 'Father Ambrose Hale', text: `"${office.text} ${rival} stands again. He always stands. The election is in five days, at noon, at the market cross."` }, [`Stand · £${office.deposit.toFixed(2)}`, 'Not yet']);
+    if (c !== 0) return;
+    s.money = Math.round((s.money - office.deposit) * 100) / 100;
+    s.parish.standing = dayIndex(s.minutes) + 5;
+    s.parish.pledges = [];
+    s.parish.crowd = 0;
+    for (const k of Object.keys(s.used)) if (k.startsWith('vote:')) delete s.used[k];
+    sfx('fanfare');
+    await this.hud.celebrate('goal', 'Candidate', `For ${office.name}`, 'Ask neighbours for their vote; speak to the crowd at the market each day.');
+    this.refreshObjectives();
+  }
+
+  /** A speech at the market: Study and Charisma win over the undecided. */
+  private async speech(): Promise<void> {
+    const s = this.state!;
+    if (this.usedToday('speech') || s.parish.standing === null) return;
+    this.markUsed('speech');
+    const sk = s.character.skills;
+    const won = Math.max(0, Math.round((0.5 + (sk.study + sk.charisma) / 5) * (0.6 + Math.random() * 0.7) * (hasPerk(s, 'study', 10) ? 2 : 1)));
+    s.parish.crowd += won;
+    simulateNeeds(s.needs, 1, 'awake');
+    addNeed(s.needs, 'rest', -5);
+    this.clock.minutes += 60;
+    const ups = [...gainXp(s, 'charisma', 10), ...gainXp(s, 'study', 6)];
+    const lines = won >= 3 ? 'They cheer! Someone throws a cabbage, but at Grubb\'s poster.' : won >= 1 ? 'A few nods. A man asks about the drains. You promise drains.' : 'They drift away to the eel stall. Jem shrugs at you.';
+    await this.dialogue.say({ speaker: '', text: [`You climb on a crate and speak about lamps, drains and rents. ${lines}`, `The undecided: +${won} (crowd ${s.parish.crowd})`, ...ups].join('\n') });
+  }
+
+  /** Election day: the count at noon. */
+  private async election(): Promise<void> {
+    const s = this.state!;
+    const office = OFFICES[s.parish.rank];
+    if (!office || s.parish.standing === null) return;
+    const { mine, theirs } = countVotes(s, office);
+    s.parish.standing = null;
+    const rival = this.nameOf(office.rival);
+    const woman = s.character.gender === 'woman';
+    if (mine > theirs) {
+      s.parish.rank++;
+      const t = officeTitle(s, woman);
+      addFact(s, 'elected', ['hale', 'pell', 'grubb', 'ruby', 'mag', 'jem'], undefined, t);
+      this.rel(office.rival).rivalry = Math.min(100, this.rel(office.rival).rivalry + 15);
+      await this.hud.modal('The count at the market cross', [`${s.character.first} ${s.character.last}: ${mine}`, `${rival}: ${theirs}`, `Elected ${t}.`, OFFICES[s.parish.rank] ? `Next: ${OFFICES[s.parish.rank].name} (Study ${OFFICES[s.parish.rank].study}, ${OFFICES[s.parish.rank].friends} friends).` : `Beyond the parish: ${FUTURE_OFFICES.join(', ')}. Other districts, another day.`], 'ELECTED');
+      await this.hud.celebrate('promotion', 'Elected', t, s.parish.rank === 1 ? 'Grubb must give you longer to pay, and the middling sort warm to you.' : 'The parish purse pays you £0.10 a week, and nobody asks how.');
+    } else {
+      this.rel(office.rival).rivalry = Math.min(100, this.rel(office.rival).rivalry + 5);
+      await this.hud.modal('The count at the market cross', [`${rival}: ${theirs}`, `${s.character.first} ${s.character.last}: ${mine}`, `${rival} keeps the seat and your deposit. Stand again when you have more friends.`]);
+    }
+    this.refreshObjectives();
+  }
+
+  // --- Clothes wear ---------------------------------------------------------
+
+  private wearOut(amount: number): void {
+    const s = this.state!;
+    const before = s.wear[s.outfit];
+    s.wear[s.outfit] = Math.max(0, before - amount);
+    if (before >= 40 && s.wear[s.outfit] < 40) this.hud.toast(`Your ${OUTFIT_NAMES[s.outfit].toLowerCase()} is getting shabby. Lizzie mends clothes at Rag & Bone.`, 3800);
+    if (before >= 15 && s.wear[s.outfit] < 15) this.hud.toast('Your clothes are in rags now. People notice, and not kindly.', 3800);
+  }
+
+  private condition(o = this.state!.outfit): string {
+    const w = this.state!.wear[o];
+    return w >= 70 ? 'good' : w >= 40 ? 'worn' : w >= 15 ? 'shabby' : 'ragged';
+  }
+
+  private mend(byLizzie: boolean): void {
+    const s = this.state!;
+    const fee = byLizzie && !this.friend('lizzie') ? 0.05 : 0;
+    if (s.money + 1e-9 < fee) return;
+    s.money = Math.round((s.money - fee) * 100) / 100;
+    s.wear[s.outfit] = 100;
+    if (!byLizzie) {
+      this.clock.minutes += 60;
+      gainXp(s, 'arts', 6);
+    }
+    sfx('flip');
+    this.hud.toast(byLizzie ? `Lizzie darns, patches and presses while you wait. Good as new${fee ? '' : ', and she won\'t take your money'}.` : 'An hour with needle and thread. Good as new, nearly.', 3500);
   }
 
   private sellToSilas(): void {
@@ -1044,7 +1840,7 @@ export class Game {
     // Robbery: at most once a night; likelier on dangerous streets, with a fat purse or fine clothes.
     if (dark && s.lastRobberyDay !== day && !this.stalker) {
       const dress = s.outfit === 'sunday' ? 1.4 : s.outfit === 'coat' ? 1.25 : 1;
-      const rate = 0.004 * this.dangerHere() * (1 + s.money * 0.6) * dress * (s.notoriety >= 3 ? 0.5 : 1) * (this.friend('ruby') ? 0.5 : 1);
+      const rate = 0.004 * this.dangerHere() * (1 + s.money * 0.6) * dress * (s.notoriety >= 3 ? 0.5 : 1) * (this.friend('ruby') ? 0.5 : 1) * (hasPerk(s, 'strength', 6) ? 0.67 : 1);
       if (Math.random() < rate * gameMinutes) {
         this.startStalker();
         return;
@@ -1175,6 +1971,7 @@ export class Game {
   private async fight(enemy: Enemy, intro: string, firstStrike: boolean, robbery: boolean): Promise<boolean> {
     const s = this.state!;
     const { outcome, xp } = await runFight(this.container, s, enemy, intro, firstStrike);
+    this.wearOut(12);
     const ups = [...gainXp(s, 'strength', xp.strength), ...gainXp(s, 'cunning', xp.cunning), ...gainXp(s, 'charisma', xp.charisma)];
     if (outcome === 'won' || outcome === 'talked') {
       s.notoriety++;
@@ -1302,10 +2099,73 @@ export class Game {
       this.applyFurniture();
       lines.push('A thin grey cat has moved in. She sleeps on the end of your bed and has decided you may stay.');
     }
+    lines.push(...this.nightlyLives(day));
     s.hotZone = HOT_ZONES[Math.floor(Math.random() * HOT_ZONES.length)];
     const after = s.letters.filter((l) => !l.read).length;
     if (after > before) lines.push(`${after - before} new letter${after - before === 1 ? '' : 's'} by your door.`);
     if (s.pending.some((p) => p.kind === 'jealousy')) lines.push('Someone you are courting has heard things. Expect a conversation.');
+    return lines;
+  }
+
+  /** The neighbourhood changes overnight: weather, sickness, the missing, the strike, newcomers. */
+  private nightlyLives(day: number): string[] {
+    const s = this.state!;
+    const lines: string[] = [];
+    const L = s.life;
+    const yesterday = s.weather;
+    s.weather = s.tomorrow;
+    s.tomorrow = rollWeather(day + 1);
+    this.locations.saltwharf.setWeather?.(s.weather);
+    // The missing come back, confused; on a fog night someone else may not come home.
+    for (const [id, until] of Object.entries(L.missing)) {
+      if (until < day) {
+        delete L.missing[id];
+        L.confused[id] = day + 1;
+        lines.push(`${this.nameOf(id)} came back out of the fog at dawn. They don't remember the last two days, and keep asking what day it is.`);
+        sendLetter(s, 'Mrs. Constance Ashby', 'They came back', `${this.first(id)} came back. Mine did not. Ask them what they saw. They will say a white light. They all say a white light.\n\nC.A.`);
+      }
+    }
+    for (const [id, until] of Object.entries(L.confused)) if (until < day) delete L.confused[id];
+    const takeable = ['tom', 'lizzie', 'jem', 'hannah', 'ruby', 'moss'].filter((id) => !(L.sick[id] >= day) && !(L.missing[id] >= day));
+    if (yesterday === 'fog' && !Object.keys(L.missing).length && Math.random() < 0.4 && takeable.length) {
+      const id = takeable[Math.floor(Math.random() * takeable.length)];
+      L.missing[id] = day + 1;
+      lines.push(`MISSING: ${this.nameOf(id)} walked home through last night's fog and never arrived. Posters are going up.`);
+    }
+    // Sickness.
+    for (const [id, until] of Object.entries(L.sick)) if (until < day) delete L.sick[id];
+    const healthy = RESIDENTS.filter((r) => this.present(r) && !['mag', 'quill', 'ashby'].includes(r.id) && !(L.sick[r.id] >= day)).map((r) => r.id);
+    if (!Object.keys(L.sick).length && Math.random() < 0.09 && healthy.length) {
+      const id = healthy[Math.floor(Math.random() * healthy.length)];
+      L.sick[id] = day + 2;
+      lines.push(`${this.nameOf(id)} has taken a fever. They're wrapped up on their step; a hot broth would do more than Quill's tonic.`);
+    }
+    // The strike.
+    if (s.strike && day > s.strike.until && s.strike.won === undefined) {
+      const won = Math.random() < (s.strike.side === 'scab' ? 0.35 : s.strike.side === 'picket' ? 0.75 : 0.55);
+      s.strike.won = won;
+      if (won) {
+        s.dockRaise = 0.1;
+        lines.push('The strike is won: the owners give the dockers back their penny, and a tenth on top.');
+      } else {
+        lines.push('The strike is broken. Rudd takes back the men he likes, and remembers the ones he doesn\'t.');
+        if (s.strike.side === 'picket') this.rel('rudd').rivalry = Math.min(100, this.rel('rudd').rivalry + 6);
+      }
+    } else if (strikeStarts(s, day)) {
+      s.strike = { day, until: day + 2, side: '' };
+      lines.push('STRIKE: the dockers are out. Pickets at the Hiring Office for three days. Join them, or cross the line for double pay.');
+    }
+    // Scripted days.
+    if (day === FUNERAL_DAY) lines.push('A funeral this morning at eleven: old Sam Pike the net-mender, from Gull Court along Quay Street.');
+    if (day === VANE_START) lines.push('Men in white coats are digging a hole on the quay. A Vane Company lamp is going in.');
+    if (day === EVICTION_DAY) lines.push('Grubb has turned the Okafors out of Gull Court. Their things are on a cart in the street.');
+    const newcomer = RESIDENTS.find((r) => r.arrives === day);
+    if (newcomer) lines.push(`Someone new has taken the Okafors' room in Gull Court: ${newcomer.name}, in black.`);
+    // Parish purse for a churchwarden.
+    if (s.parish.rank >= 2 && weekday(day) === 1) {
+      s.money = Math.round((s.money + 0.1) * 100) / 100;
+      lines.push('Your share of the pew rents: £0.10. Nobody asks how the parish purse is kept.');
+    }
     return lines;
   }
 
@@ -1341,6 +2201,14 @@ export class Game {
     const hot = ZONES.find((z) => z.id === s.hotZone)?.name ?? 'Gull Court';
     const recent = s.facts.filter((f) => day - f.day <= 2);
     const heads = gazette(s, day, hot, recent, `${s.character.first} ${s.character.last}`);
+    const missing = Object.keys(s.life.missing).filter((k) => s.life.missing[k] >= day);
+    if (missing.length) heads.splice(1, 0, `MISSING IN THE FOG: ${this.nameOf(missing[0]).toUpperCase()} OF SALTWHARF; NEIGHBOURS SEARCH THE RIVER STAIRS`);
+    if (s.strike && day >= s.strike.day && day <= s.strike.until) heads.splice(1, 0, 'DOCKERS OUT AT SALTWHARF: OWNERS THREATEN "MEN FROM WAPPING"');
+    if (day >= VANE_START && day < VANE_DONE) heads.splice(1, 0, 'FIRST VANE LAMP FOR SALTWHARF QUAY: "LIGHT FOR ALL," SAYS COMPANY');
+    if (s.parish.standing !== null) heads.push(`VESTRY ELECTION: ${s.character.last.toUpperCase()} CHALLENGES ${this.nameOf(OFFICES[s.parish.rank].rival).toUpperCase()}`);
+    const hol = holidayOn(day + 1) ?? holidayOn(day);
+    if (hol) heads.push(`${hol.name.toUpperCase()}: ${hol.text.split(': ')[1]?.toUpperCase() ?? ''}`);
+    if (hasPerk(s, 'study', 3)) heads.push(`Small print, tomorrow's weather: ${s.tomorrow === 'clear' ? 'dry' : s.tomorrow === 'rain' ? 'rain from the estuary' : 'FOG on the river'}.`);
     sfx('page');
     await this.hud.modal('The Saltwharf Gazette', heads, '', 'gazette', `${this.clock.formatDate()} · One Penny`);
   }
@@ -1355,7 +2223,12 @@ export class Game {
     const s = this.state!;
     if (this.location.id !== 'saltwharf' || !this.player) return 0;
     const p = this.player.position;
-    return dangerAt(p.x, p.y, this.clock.hour, s.hotZone, this.nearLamp(p.x, p.y));
+    let d = dangerAt(p.x, p.y, this.clock.hour, s.hotZone, this.nearLamp(p.x, p.y));
+    if (s.weather === 'fog') d *= 1.3;
+    if (hasPerk(s, 'cunning', 6)) d *= 0.75;
+    if (this.life.constableNear(p.x, p.y)) d *= 0.5;
+    if (this.life.bonfireLit && Math.hypot(p.x - 15.5, p.y - 20.5) < 7) d *= 0.3;
+    return Math.min(1, d);
   }
 
   /** Warn once per zone per night when you walk somewhere dangerous; the screen darkens at the edges. */
@@ -1383,7 +2256,7 @@ export class Game {
     if (!spot) return void this.robbery();
     const look = { skin: 0x9a8a7a, hair: 0x101010, coat: 0x14161c, trousers: 0x101216, shirt: 0x202228, boots: 0x0a0a0a, hat: 'cap' as const, hatColor: 0x0e0e12, build: 1.08 };
     const shadow = new Player(grid, look, spot.x + 0.5, spot.z + 0.5);
-    shadow.speedMult = 0.9;
+    shadow.speedMult = hasPerk(s, 'cunning', 3) ? 0.75 : 0.9;
     this.locations.saltwharf.scene.add(shadow.rig.root);
     this.stalker = { walker: shadow, t: 0, retarget: 0 };
     s.lastRobberyDay = dayIndex(s.minutes);
@@ -1404,7 +2277,7 @@ export class Game {
     }
     st.walker.update(dt, this.elapsed);
     const gone = this.location.id !== 'saltwharf' || this.nearLamp(p.x, p.y, 1.4);
-    const caught = Math.hypot(st.walker.position.x - p.x, st.walker.position.y - p.y) < 1.1 || st.t > 9;
+    const caught = Math.hypot(st.walker.position.x - p.x, st.walker.position.y - p.y) < 1.1 || st.t > (hasPerk(this.state!, 'cunning', 3) ? 14 : 9);
     if (gone || caught) {
       st.walker.rig.root.removeFromParent();
       this.stalker = null;
@@ -1633,10 +2506,14 @@ export class Game {
   private dressBonus(id: string): number {
     const s = this.state!;
     const res = RESIDENTS.find((r) => r.id === id)!;
-    if (s.outfit === 'coat') return 0.08;
-    if (s.outfit === 'work') return CIRCLES.docks.includes(id) ? 0.08 : 0;
-    if (s.outfit === 'sunday') return res.cls === 'middle' ? 0.1 : res.traits.includes('jovial') || res.traits.includes('cynical') ? -0.05 : 0.02;
-    return 0;
+    const w = s.wear[s.outfit];
+    if (w < 15) return -0.08;
+    const k = w < 40 ? 0.5 : 1;
+    const office = res.cls === 'middle' ? s.parish.rank * 0.04 : 0;
+    if (s.outfit === 'coat') return 0.08 * k + office;
+    if (s.outfit === 'work') return (CIRCLES.docks.includes(id) ? 0.08 : 0) * k + office;
+    if (s.outfit === 'sunday') return (res.cls === 'middle' ? 0.1 : res.traits.includes('jovial') || res.traits.includes('cynical') ? -0.05 : 0.02) * k + office;
+    return office;
   }
 
   /** The jealousy confrontation, when you next speak to someone who has heard. */
@@ -1736,6 +2613,7 @@ export class Game {
     s.minutes = this.clock.minutes;
     if (kind === 'collapse') addNeed(s.needs, 'health', -10);
     if (outdoors && !scarf) addNeed(s.needs, 'health', -5);
+    if (outdoors) this.wearOut(8);
     const theft = outdoors ? this.theftWhileAsleep() : null;
     const rentNews = this.checkRent();
     await this.hud.fade(false);
@@ -1795,6 +2673,18 @@ export class Game {
       lines.push(`Rent: £${s.rent.amount.toFixed(2)} in ${days} day${days === 1 ? '' : 's'}${s.money >= s.rent.amount ? ' (you have it)' : ''}`);
     } else lines.push(`Homeless: Grubb wants £${s.rent.arrears.toFixed(2)} to let you back in`);
     lines.push(...world);
+    lines.push(`Weather: ${WEATHER_TEXT[s.weather]}`);
+    if (hasPerk(s, 'occult', 10) && s.tomorrow === 'fog') lines.push('You feel it in your teeth: fog tomorrow.');
+    const hol = holidayOn(day);
+    if (hol) lines.push(hol.text);
+    const soon = holidayOn(day + 1);
+    if (soon) lines.push(`Tomorrow: ${soon.name}.`);
+    if (isSunday(day)) lines.push('Sunday: Father Hale holds a service at the market cross until noon.');
+    for (const e of s.jobs) {
+      const t = MOOD_TEXT[e.jobId]?.[bossMood(e.jobId, day, s)];
+      if (t && bossMood(e.jobId, day, s) !== 'fair') lines.push(t);
+    }
+    if (s.parish.standing !== null) lines.push(s.parish.standing === day ? 'Election day: the count is at noon at the market cross.' : `Election in ${s.parish.standing - day} days: ${s.parish.pledges.length} pledged, ${s.parish.crowd} won by speeches.`);
     const hot = ZONES.find((z) => z.id === s.hotZone)?.name;
     if (hot) lines.push(`Word on the street: stay out of ${hot} after dark.`);
     if (weekday(day) === FIGHT_NIGHT.day) lines.push(`Fight Night tonight at the boxing yard, 20:00: ${this.nextBout().enemy.name}.`);
@@ -1807,6 +2697,7 @@ export class Game {
   /** Sleeping in the street: someone may go through your pockets. Cunning wakes you; a friend may keep watch. */
   private theftWhileAsleep(): string | null {
     const s = this.state!;
+    if (hasPerk(s, 'cunning', 10)) return null;
     const mag = s.relations?.mag;
     const watched = !!mag && mag.friendship >= 30;
     const chance = Math.max(0.05, 0.45 - s.character.skills.cunning * 0.04) * (watched ? 0.4 : 1);
@@ -1868,7 +2759,7 @@ export class Game {
         this.rentPaid = true;
         return `Rent, £${r.amount.toFixed(2)}. Paid. Pleasure, I'm sure. Same again at the end of the month.`;
       }
-      r.graceUntil = this.clock.minutes + (this.friend('grubb') ? 14 : 7) * DAY;
+      r.graceUntil = this.clock.minutes + ((this.friend('grubb') ? 14 : 7) + (s.parish.rank > 0 ? 7 : 0)) * DAY;
       return `£${r.amount.toFixed(2)}, and you haven't got it. ${this.friend('grubb') ? 'Fourteen days, because I like you.' : 'Seven days.'} After that you and your things go in the gutter.`;
     }
     if (r.graceUntil !== null) {
@@ -1917,6 +2808,8 @@ export class Game {
   private goals(): string[] {
     const s = this.state!;
     const out: string[] = [];
+    for (const q of s.quests.filter((x) => !x.done).slice(0, 2)) out.push(`Favour: ${q.text}`);
+    if (s.parish.standing !== null) out.push(`Election in ${Math.max(0, s.parish.standing - dayIndex(s.minutes))} days: ${s.parish.pledges.length} pledges, ${s.parish.crowd} from speeches`);
     if (!s.housed) out.push(`Get your room back: £${s.money.toFixed(2)} / £${s.rent.arrears.toFixed(2)}`);
     else if (s.money < s.rent.amount) out.push(`Rent by ${this.clock.formatShortDate(this.clock.rentDue)}: £${s.money.toFixed(2)} / £${s.rent.amount.toFixed(2)}`);
     if (s.jobs.length === 0) out.push('Find work: the Dock Hiring Office or the Copper Cup');
@@ -1930,7 +2823,9 @@ export class Game {
       .filter((x) => x.f < 30)
       .sort((a, b) => b.f - a.f)[0];
     if (close) out.push(`Befriend ${close.p.name.split(' ')[0]}: friendship ${Math.round(close.f)} / 30`);
-    else if (known.length < RESIDENTS.length) out.push(`Meet the neighbours: ${known.length} / ${RESIDENTS.length}`);
+    else if (known.length < RESIDENTS.filter((r) => this.present(r)).length) out.push(`Meet the neighbours: ${known.length} / ${RESIDENTS.filter((r) => this.present(r)).length}`);
+    const office = OFFICES[s.parish.rank];
+    if (office && s.parish.standing === null && s.character.skills.study >= office.study - 1) out.push(`Stand for ${office.name}: ask Father Hale (Study ${office.study}, ${office.friends} friends)`);
     const want = Object.values(ITEMS).filter((i) => i.upgrade && !s.owned.includes(i.id)).sort((a, b) => a.price - b.price)[0];
     if (want) {
       const where = SHOPS.hester.stock.includes(want.id) ? "Pell's Chandlery" : 'Rag & Bone';
@@ -2010,7 +2905,21 @@ export class Game {
     const work = s.jobs
       .map((e) => `${title(s, e)} at the ${JOBS[e.jobId].employer}: ${nextShiftText(s, e.jobId)}. ${promotionText(s, e.jobId)}`)
       .join('\n');
-    this.hud.setJournal(Hud.titleFor(s), this.hud.journalHtml(s, rentLine + debtLine, work));
+    const esc = (t: string) => t.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
+    const perks = PERKS_OWNED(s).map((p) => `<li><b>${esc(p.name)}</b> (${SKILL_INFO[p.skill].name} ${p.level}): ${esc(p.text)}</li>`).join('');
+    const next = SKILLS.map((k) => nextPerk(s, k)).filter(Boolean).map((p) => `<li>${SKILL_INFO[p!.skill].name} ${p!.level}: ${esc(p!.name)}</li>`).join('');
+    const mentors = SKILLS.map((k) => `${SKILL_INFO[k].name}: ${esc(this.first(MENTORS[k].who))}`).join(' · ');
+    const favours = s.quests.filter((q) => !q.done).map((q) => `<li>${esc(q.text)}</li>`).join('') || '<li>Nobody needs anything from you just now.</li>';
+    const office = officeTitle(s, s.character.gender === 'woman');
+    const extra = `
+      <h3>Favours</h3><ul class="perks">${favours}</ul>
+      <h3>Perks</h3><ul class="perks">${perks || '<li>None yet. They come at skill 3, 6 and 10.</li>'}</ul>
+      <p class="meta">Next: </p><ul class="perks">${next}</ul>
+      <p class="meta">Mentors: ${mentors}. Make friends with them for free lessons.</p>
+      <h3>Clothes</h3><p>${esc(OUTFIT_NAMES[s.outfit])}: ${this.condition()} (${Math.round(s.wear[s.outfit])}%).</p>
+      <h3>Parish</h3><p>${office ? `${office} of St. Botolph.` : 'No office.'} ${s.parish.standing !== null ? `Standing for ${OFFICES[s.parish.rank].name}: ${s.parish.pledges.length} pledged, ${s.parish.crowd} from speeches.` : OFFICES[s.parish.rank] ? `Next: ${OFFICES[s.parish.rank].name}, needs Study ${OFFICES[s.parish.rank].study} and ${OFFICES[s.parish.rank].friends} friends. Ask Father Hale.` : ''}</p>
+      <h3>Days ahead</h3><p>${HOLIDAYS.map((h) => `${h.name}, ${h.date} ${h.month === 9 ? 'Oct' : 'Nov'}`).join(' · ')}. Weather today: ${s.weather}.</p>`;
+    this.hud.setJournal(Hud.titleFor(s), this.hud.journalHtml(s, rentLine + debtLine, work) + extra);
   }
 
   // --- Creator preview ------------------------------------------------------
@@ -2073,7 +2982,7 @@ export class Game {
       return;
     }
 
-    this.sound.setAmbience(this.mode === 'play' ? this.clock.hour : 21, this.location.id !== 'saltwharf', document.querySelector('.minigame') !== null);
+    this.sound.setAmbience(this.mode === 'play' ? this.clock.hour : 21, this.location.id !== 'saltwharf', document.querySelector('.minigame') !== null, this.mode === 'play' && this.state?.weather === 'rain');
 
     if (this.mode === 'title') {
       this.location.update(20.8, this.elapsed);
@@ -2107,7 +3016,19 @@ export class Game {
         s.debt = Math.round((s.debt - pay) * 100) / 100;
         if (s.debt === 0) this.hud.toast('Your hospital bill is paid off.');
       }
+      // A strike is no absence: shifts lost to the picket line don't count against you.
+      const today = dayIndex(s.minutes);
+      const e = employment(s, 'docks');
+      if (e && s.strike && today >= s.strike.day && today <= s.strike.until) e.checkedDay = Math.max(e.checkedDay, today);
       void this.attendance();
+      // Rain soaks you outdoors, unless you have a good coat on.
+      const mins = this.clock.minutes - before;
+      if (s.weather === 'rain' && this.location.id === 'saltwharf' && mins > 0) {
+        if (s.outfit !== 'coat') addNeed(s.needs, 'health', (-1.5 * mins) / 60);
+        this.wearOut((2 * mins) / 60);
+      }
+      this.checkQuests();
+      if (s.parish.standing !== null && today >= s.parish.standing && this.clock.hour >= 12 && !this.busy && !this.dialogue.open && !this.hud.blocking) void this.election();
       if (s.minutes - this.lastSaveMinute >= 60) this.save();
     }
 
@@ -2115,6 +3036,23 @@ export class Game {
     this.updateNpcs(dt);
     this.updateStalker(dt);
     this.updateTully(dt);
+    if (this.location.id === 'saltwharf') {
+      const day = dayIndex(s.minutes);
+      const hol = holidayOn(day)?.id ?? (holidayOn(dayIndex(s.minutes - 6 * 60))?.id === 'hallows' && this.clock.hour < 6 ? 'hallows' : null);
+      this.life.update(dt, this.elapsed, {
+        hour: this.clock.hour, day, weather: s.weather, player: player.position,
+        sight: hasPerk(s, 'occult', 3) || hol === 'hallows', holiday: hol,
+        headline: this.headline ??= gazette(s, day, 'Gull Court', [], '')[0],
+        lost: s.quests.filter((q) => q.kind === 'lost' && !q.found && q.at).map((q) => ({ id: q.id, x: q.at!.x, z: q.at!.z })),
+      });
+      if (this.headlineDay !== day) {
+        this.headlineDay = day;
+        this.headline = null;
+      }
+    }
+    const atmo = document.querySelector('.atmo');
+    atmo?.classList.toggle('foggy', s.weather === 'fog' && this.location.id === 'saltwharf');
+    atmo?.classList.toggle('rainy', s.weather === 'rain' && this.location.id === 'saltwharf');
     this.dangerTimer -= dt;
     if (this.dangerTimer <= 0) {
       this.dangerTimer = 0.4;
@@ -2144,7 +3082,8 @@ export class Game {
     if (!this.prevSkills) this.prevSkills = { ...s.character.skills };
     for (const k of SKILLS) {
       if (s.character.skills[k] > (this.prevSkills[k] ?? 0)) {
-        void this.hud.celebrate('skill', 'Skill improved', `${SKILL_INFO[k].name} ${s.character.skills[k]}`, SKILL_INFO[k].blurb);
+        const perk = perkAt(k, s.character.skills[k]);
+        void this.hud.celebrate('skill', perk ? `New perk: ${perk.name}` : 'Skill improved', `${SKILL_INFO[k].name} ${s.character.skills[k]}`, perk ? perk.text : SKILL_INFO[k].blurb);
       }
     }
     this.prevSkills = { ...s.character.skills };

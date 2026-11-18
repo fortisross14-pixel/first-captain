@@ -8,7 +8,11 @@ A dark gothic life-sim RPG set in a fictional Victorian London (1871): work, ren
 - Latest audit: [docs/AUDIT_2026-11-18.md](docs/AUDIT_2026-11-18.md) · repeat it with `node scripts/audit-metrics.cjs` and the `game-audit` skill
 - Story and world design: the *Pale Lamps Story Bible* (Claude Docs)
 
-## Current state: M8, a living world
+## Current state: M9, Saltwharf lives
+
+Neighbours with their own days: working at their stops, talking to each other (and about you), walking up to ask favours. Bells, the crier, the lamplighter, drunks and a constable; gulls, cats and rats; rain and fog banks; fevers, the missing, a funeral, an eviction and a newcomer; Vane's white lamp and the dead. Plus the rest of M8's list: recipes, mentors and perks, boss moods and a dock strike, feast days, clothes that wear out, and the Vestry election.
+
+### Earlier: M8, a living world
 
 Gossip, jealousy and revenge; letters and the Gazette; readable danger, Black Jack Tully and Fight Night; furniture and outfits people react to.
 

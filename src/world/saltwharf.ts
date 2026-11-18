@@ -313,5 +313,6 @@ export function buildSaltwharf(): Location {
     fadeOccluders: true,
     lamps: lamps.filter((l) => !l.vane).map((l) => ({ x: l.position.x, z: l.position.z })),
     update,
+    setWeather: (w) => (lighting.weather = w),
   };
 }

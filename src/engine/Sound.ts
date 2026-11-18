@@ -12,6 +12,7 @@ export class Sound {
   private river!: GainNode;
   private wind!: GainNode;
   private windFilter!: BiquadFilterNode;
+  private rain!: GainNode;
   private noise!: AudioBuffer;
   enabled: boolean;
 
@@ -97,11 +98,19 @@ export class Sound {
     lfoGain.gain.value = 300;
     lfo.connect(lfoGain).connect(this.windFilter.frequency);
     lfo.start();
+    // Rain: high hiss on the cobbles.
+    const rn = loop(0);
+    const rnf = ctx.createBiquadFilter();
+    rnf.type = 'highpass';
+    rnf.frequency.value = 2400;
+    rn.g.connect(rnf).connect(this.master);
+    this.rain = rn.g;
   }
 
   /** Called every frame: louder wind at night, muffled indoors. */
-  setAmbience(hour: number, indoors: boolean, busy: boolean): void {
+  setAmbience(hour: number, indoors: boolean, busy: boolean, rain = false): void {
     if (!this.ctx) return;
+    this.rain.gain.setTargetAtTime(rain && !busy ? (indoors ? 0.25 : 0.9) : 0, this.ctx.currentTime, 1.2);
     const night = hour >= 20 || hour < 6 ? 1 : 0;
     const t = this.ctx.currentTime;
     this.river.gain.setTargetAtTime(busy ? 0.05 : indoors ? 0.05 : 0.35, t, 0.5);
@@ -151,6 +160,8 @@ export class Sound {
       case 'chime': [880, 1175, 1568].forEach((f, i) => tone(f, i * 0.07, 0.9, 0.05)); break;
       case 'flip': tone(1400, 0, 0.05, 0.04, 'triangle'); tone(2100, 0.08, 0.08, 0.03, 'triangle'); burst(0.06, 0.15, 5000, 'highpass'); break;
       case 'page': burst(0.22, 0.25, 3000, 'bandpass'); break;
+      case 'bell': [1, 2.0, 2.4, 3.0, 4.2].forEach((m, i) => tone(196 * m, 0, 3.2 - i * 0.4, [0.09, 0.05, 0.035, 0.025, 0.015][i])); break;
+      case 'handbell': [0, 0.16, 0.32, 0.48].forEach((d) => { tone(1320, d, 0.25, 0.04); tone(1980, d, 0.18, 0.02); }); break;
       case 'tick': tone(3200, 0, 0.02, 0.05, 'square'); tone(3200, 0.12, 0.02, 0.04, 'square'); break;
     }
   }

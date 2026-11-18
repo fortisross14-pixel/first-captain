@@ -4,6 +4,9 @@ import type { Relation } from './social';
 import type { Outfit } from './items';
 import type { Letter } from './letters';
 import type { Fact, Pending } from './world';
+import type { Quest } from './quests';
+import type { Weather } from './calendar';
+import type { Parish } from './parish';
 
 export const SKILLS = ['study', 'strength', 'arts', 'charisma', 'cunning', 'occult'] as const;
 export type SkillId = (typeof SKILLS)[number];
@@ -98,6 +101,22 @@ export interface GameState {
   skillXp: Record<SkillId, number>;
   /** Employer id → first day they will hire you again. */
   bans: Record<string, number>;
+  // --- Saltwharf lives (M8 leftovers and M9) ---
+  /** Favours neighbours have asked of you. */
+  quests: Quest[];
+  /** Today's weather, chosen overnight; tomorrow's for the Gazette's forecast. */
+  weather: Weather;
+  tomorrow: Weather;
+  /** Condition of each outfit, 0–100. */
+  wear: Record<Outfit, number>;
+  /** Standing in the parish: the Vestry ladder. */
+  parish: Parish;
+  /** A dock strike, if one is on: the day it started and which side you took. */
+  strike: { day: number; until: number; side: '' | 'picket' | 'scab'; won?: boolean } | null;
+  /** Permanent raise at the docks after a strike won. */
+  dockRaise: number;
+  /** Changes in the neighbourhood: who is sick, who is missing, until which day. */
+  life: { sick: Record<string, number>; missing: Record<string, number>; confused: Record<string, number> };
 }
 
 const zeroSkills = (): Record<SkillId, number> => ({ study: 0, strength: 0, arts: 0, charisma: 0, cunning: 0, occult: 0 });
@@ -113,13 +132,26 @@ function upgrade(s: GameState): GameState {
   s.inventory ??= [];
   s.skillXp ??= zeroSkills();
   s.bans ??= {};
+  fillLives(s);
   return s;
+}
+
+/** Defaults for the fields added for a living Saltwharf. */
+function fillLives(s: GameState): void {
+  s.quests ??= [];
+  s.weather ??= 'clear';
+  s.tomorrow ??= 'clear';
+  s.wear ??= { plain: 100, work: 100, sunday: 100, coat: 100 };
+  s.parish ??= { rank: 0, standing: null, pledges: [], crowd: 0, lastSpeech: -1 };
+  s.strike ??= null;
+  s.dockRaise ??= 0;
+  s.life ??= { sick: {}, missing: {}, confused: {} };
 }
 
 const KEY = 'pale-lamps-save-v1';
 
 export function newGame(character: Character): GameState {
-  return {
+  const s = {
     version: 1,
     character,
     money: 1.0,
@@ -152,7 +184,9 @@ export function newGame(character: Character): GameState {
     hesterLetters: 0,
     skillXp: zeroSkills(),
     bans: {},
-  };
+  } as unknown as GameState;
+  fillLives(s);
+  return s;
 }
 
 export function saveGame(state: GameState): boolean {

@@ -10,6 +10,10 @@ export class Lighting {
   private readonly fog: THREE.Fog;
   private readonly lampLights: { light: THREE.PointLight; vane: boolean; seed: number }[] = [];
   private readonly sky = new THREE.Color();
+  /** Today's weather: rain darkens and greys the light; a fog bank closes in. */
+  weather: 'clear' | 'rain' | 'fog' = 'clear';
+  private wet = 0;
+  private murk = 0;
 
   constructor(scene: THREE.Scene, center: THREE.Vector3, lamps: { position: THREE.Vector3; vane: boolean }[], private readonly cameraDistance: number) {
     this.hemi = new THREE.HemisphereLight(0xc8d0d8, 0x3a3228, 1.2);
@@ -44,12 +48,14 @@ export class Lighting {
     const day = smooth(5, 7.5, hour) * (1 - smooth(17, 19.5, hour));
     const dusk = Math.max(0, 1 - Math.abs(hour - 18.3) / 1.6) + Math.max(0, 1 - Math.abs(hour - 6.6) / 1.3);
     const night = 1 - day;
+    this.wet += ((this.weather === 'rain' ? 1 : 0) - this.wet) * 0.02;
+    this.murk += ((this.weather === 'fog' ? 1 : 0) - this.murk) * 0.02;
 
     // Sun travels east to west, kept on the river side so the shopfronts facing the camera are lit.
     const ang = ((hour - 6) / 12) * Math.PI;
     const c = this.sun.target.position;
     this.sun.position.set(c.x + Math.cos(ang) * 30, 8 + Math.sin(Math.max(0.15, ang)) * 30, c.z - 18);
-    this.sun.intensity = 0.55 + day * 1.7;
+    this.sun.intensity = (0.55 + day * 1.7) * (1 - this.wet * 0.4 - this.murk * 0.3);
     this.sun.color.setHSL(0.09, 0.5 * dusk + 0.15, 0.75 - 0.15 * dusk);
     if (night > 0.6) this.sun.color.setHex(0x7f96c0); // moonlight
 
@@ -60,10 +66,11 @@ export class Lighting {
     const duskFog = new THREE.Color(0x8a6a5a);
     const nightFog = new THREE.Color(0x1a2230);
     this.sky.copy(nightFog).lerp(dayFog, day).lerp(duskFog, Math.min(0.6, dusk * 0.5));
+    this.sky.lerp(new THREE.Color(0x5a6268), this.wet * 0.35 * day).lerp(new THREE.Color(night > 0.5 ? 0x2a3038 : 0xa8aca8), this.murk * 0.5);
     this.fog.color.copy(this.sky);
-    // Fog thickens at night and creeps closer to the camera.
-    this.fog.near = this.cameraDistance - 6 - night * 4;
-    this.fog.far = this.cameraDistance + 34 - night * 14;
+    // Fog thickens at night and creeps closer to the camera; a fog bank closes right in.
+    this.fog.near = this.cameraDistance - 6 - night * 4 - this.murk * 10;
+    this.fog.far = this.cameraDistance + 34 - night * 14 - this.murk * 20 - this.wet * 6;
 
     const lampGlow = Math.max(smooth(16.8, 18.5, hour), 1 - smooth(5.8, 7.5, hour));
     glow.gasLamp.emissiveIntensity = lampGlow * 2.4;

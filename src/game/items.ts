@@ -27,6 +27,11 @@ export const ITEMS: Record<string, ItemDef> = {
   apple: { id: 'apple', name: 'Apple', price: 0.01, use: { hunger: 10, health: 2 }, verb: 'Eat', blurb: 'Small, sour, slightly bruised.' },
   eelpie: { id: 'eelpie', name: 'Eel pie', price: 0.06, use: { hunger: 45 }, verb: 'Eat', blurb: 'Best not to think about the eel.' },
   meatpie: { id: 'meatpie', name: 'Meat pie', price: 0.09, use: { hunger: 60, health: 3 }, verb: 'Eat', blurb: 'Real meat. Probably.' },
+  onion: { id: 'onion', name: 'Onion', price: 0.01, blurb: 'For the pot. Eating it raw is a cry for help.' },
+  eel: { id: 'eel', name: 'Live eel', price: 0.03, blurb: 'Still wriggling in its paper. For the stove.' },
+  mutton: { id: 'mutton', name: 'Scrag of mutton', price: 0.05, blurb: 'Bone, gristle and hope: a stew or a broth.' },
+  stew: { id: 'stew', name: 'Pot of mutton stew', price: 0.18, use: { hunger: 75, health: 10 }, verb: 'Eat', blurb: 'Home-cooked. The best gift in Saltwharf.' },
+  broth: { id: 'broth', name: 'Jar of broth', price: 0.12, use: { hunger: 30, health: 15 }, verb: 'Drink', blurb: 'For the sick. Quill swears by it.' },
   candle: { id: 'candle', name: 'Tallow candle', price: 0.02, blurb: 'Smoky, but it burns.' },
   bandage: { id: 'bandage', name: 'Bandage', price: 0.04, use: { health: 10 }, verb: 'Apply', blurb: 'Clean linen, for now.' },
   tonic: { id: 'tonic', name: "Pell's tonic", price: 0.12, use: { health: 25, rest: 5 }, verb: 'Drink', blurb: 'Mostly gin, partly hope.' },
@@ -60,7 +65,7 @@ export interface Shop {
 }
 
 export const SHOPS: Record<string, Shop> = {
-  market: { name: 'Saltwharf Market', keeper: 'the stallholders', stock: ['potato', 'apple', 'bread', 'eelpie', 'meatpie'], buys: 0 },
+  market: { name: 'Saltwharf Market', keeper: 'the stallholders', stock: ['potato', 'apple', 'bread', 'onion', 'eel', 'mutton', 'eelpie', 'meatpie'], buys: 0 },
   hester: { name: "Pell's Chandlery", keeper: 'Mrs. Pell', stock: ['candle', 'candle2', 'coal', 'bandage', 'tonic', 'mattress', 'chest'], buys: 0 },
   clothier: { name: 'Rag & Bone Clothiers', keeper: 'Lizzie Barlow', stock: ['work', 'sunday', 'coat', 'scarf', 'gloves', 'apron', 'boots'], buys: 0 },
   pawnbroker: { name: 'Moss the Pawnbroker', keeper: 'Moss', stock: ['rug', 'curtains', 'mirror', 'bookshelf', 'workbench'], buys: 0.4 },

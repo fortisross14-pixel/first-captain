@@ -150,6 +150,30 @@ The style chosen from four proposals is in `docs/STYLE_GUIDE.md`: torn midnight-
 - [x] **Furniture** from Moss (rug, curtains, bookshelf, looking-glass, workbench) appears in Hester's room. Comfort tops up Social at home; the bookshelf boosts Study, the glass first impressions, the workbench makes trinkets for Arts & Crafts. A stray cat moves into a comfortable room. Pembleton comments on everything.
 - [x] **Outfits** from Rag & Bone (docker's jacket, Sunday best, respectable coat) change your 3D model, your odds with each class, and how likely you are to be robbed. Everyone you know reacts the first time they see you in new clothes; Lizzie recognises her own stitching.
 
+## M8 leftovers ✅ The rest of the living world
+
+What the M8 brainstorm promised and M8 didn't build:
+
+- [x] **Food and recipes** (`src/game/food.ts`): onions, eels and mutton at the market; six recipes at Hester's stove (hash, stewed eels, baked apples, mutton stew, sick-room broth). Arts & Crafts makes food go further (+4% a level) and unlocks harder dishes; stew and broth are carried as gifts and remedies.
+- [x] **Skill mentors and perks** (`src/game/skills.ts`): a mentor for each skill (Hale, Nell, Lizzie, Bessa, Silas, Mag); lessons once a day, paid for acquaintances, free for friends. Perks at 3, 6 and 10 in every skill (eighteen in all: weather forecasts, cheaper prices, mending, the sight, sleeping rough unrobbed...). The diary lists them and the next one.
+- [x] **Boss moods and workplace events** (`src/game/calendar.ts`): Rudd and Bessa have tempers that change pay by 15% either way. A dock strike once in the second or third week: picket with the dockers or cross the line for double pay; the outcome sets a permanent raise, or a grudge.
+- [x] **Calendar**: All Hallows' Eve (the dead visible to all), Bonfire Night (a bonfire, a Guy, a crowd, safer streets), Martinmas (good bosses, a free goose), and Sunday services at the market cross.
+- [x] **Clothes condition**: work, fights, rain and rough sleep wear clothes down; shabby and ragged clothes lose their bonus and draw comments. Lizzie mends them (free for a friend), or mend them yourself at Arts & Crafts 6.
+- [x] **Parish politics** (`src/game/parish.ts`): stand for the Vestry with Father Hale (Study, friends, a roof, a deposit), canvass for pledges, speak at the market, and win the count against Mr. Grubb; then Churchwarden against Moss. Offices change greetings, rent grace and the parish purse. Beyond: Guardian, Board of Works, Alderman, Lord Mayor, in later districts.
+
+## M9 ✅ Saltwharf lives
+
+The Animal Crossing feeling, darker: residents have their own lives and you walk through them.
+
+- [x] **Activities**: every routine stop has something to do, with a pose and a prop: Jem crying his wares with a basket, Nell shadow-boxing, dockers hauling crates up and down the quay, Hannah at the washtub, Hale preaching, Mag feeding the pigeons, Bessa sweeping then counting, Silas smoking in the alley. Passers-by mutter and shout their trade.
+- [x] **Neighbours talk to each other**: pairs stop and chat in bubbles about you (drawn from what they know, which really spreads), the missing, the sick, the strike, the Vane lamps, the weather. Close by, you overhear.
+- [x] **Residents come to you** (`src/game/quests.ts`): friends walk up with favours: fetch something, find something lost (it glints in the gutter), meet them somewhere at an hour, read a letter for them (Study). Done favours pay in friendship and reputation; ignored ones go sour, or arrive as "You never came" letters.
+- [x] **Town rhythm** (`src/engine/Life.ts`): church bells on the hour, the crier at 08:00 calling the day's headlines, the lamplighter on his round at dusk, drunks singing home from the Copper Cup, a constable with a lantern on Quay Street (safer near him).
+- [x] **Creatures and weather**: gulls on the quay that scatter as you pass, crows, Mag's pigeons, stray cats, rats at night. Rain (streaks, sound, emptier streets, soaked clothes) and fog banks (closed-in light, more danger, and people go missing), chosen each night.
+- [x] **Life changes**: fevers (bring broth), missing persons who come back from the fog days later with no memory, old Sam Pike's funeral, the Okafors evicted onto a cart, and Mrs. Constance Ashby moving into their room, looking for a husband the fog took.
+- [x] **The darker layer**: Vane's men install a white lamp on the quay and want to put one on your stair; with Occult 3 you see the dead at night, and at Occult 6 they talk.
+- [x] Performance: creatures are merged into one or two meshes each; Quay Street by day is 118 draw calls (budget 250, was 91 before M9).
+
 ## After the slice
 
 More districts, factions, the main story and the Fog Clock, businesses, marriage, children and aging.

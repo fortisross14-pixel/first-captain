@@ -116,6 +116,13 @@ export const VOICES: Record<string, Voice> = {
     chat: 'Hannah tells you what the laundry says about the neighbours. Laundry knows everything.',
     perk: 'Friend: Hannah keeps your clothes clean, so people warm to you a little more.',
   },
+  ashby: {
+    hint: 'Black crape, good gloves gone shiny at the fingertips. She watches the river as if it owes her an answer.',
+    friend: ['You again. Good. I need someone sane to talk to.', 'Any news? No. There never is.'],
+    rival: ['I have nothing to say to you.'],
+    chat: 'Mrs. Ashby tells you about her husband, a clerk who walked home through the fog from Greymourne in August and never arrived. "They say widow. I say missing."',
+    perk: 'Friend: Mrs. Ashby shares what she has learned about the fog and the people it takes.',
+  },
 };
 
 /** Which shopkeeper's friendship gives a discount at which shop. */

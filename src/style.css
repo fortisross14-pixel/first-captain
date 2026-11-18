@@ -430,3 +430,12 @@ button:disabled { cursor: default; }
 .journal-sheet.gazette .modal-body p { font: 600 17px/1.25 var(--f-display); letter-spacing: .02em; padding: 10px 0; border-bottom: 1px solid var(--rule); margin: 0; }
 .journal-sheet.gazette .modal-body p:first-child { font-size: 21px; }
 .journal-sheet.gazette .modal-body p:last-child { color: var(--ember); border-bottom: 0; }
+
+/* --- Saltwharf lives: weather over the world, perks in the diary --------- */
+.atmo .fog { transition: opacity 3s, height 3s; }
+.atmo.foggy .f1 { opacity: .62; height: 62%; }
+.atmo.foggy .f2 { opacity: .42; height: 50%; }
+.atmo.foggy .vignette { background: radial-gradient(ellipse at 50% 48%, transparent 30%, rgba(150, 160, 160, .35) 75%, rgba(20, 24, 28, .8) 100%); }
+.atmo.rainy .vignette { background: radial-gradient(ellipse at 50% 48%, rgba(20, 30, 44, .12) 40%, rgba(6, 10, 18, .6) 100%); }
+.journal-body ul.perks { margin: 4px 0 10px; padding-left: 18px; }
+.journal-body ul.perks li { margin: 3px 0; line-height: 1.35; }

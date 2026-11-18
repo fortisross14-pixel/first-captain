@@ -11,7 +11,9 @@ export type FactKind =
   | 'helped' // you helped `about`
   | 'promoted' // a promotion; `note` is the new title
   | 'champion' // you won a Fight Night bout; `note` is the opponent
-  | 'evicted';
+  | 'evicted'
+  | 'scab' // you crossed the dockers' picket
+  | 'elected'; // you won a seat; `note` is the office
 
 export interface Fact {
   id: number;
@@ -28,14 +30,14 @@ export const CIRCLES: Record<string, string[]> = {
   docks: ['nell', 'rudd', 'tom', 'hannah'],
   cup: ['bessa', 'nell', 'jem', 'ruby', 'silas'],
   church: ['hale', 'pell', 'quill', 'hannah'],
-  street: ['mag', 'ruby', 'jem', 'lizzie', 'moss', 'grubb'],
+  street: ['mag', 'ruby', 'jem', 'lizzie', 'moss', 'grubb', 'ashby'],
   kin: ['silas', 'ruby', 'moss'],
 };
 
 /** How readily each resident passes things on (0–1). */
 export const GOSSIP: Record<string, number> = {
   ruby: 0.9, mag: 0.85, jem: 0.75, bessa: 0.65, lizzie: 0.5, grubb: 0.45, tom: 0.4, nell: 0.35,
-  hannah: 0.35, pell: 0.3, moss: 0.3, hale: 0.15, quill: 0.15, silas: 0.25, rudd: 0.1,
+  hannah: 0.35, pell: 0.3, moss: 0.3, hale: 0.15, quill: 0.15, silas: 0.25, rudd: 0.1, ashby: 0.2,
 };
 
 /** Residents whose wrongs the Hollow Lane Kin avenge. */
@@ -133,6 +135,8 @@ export function knowledgeOf(s: GameState, who: string, nameOf: (id: string) => s
     if (f.kind === 'promoted') out.push(`heard you're ${f.note} now`);
     if (f.kind === 'champion') out.push(`saw you beat ${f.note}`);
     if (f.kind === 'evicted') out.push('knows Grubb threw you out');
+    if (f.kind === 'scab') out.push('knows you crossed the picket');
+    if (f.kind === 'elected') out.push(`voted you ${f.note}, or knows who did`);
   }
   return [...new Set(out)];
 }
