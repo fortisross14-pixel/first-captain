@@ -107,6 +107,7 @@ export const ITEMS: Record<string, ItemDef> = {
   mirror: { id: 'mirror', name: 'Looking-glass', price: 0.45, upgrade: true, furniture: true, blurb: 'Tidy yourself each morning: better first impressions all day.' },
   workbench: { id: 'workbench', name: 'Workbench', price: 0.9, upgrade: true, furniture: true, blurb: 'Carve trinkets to sell: Arts & Crafts practice.' },
   scarf: { id: 'scarf', name: 'Wool scarf', price: 0.25, upgrade: true, blurb: 'Sleeping rough costs no Health and rests a little better.' },
+  lovetoken: { id: 'lovetoken', name: 'Tom\'s love token', price: 0.01, blurb: 'For Lizzie Barlow, from Tom Fairley, who could not say it himself.' },
   // Finds: what Saltwharf throws away, and what the river gives back.
   rags: { id: 'rags', name: 'Bundle of rags', price: 0.05, junk: true, blurb: 'Filthy, but the paper mills pay for rag. Lizzie buys them.' },
   bottle: { id: 'bottle', name: 'Empty bottle', price: 0.04, junk: true, blurb: 'Rinse it and it is worth a farthing to the brewers.' },

@@ -14,7 +14,7 @@ import { LESSON_XP, MENTORS, PERKS, hasPerk, nextPerk, perkAt } from '../game/sk
 
 const PERKS_OWNED = (s: GameState) => PERKS.filter((p) => s.character.skills[p.skill] >= p.level);
 import { HOLIDAYS, MOOD_PAY, MOOD_TEXT, WEATHER_TEXT, bossMood, holidayOn, isSunday, rollWeather, strikeStarts } from '../game/calendar';
-import { JOURNAL, SAILOR, URGENT, clockWord } from '../game/story';
+import { JOURNAL, URGENT, clockWord } from '../game/story';
 import { FACTIONS, FACTION_IDS, addDeed, factionOf, joinBlockers, rankIn, standing, type FactionId } from '../game/factions';
 import { FUTURE_OFFICES, OFFICES, count as countVotes, officeTitle, pledgeChance, voters } from '../game/parish';
 import { ASKS, LOST_ZONES, PLACE_NAMES, READ_LETTERS, type Quest } from '../game/quests';
@@ -33,15 +33,16 @@ import {
   canStartShift, checkAttendance, completeShift, dayStart, employment, gainXp, hire, hireBlocker, leave, nextShiftText,
   promotionText, title,
 } from '../game/work';
-import { xpToNext } from '../game/jobs';
+import { formatMinutes, rankTitle, xpToNext } from '../game/jobs';
 import { playBar } from '../minigames/bar';
 import { ENEMIES, runFight, type Enemy } from '../minigames/fight';
 import { playCargo } from '../minigames/cargo';
-import { NEED_NAMES, SKILLS, SKILL_INFO, currentSlot, deleteSave, latestSlot, loadGame, newGame, saveGame, slotInfo, useSlot, type Character, type GameState, type LocationId, type NeedId } from '../game/state';
+import { NEED_NAMES, SKILLS, SKILL_INFO, currentSlot, deleteSave, latestSlot, loadGame, newGame, saveGame, slotInfo, useSlot, type Character, type GameState, type LocationId, type NeedId, type SkillId } from '../game/state';
 import { Creator } from '../ui/Creator';
 import { Dialogue, type Line } from '../ui/Dialogue';
 import { Hud, type Action, type ListRow, type PieItem } from '../ui/Hud';
 import { Title } from '../ui/Title';
+import { Prologue } from '../ui/Prologue';
 import { installPrompt, isIOSInstallable, runInstall } from '../pwa';
 import { buildHesterRoom } from '../world/hesterRoom';
 import type { Location, Place } from '../world/location';
@@ -51,7 +52,8 @@ import { FLOOR_COLORS, FURNITURE, WALL_COLORS, defaultLayout, footprint, type Fu
 import { SPOTS, rummage } from '../world/scavenge';
 import { EXITS, ROUTE_TO } from '../world/exits';
 import { INTERIORS, buildInterior, isOpen } from '../world/interior';
-import { OLD_HOMES } from '../world/saltwharfHomes';
+import { HOUSES, OLD_HOMES } from '../world/saltwharfHomes';
+import { MAIN_IDS, MISSION, MISSIONS, currentChapter, objectiveOf, reqMet, reqText, sideStatus, type MissionDef, type MissionState, type Req } from '../game/missions';
 import { Portraits } from '../ui/Portraits';
 import { CameraRig } from './CameraRig';
 import { Clock } from './Clock';
@@ -314,6 +316,7 @@ export class Game {
     this.hud.visible = true;
     this.resize();
     this.refreshObjectives();
+    if (s.tutorial.step === 'intro') await new Prologue(this.container, s.character).done;
     await this.hud.fade(false);
     if (s.tutorial.step === 'intro') await this.introScene();
   }
@@ -471,6 +474,17 @@ export class Game {
     else this.hud.toast("You can't find a way there.", 1400);
   }
 
+  /** The Back Lane Pump: asking at Back Lane doors. Three houses tell you where the sick drink. */
+  private pumpKnock(key: string): void {
+    const m = this.mission('pump');
+    if (!m || m.done || m.stage !== 1 || !HOUSES.find((x) => x.key === key)?.name.endsWith('Back Lane') || m.flags[`k:${key}`]) return;
+    m.flags[`k:${key}`] = 1;
+    m.flags.knocks = (m.flags.knocks ?? 0) + 1;
+    if (m.flags.knocks >= 3) {
+      void this.dialogue.say({ speaker: '', text: 'Three doors, three answers, all the same: "We get our water from the pump, same as everyone on the Lane. It tastes a bit off, lately." Church Street has its own pump. Church Street has no fever.' }).then(() => this.advance('pump', 2));
+    } else this.hud.toast(`"Fever? Two of the children. We drink from the Lane pump, like everyone." (${m.flags.knocks} of 3 houses)`, 3500);
+  }
+
   /** A house door: who lives here, and knocking for them. */
   private showHouse(place: Place): void {
     const s = this.state!;
@@ -491,6 +505,7 @@ export class Game {
         onClick: () => {
           this.hud.hidePlace();
           sfx('drop');
+          this.pumpKnock(key);
           const out = npc ? npc.visible || this.stopFor(npc.res, h) !== null : true;
           if (!npc || out || h >= 22 || h < 7) {
             const l = this.lifeOf(p.id);
@@ -703,6 +718,7 @@ export class Game {
         const ex = EXITS.find((e) => `exit:${e.id}` === place.id)!;
         const dest = LONDON_NAMES[ex.to] ?? 'the city';
         return [
+          ...this.missionPlaceActions(place.id, act),
           act(`Travel to ${dest} · lost in the fog for now`, () => undefined, { primary: true, disabled: true }),
           act('Look at the map of London', () => this.openMap('london')),
         ];
@@ -714,7 +730,8 @@ export class Game {
         if (!low) return [act('The tide is in. The mud shows from 05:00 to 10:00 and 16:00 to 21:00.', () => undefined, { disabled: true })];
         return [act(sp.kind === 'foreshore' ? 'Go down and mudlark (30 min)' : 'Rummage through it (15 min)', () => this.scavenge(sp.id), { primary: true })];
       }
-      if (place.id === 'church') return [act('Father Hale is usually at the market cross in the mornings', () => undefined, { disabled: true })];
+      if (place.id === 'church') return [...this.missionPlaceActions('church', act), act('Father Hale is usually at the market cross in the mornings', () => undefined, { disabled: true })];
+      if (place.id === 'pump') return [...this.missionPlaceActions('pump', act), act('Work the handle and drink (no thank you)', () => undefined, { disabled: true })];
       const inside = INTERIORS.find((d) => d.id === place.id);
       const closed = inside && !isOpen(inside, this.clock.hour) ? [act(`Closed. Opens at ${String(inside.open[0]).padStart(2, '0')}:00`, () => undefined, { disabled: true })] : [];
       return [...closed, ...this.streetActions(place.id, act)];
@@ -723,6 +740,10 @@ export class Game {
   }
 
   private streetActions(id: string, act: (label: string, fn: () => void | Promise<void>, opts?: Partial<Action>) => Action): Action[] {
+    return [...this.missionPlaceActions(id, act), ...this.streetActionsBase(id, act)];
+  }
+
+  private streetActionsBase(id: string, act: (label: string, fn: () => void | Promise<void>, opts?: Partial<Action>) => Action): Action[] {
     const s = this.state!;
     {
       switch (id) {
@@ -813,6 +834,7 @@ export class Game {
         return [
           act(night ? (candle ? 'Read by candlelight (1 hour)' : 'Read (needs a candle after dark)') : 'Read by the window (1 hour)', () => this.read(this.member('lantern')), { primary: true, disabled: night && !candle }),
           ...(this.member('lantern') && !s.factions.dutyDone ? [act('Write your essay for the Lantern Society (1 hour)', () => this.essay(), { primary: true })] : []),
+          ...this.missionPlaceActions('table', act),
         ];
       }
       case 'bookshelf':
@@ -924,7 +946,7 @@ export class Game {
     const render = () => {
       const rows: ListRow[] = [];
       for (const itemId of shop.stock) {
-        if (itemId === 'jmedal' && !(s.story.name && !s.story.medal && s.story.act1 === 'open' && !s.inventory.some((i) => i.id === 'jmedal'))) continue;
+        if (itemId === 'jmedal') continue;
         const def = ITEMS[itemId];
         const price = this.priceAt(id, itemId);
         const owned = def.upgrade && owns(s, itemId);
@@ -1967,7 +1989,9 @@ export class Game {
       { speaker: '', text: 'This time the lid lifts, as if it had only been waiting to be asked. Mothballs. Salt. An iron nail as long as your hand. A journal in Hester\'s slanting hand, and a silver pocket watch that starts ticking the moment you touch it.' },
       { speaker: P, text: '"So. She wanted you to have it." For once he does not make a joke. "Read the journal. Keep the watch on you. When it stops, something is near that should not be."' },
     );
-    await this.hud.celebrate('promotion', 'Act I', 'The Fog', 'Hester\'s journal and watch are in your bag. The drowned man walks the quay at night.');
+    await this.completeMission('a1c1', 'opened', '', true);
+    this.startMission('a1c2');
+    await this.hud.celebrate('promotion', 'Act I · The Fog', 'II. The First to Vanish', 'Hester\'s journal and watch are in your bag. Keep the watch close tonight.');
     await this.readJournal();
     this.refreshObjectives();
   }
@@ -1979,63 +2003,443 @@ export class Game {
     await this.hud.modal('Hester\'s journal', pages, '', 'letter', 'In her own hand');
   }
 
-  /** What the story wants of you now, for goals and the journal. */
+  /** What the story wants of you now, for goals: the chapter, then the first side story under way. */
   private storyGoals(): string[] {
-    const st = this.state!.story;
-    if (st.act1 === 'locked') return this.trunkReady() ? ['Hester\'s trunk: try the lid again'] : [];
-    if (st.act1 === 'done') return [];
+    const s = this.state!;
     const out: string[] = [];
-    if (!st.name) out.push('Act I: learn the drowned sailor\'s name (Old Mag remembers; so do Rudd\'s books)');
-    else if (!st.medal && !st.kinPaid) out.push(`Act I: find something of ${SAILOR.name}'s (Moss buys from widows), or face him as he is`);
-    out.push('Act I: find the drowned sailor on the quay after ten at night (the watch will stop)');
+    const ch = currentChapter(s);
+    if (ch?.id === 'a1c1') {
+      if (this.trunkReady()) out.push('Hester\'s trunk: try the lid again');
+    } else if (ch) out.push(`${ch.title.replace(/^[IVX]+\. /, '')}: ${objectiveOf(s, ch)}`);
+    const side = MISSIONS.find((d) => d.kind === 'side' && s.missions[d.id] && !s.missions[d.id].done);
+    if (side) out.push(`${side.title}: ${objectiveOf(s, side)}`);
     return out;
   }
 
-  /** Ask a resident about the sailor: Mag, Rudd and Hale know things. */
-  private sailorActions(npc: Npc): Action[] {
+  // --- Missions: the chapters of Act I and the side stories ---------------------
+
+  private mission(id: string): MissionState | undefined {
+    return this.state!.missions[id];
+  }
+
+  /** The stage a mission is on, or -1 if it isn't under way. */
+  private stageOf(id: string): number {
+    const m = this.mission(id);
+    return m && !m.done ? m.stage : -1;
+  }
+
+  private startMission(id: string, stage = 0): MissionState {
     const s = this.state!;
-    const st = s.story;
+    const m: MissionState = { stage, started: dayIndex(s.minutes), flags: {} };
+    s.missions[id] = m;
+    this.refreshObjectives();
+    return m;
+  }
+
+  private advance(id: string, stage: number): void {
+    const m = this.mission(id);
+    if (!m) return;
+    m.stage = stage;
+    sfx('page');
+    const def = MISSION(id);
+    this.hud.toast(`${def.title.replace(/^[IVX]+\. /, '')}: ${objectiveOf(this.state!, def)}`, 5000);
+    this.refreshObjectives();
+    this.save();
+  }
+
+  private async completeMission(id: string, outcome: string, reward: string, quiet = false): Promise<void> {
+    const s = this.state!;
+    const m = this.mission(id) ?? this.startMission(id);
+    m.done = true;
+    m.outcome = outcome;
+    const def = MISSION(id);
+    if (!quiet) await this.hud.celebrate(def.kind === 'main' ? 'promotion' : 'goal', def.kind === 'main' ? 'Chapter complete' : 'Story complete', def.title.replace(/^[IVX]+\. /, ''), reward);
+    if (def.kind === 'main') {
+      const next = currentChapter(s);
+      if (next && !s.missions[next.id] && next.id !== 'a1c2') this.startMission(next.id);
+    }
+    this.refreshObjectives();
+    this.save();
+  }
+
+  private warm(id: string, f: number): void {
+    const r = this.rel(id);
+    r.met = true;
+    r.friendship = Math.max(0, Math.min(100, r.friendship + f));
+  }
+
+  private sk(k: SkillId, n: number): boolean {
+    return this.state!.character.skills[k] >= n;
+  }
+
+  /** Story bubbles for someone: chapters, side stories on offer, and what each stage needs of them. */
+  private missionActions(npc: Npc): Action[] {
+    const s = this.state!;
     const id = npc.res.id;
+    const h = this.clock.hour;
     const out: Action[] = [];
-    if (st.act1 === 'open' && !st.name && ['mag', 'rudd', 'hale', 'quill', 'nell'].includes(id)) {
-      out.push({
-        label: 'Ask about the drowned man on the quay', primary: true,
-        onClick: () => {
-          this.hud.hidePlace();
-          const r = this.rel(id);
-          const knows = id === 'mag' || (id === 'rudd' && r.friendship >= 15) || (id === 'hale' && r.friendship >= 15) || this.member('lantern');
-          if (!knows) {
-            void this.dialogue.say({ speaker: npc.res.name, text: id === 'rudd' ? '"I don\'t talk about the river\'s dead with strangers."' : '"Drowned men are ten a penny on this river. Ask Old Mag. She was there for all of them."' });
+    const A = (label: string, fn: () => void | Promise<void>, opts: Partial<Action> = {}): Action => ({ label, primary: true, onClick: () => { this.hud.hidePlace(); void Promise.resolve(fn()).then(() => npc.held && this.showPerson(npc)); }, ...opts });
+    const say = (text: string) => this.dialogue.say({ speaker: npc.res.name, text });
+    // Side stories on offer.
+    for (const d of MISSIONS) if (d.kind === 'side' && d.giver === id && sideStatus(s, d) === 'offered') out.push(A(`A story: ${d.title}`, () => this.offerSide(npc, d.id)));
+
+    // II. The First to Vanish.
+    const c2 = this.stageOf('a1c2');
+    if (c2 === 0 && id === 'lizzie' && this.mission('a1c2')!.flags.vanish) out.push(A('Ask about Tom', async () => {
+      await say('"He never came home. His mam\'s been up all night. He always walks back along the quay, and the fog was so thick..." She twists a measuring tape round her fingers. "Ruby was out on Rope Walk last night. Ruby sees everything after dark. Ask her."');
+      this.advance('a1c2', 1);
+    }));
+    if (c2 === 1 && id === 'ruby') {
+      const lead = async (how: 'charm' | 'friend' | 'lean') => {
+        if (how === 'lean') {
+          const r = this.rel('ruby');
+          r.friendship = Math.max(0, r.friendship - 10);
+          r.rivalry = Math.min(100, r.rivalry + 8);
+          await say('She flinches when you take her wrist. "All right! All right. Let go." She rubs it. "I saw him. Remember that I told you, and remember how you asked."');
+        } else if (how === 'charm') await say(`She laughs despite herself. "You could talk the fog off the river, ${s.character.first}." Then she stops laughing.`);
+        gainXp(s, how === 'lean' ? 'strength' : 'charisma', 8);
+        await say('"I saw Tom. Midnight, near enough. There was a light on the quay, white, like the new lamp but lower, moving. He walked after it like a dog after its master. I called him. He didn\'t turn round."');
+        this.advance('a1c2', 2);
+      };
+      out.push(A('Ask what she saw (charm: Charisma 3)', () => lead('charm'), { disabled: !this.sk('charisma', 3) }));
+      out.push(A('Ask as a friend (Friendship 15)', () => lead('friend'), { disabled: this.rel('ruby').friendship < 15 }));
+      out.push(A('Lean on her (Strength 3)', () => lead('lean'), { primary: false, disabled: !this.sk('strength', 3) }));
+    }
+    if (c2 === 2 && id === 'mag' && !this.mission('a1c2')!.flags.mag) out.push(A('Ask Mag to read Hester\'s watch (Friendship 10)', async () => {
+      this.mission('a1c2')!.flags.mag = 1;
+      await say('She holds the watch to her ear like a shell. "Oh, Hester. Still ticking." She shows you the hands: they do not tell the time; they point. "Down the quay. When the dead walk, after ten. I\'ll come with you, and you\'ll hold my arm, and we\'ll see what we see."');
+      this.refreshObjectives();
+    }, { disabled: this.rel('mag').friendship < 10 }));
+
+    // III. A Name for the Drowned.
+    const c3 = this.stageOf('a1c3');
+    const f3 = this.mission('a1c3')?.flags;
+    if (c3 === 0 && f3) {
+      if (id === 'mag' && !f3.mag) {
+        out.push(A('Ask about the Kittiwake (Friendship 10)', () => this.clue('mag'), { disabled: this.rel('mag').friendship < 10 }));
+        const food = s.inventory.find((i) => isFood(i.id));
+        if (food) out.push(A(`Give her ${ITEMS[food.id].name.toLowerCase()}, and ask`, () => { removeItem(s, food.id); this.warm('mag', 4); return this.clue('mag'); }));
+      }
+      if (id === 'rudd' && !f3.rudd) out.push(A('Ask to see the old tally books (Friendship 15)', () => this.clue('rudd'), { disabled: this.rel('rudd').friendship < 15 }));
+      if (id === 'hale' && !f3.hale) out.push(A('Ask him to read the burial register (Friendship 15)', () => this.clue('hale'), { disabled: this.rel('hale').friendship < 15 }));
+    }
+
+    // IV. The Gallantry Medal.
+    const c4 = this.stageOf('a1c4');
+    if (c4 === 0 && id === 'moss') out.push(A('Ask about Jack Merrow\'s medal', async () => {
+      await say('"Merrow, Merrow..." Moss turns the pages of a ledger the size of a gravestone. "Gallantry medal, silver, brig Kittiwake. Pawned \'69 by the widow, never redeemed. And sold, last month, to Silas Crane." He closes the book. "Silas buys what the dead leave behind. I don\'t ask what for. Neither should you."');
+      this.advance('a1c4', 1);
+    }));
+    if (c4 === 1 && id === 'silas') {
+      const price = this.member('kin') ? 0.3 : 0.8;
+      const got = async (how: string, text: string) => {
+        if (canCarry(s, 'jmedal')) addItem(s, 'jmedal');
+        s.story.medal = true;
+        await say(text);
+        await this.completeMission('a1c4', how, 'Jack Merrow\'s medal is in your bag. Now he has a name and something he loved.');
+      };
+      out.push(A(`Buy the medal (£${price.toFixed(2)})`, () => {
+        s.money = Math.round((s.money - price) * 100) / 100;
+        return got('coin', '"Sentimental, are we?" He takes your money and drops the medal in your palm, still warm from his pocket. "He\'ll be wanting that. They always want their things."');
+      }, { disabled: s.money + 1e-9 < price }));
+      out.push(A('Talk him round (Charisma 3)', () => {
+        gainXp(s, 'charisma', 10);
+        addDeed(s, 'kin', 2);
+        return got('word', 'You tell him what the medal is for. He listens, which is worse than if he laughed. "Take it. Call it a loan. The Kin like to be owed by people who go out on the quay at night."');
+      }, { disabled: !this.sk('charisma', 3) }));
+      out.push(A('Take it from him (Strength 4)', async () => {
+        const won = await this.fight({ name: 'Silas Crane', hp: 45, dmg: [5, 9], hit: 0.6, nerve: 30 }, '"Oh, you want to do it that way." Silas takes his coat off and folds it, carefully, first.', false, false);
+        if (won) {
+          addDeed(s, 'kin', -12);
+          await got('steel', 'He spits blood and the medal onto the cobbles. "The Kin will hear about this. The Kin hear about everything."');
+        }
+      }, { primary: false, disabled: !this.sk('strength', 4) }));
+    }
+
+    // V. The Quay at Night: the coin ending.
+    if (this.stageOf('a1c5') === 0 && id === 'silas' && s.story.kinPaid === undefined) {
+      const cost = this.member('kin') ? 0.75 : 1.5;
+      out.push(A(`Pay the Kin to deal with the drowned man (£${cost.toFixed(2)})`, async () => {
+        s.money = Math.round((s.money - cost) * 100) / 100;
+        s.story.kinPaid = dayIndex(s.minutes);
+        addDeed(s, 'kin', 6);
+        await say('"Iron, salt and a boat with no bottom. He\'ll be someone else\'s ghost by morning. Upriver, I should think. Hollow Lane, maybe." He smiles. "Don\'t ask what we do with it."');
+      }, { primary: false, disabled: s.money + 1e-9 < cost }));
+    }
+
+    // Side: Letters for Lizzie.
+    const lt = this.stageOf('letters');
+    if (lt === 1 && id === 'lizzie' && s.inventory.some((i) => i.id === 'lovetoken')) out.push(A('Give her Tom\'s love token', async () => {
+      removeItem(s, 'lovetoken');
+      await say(`She reads it twice. Her eyes fill. "${this.mission('letters')!.flags.card ? 'He pressed a forget-me-not for me. Tom did?' : 'Tom wrote this? Tom can\'t write.'}" A long breath. "He\'s the sweetest boy on the river, and I can\'t. Not Tom. Not any boy." She looks at you, frightened of what she just said. "Will you tell him gently? Please. And nobody else."`);
+      this.advance('letters', 2);
+    }));
+    if (lt === 2 && id === 'tom') {
+      out.push(A('Tell him the truth, gently', async () => {
+        await say('He listens with his cap in his hands. "Not any boy." He nods slowly. "I think I knew. I just wanted her to know someone thought she hung the moon." He swallows. "Thank you for not lying to me."');
+        this.warm('tom', 12);
+        this.warm('lizzie', 10);
+        await this.completeMission('letters', 'truth', 'Tom Friendship +12, Lizzie Friendship +10. Some secrets are safest with a friend.');
+      }));
+      out.push(A('Tell him she\'s promised to someone in Kent', async () => {
+        await say('"Kent." He laughs, a bit wet. "Course she is. Course there\'s someone." He claps your shoulder too hard. "Well. You tried. You\'re a good friend."');
+        this.warm('tom', 8);
+        this.warm('lizzie', 4);
+        await this.completeMission('letters', 'kent', 'Tom Friendship +8. Lizzie\'s secret is safe; Tom\'s heart, less so.');
+      }, { primary: false }));
+    }
+
+    // Side: Ruby's Debt.
+    if (this.stageOf('ruby') === 0) {
+      if (id === 'silas') {
+        out.push(A('Pay off Ruby\'s debt (£1.00)', async () => {
+          s.money = Math.round((s.money - 1) * 100) / 100;
+          addDeed(s, 'kin', 2);
+          await say('"A pound, and a penny for my trouble. No? Then a pound." He strikes her name out of a little black book. "She\'ll be back. They always come back."');
+          this.warm('ruby', 15);
+          await this.completeMission('ruby', 'paid', 'Ruby Friendship +15. She\'s free of the Kin, for now.');
+        }, { disabled: s.money < 1 }));
+        out.push(A('Talk him into writing it off (Charisma 3)', async () => {
+          gainXp(s, 'charisma', 10);
+          await say('You talk about bad debts and good will, and how the Kin are only as strong as the street that keeps their secrets. Silas sighs. "Fine. Ruby\'s square. But you\'re not, now."');
+          this.warm('ruby', 15);
+          await this.completeMission('ruby', 'talked', 'Ruby Friendship +15. Silas wrote off her debt, and wrote your name down instead.');
+        }, { disabled: !this.sk('charisma', 3) }));
+      }
+      if (id === 'ruby') {
+        const night = h >= 21 && h < 24;
+        out.push(A(night ? 'Wait with her for Skint Joe (Strength 3)' : 'Wait with her for Skint Joe (after 21:00; Strength 3)', async () => {
+          const won = await this.fight({ name: 'Skint Joe', hp: 35, dmg: [4, 8], hit: 0.6, nerve: 25 }, 'Skint Joe comes down Rope Walk swinging a cosh on a string. "Evening, Ruby. And who\'s your friend?"', false, false);
+          if (won) {
+            addDeed(s, 'kin', -6);
+            await say('"He won\'t come back. Not to me." She squeezes your hand, hard. "You\'re mad. Thank you."');
+            this.warm('ruby', 15);
+            await this.completeMission('ruby', 'fought', 'Ruby Friendship +15. Skint Joe won\'t collect from her again. The Kin won\'t forget it.');
+          }
+        }, { disabled: !night || !this.sk('strength', 3) }));
+      }
+    }
+
+    // Side: The Back Lane Pump.
+    const pm = this.stageOf('pump');
+    if (pm === 0 && id === 'quill') {
+      const remedy = s.inventory.find((i) => ['bandage', 'tonic', 'broth'].includes(i.id));
+      out.push(A(remedy ? `Give Quill the ${ITEMS[remedy.id].name.toLowerCase()}` : 'Give Quill a remedy (bandages, tonic or broth)', async () => {
+        removeItem(s, remedy!.id);
+        const m = this.mission('pump')!;
+        m.flags.given = (m.flags.given ?? 0) + 1;
+        gainXp(s, 'study', 6);
+        if (m.flags.given >= 2) {
+          await say('"That will see the Doyle children through the night." He frowns at his notebook. "Five houses, all on Back Lane, none on Church Street. Fevers don\'t keep to streets. Something on Back Lane is doing this. Find it."');
+          this.advance('pump', 1);
+        } else await say('"Good. One more and I can do my rounds properly."');
+      }, { disabled: !remedy }));
+    }
+    if (pm === 2 && id === 'hale') out.push(A('Ask him to have the vestry chain the pump (Charisma 3)', async () => {
+      gainXp(s, 'charisma', 8);
+      await say('"A pump? Doctor Quill thinks the water is... yes. Yes, there was a paper on it, in Soho." He looks at you over his spectacles. "You argue like a barrister. I\'ll have the beadle chain it this afternoon."');
+      this.warm('hale', 6);
+      await this.endPump('chained');
+    }, { disabled: !this.sk('charisma', 3) }));
+
+    return out;
+  }
+
+  /** A side story is offered: the giver's lines, and yes or not yet. */
+  private async offerSide(npc: Npc, id: string): Promise<void> {
+    const s = this.state!;
+    const lines: Record<string, string> = {
+      letters: '"Can I ask you something? Don\'t laugh." Tom stares at his boots. "Lizzie. Lizzie Barlow. I can\'t say it to her face. I can\'t write it either. You could write it. Or make her something. You\'re clever with your hands."',
+      ruby: '"I borrowed a pound off the Kin last winter, when my mam was bad. It\'s three pound now, by their sums, and they\'ve sent Skint Joe." She tries to laugh. "He collects after dark. With a cosh."',
+      bruiser: '"Big Dan Sallow, out of Hollow Lane. He wants the yard\'s belt, and he wants it Saturday." Nell cracks her knuckles. "I need someone to spar with who won\'t fold. And someone to watch his corner. Dan doesn\'t fight clean."',
+      pump: '"Fever in Back Lane, and more every day. I need someone who can read, and carry, and keep a list." Quill is grey with tiredness. "Bring me remedies, and then help me find the cause. There is always a cause."',
+      cellar: '"Can you keep your mouth shut and your feet quiet?" Bessa doesn\'t wait for an answer. "There\'s a boat at the Wherry Stairs some nights. Brandy for my cellar. The constable walks the quay at midnight. Ten pence a run."',
+    };
+    const yes = await this.dialogue.ask({ speaker: npc.res.name, text: lines[id] ?? MISSION(id).blurb }, ['I\'ll help', 'Not now']);
+    if (yes !== 0) return;
+    this.startMission(id);
+    sfx('page');
+    const def = MISSION(id);
+    await this.hud.celebrate('goal', 'A new story', def.title, objectiveOf(s, def));
+    this.save();
+  }
+
+  /** III: a record of the drowned man; two of three give his name. */
+  private async clue(which: 'mag' | 'rudd' | 'hale'): Promise<void> {
+    const s = this.state!;
+    const m = this.mission('a1c3');
+    if (!m || m.flags[which]) return;
+    m.flags[which] = 1;
+    const texts = {
+      mag: { speaker: 'Old Mag Doyle', text: '"Kittiwake. A brig, a pretty one. Came in the fog of \'69 and one of her men walked off the quay with his pockets full of nothing. A young one. His wife used to stand where you\'re standing, every night, till she didn\'t." She can\'t remember his name. "The river took it."' },
+      rudd: { speaker: 'Foreman Rudd', text: 'The tally book for November 1869: Kittiwake, brig, 14 hands paid off. One line in red ink: "J. MERROW. Did not collect wages. Presumed drowned." Rudd shuts the book. "We don\'t get many in red."' },
+      hale: { speaker: 'Father Ambrose Hale', text: 'The register, in a hand older than Hale\'s: "December 1869. John Merrow, called Jack, seaman of the brig Kittiwake, aged 24. No body. Buried at the widow\'s request and expense." In the margin: "Widow pawned a medal to pay. God forgive us."' },
+    };
+    await this.dialogue.say(texts[which]);
+    const count = ['mag', 'rudd', 'hale'].filter((k) => m.flags[k]).length;
+    if (count >= 2) {
+      s.story.name = true;
+      s.story.pages = Math.max(s.story.pages, 2);
+      await this.dialogue.say({ speaker: P, text: '"Jack Merrow." Pembleton says it into the cold air of your room that night. "A name is a handle. Now you can pick him up. Or put him down." He hesitates. "The widow\'s medal. Moss buys from widows."' });
+      await this.completeMission('a1c3', 'named', `His name was Jack Merrow, of the brig Kittiwake. Hester's journal has more now.`);
+    } else this.refreshObjectives();
+  }
+
+  /** Place actions for missions: the table at home, the church, the yard, the Cup, the stairs, the pump. */
+  private missionPlaceActions(placeId: string, act: (label: string, fn: () => void | Promise<void>, opts?: Partial<Action>) => Action): Action[] {
+    const s = this.state!;
+    const h = this.clock.hour;
+    const out: Action[] = [];
+    const hourOn = async (mins: number) => {
+      this.clock.minutes += mins;
+      s.minutes = this.clock.minutes;
+      simulateNeeds(s.needs, mins / 60, 'awake');
+    };
+    if (placeId === 'table') {
+      if (this.stageOf('letters') === 0) {
+        const make = async (card: boolean) => {
+          await hourOn(60);
+          gainXp(s, card ? 'arts' : 'study', 10);
+          addItem(s, 'lovetoken');
+          this.mission('letters')!.flags.card = card ? 1 : 0;
+          await this.dialogue.say({ speaker: '', text: card ? 'A forget-me-not from Hester\'s window box, pressed flat in her Bible, glued to a card with a border you inked yourself. It is better than it has any right to be.' : '"Dear Lizzie," you write, and then, for an hour, everything Tom has never managed to say. You leave out the bit about her laugh sounding like a kettle. Tom would want it in. You put it back.' });
+          this.advance('letters', 1);
+        };
+        out.push(act('Write Tom\'s letter to Lizzie (Study 2, 1 hour)', () => make(false), { primary: true, disabled: !this.sk('study', 2) }));
+        out.push(act('Press a flower card for Lizzie (Arts & Crafts 2, 1 hour)', () => make(true), { disabled: !this.sk('arts', 2) }));
+      }
+      if (this.stageOf('pump') === 1) out.push(act('Map the fever cases (Study 3, 1 hour)', async () => {
+        await hourOn(60);
+        gainXp(s, 'study', 12);
+        await this.dialogue.say({ speaker: '', text: 'You draw Back Lane from memory and put a cross on every house with a fever. The crosses make a ring. In the middle of the ring is the pump.' });
+        this.advance('pump', 2);
+      }, { primary: true, disabled: !this.sk('study', 3) }));
+    }
+    if (placeId === 'church' && this.stageOf('a1c3') === 0 && !this.mission('a1c3')!.flags.hale) {
+      out.push(act('Read the old burial register (Study 2)', () => { gainXp(s, 'study', 8); return this.clue('hale'); }, { primary: true, disabled: !this.sk('study', 2) }));
+    }
+    if (placeId === 'dockoffice') {
+      if (this.stageOf('a1c3') === 0 && !this.mission('a1c3')!.flags.rudd) out.push(act('Read Rudd\'s old tally book upside down (Cunning 3)', () => { gainXp(s, 'cunning', 8); return this.clue('rudd'); }, { disabled: !this.sk('cunning', 3) }));
+      if (this.stageOf('strike') === 0 && s.strike && dayIndex(s.minutes) >= s.strike.day) {
+        out.push(act('Speak for the men to the owners\' agent (Charisma 3)', async () => {
+          gainXp(s, 'charisma', 12);
+          await this.dialogue.say({ speaker: 'The owners\' agent', text: 'You talk about barges rotting at anchor and cargo spoiling in the hold, and about how much Wapping men charge to sleep on a Saltwharf floor. The agent writes a number down, crosses it out, writes a bigger one. "Tell them the penny\'s back. And a tenth."' });
+          this.mission('strike')!.flags.won = 1;
+          for (const id of ['nell', 'tom', 'hannah']) this.warm(id, 6);
+          await this.completeMission('strike', 'spoke', 'The strike is won: the penny back, and a tenth on top. The dockers will drink to you for a month.');
+        }, { primary: true, disabled: !this.sk('charisma', 3) }));
+        out.push(act('Hold the gate against the Wapping men (Strength 3, dawn)', async () => {
+          const won = await this.fight({ name: 'A Wapping blackleg', hp: 40, dmg: [5, 9], hit: 0.6, nerve: 25 }, 'A cart of Wapping men comes up Quay Street in the grey light. The biggest jumps down first.', false, false);
+          if (won) {
+            this.mission('strike')!.flags.won = 1;
+            for (const id of ['nell', 'tom', 'hannah']) this.warm(id, 8);
+            this.rel('rudd').rivalry = Math.min(100, this.rel('rudd').rivalry + 4);
+            await this.completeMission('strike', 'held', 'The Wapping men turned their cart round. The strike will be won, and the dockers know whose fists did it.');
+          }
+        }, { disabled: !this.sk('strength', 3) || h < 5 || h >= 9 }));
+      }
+    }
+    if (placeId === 'boxing') {
+      const b = this.stageOf('bruiser');
+      if (b === 0) out.push(act(this.usedToday('spar') ? 'You sparred with Nell today' : 'Spar with Nell (1 hour; dawn until ten)', async () => {
+        this.markUsed('spar');
+        await hourOn(60);
+        addNeed(s.needs, 'rest', -8);
+        this.warm('nell', 3);
+        const ups = gainXp(s, 'strength', 12);
+        const m = this.mission('bruiser')!;
+        m.flags.spar = (m.flags.spar ?? 0) + 1;
+        this.hud.toast(['An hour of Nell hitting you and calling it love. Nell +3.', ...ups].join(' '), 3500);
+        if (m.flags.spar >= 3) {
+          await this.dialogue.say({ speaker: 'Nell Hartigan', text: '"You\'ll do. I\'ll do." She unwraps her hands. "Saturday, fight night. Dan always has something in his gloves. Catch him at it, or be in my corner when his seconds try something. Both, if you\'re greedy."' });
+          this.advance('bruiser', 1);
+        }
+      }, { primary: true, disabled: this.usedToday('spar') || h < 5 || h >= 10 }));
+      if (b === 1) {
+        const m = this.mission('bruiser')!;
+        out.push(act('Stand in Nell\'s corner against Dan Sallow', async () => {
+          if (m.flags.gloves) {
+            await this.dialogue.say({ speaker: '', text: 'Before the bell you hold up Dan\'s glove and pour lead shot out of the knuckle onto the sawdust. The crowd goes quiet, then very loud. Dan leaves over the back fence. Nell wins without throwing a punch, and is furious about it.' });
+            s.money = Math.round((s.money + 0.2) * 100) / 100;
+            this.warm('nell', 15);
+            await this.completeMission('bruiser', 'exposed', 'Nell keeps the belt. Her share of the purse is yours: £0.20. Nell Friendship +15.');
             return;
           }
-          st.name = true;
-          st.pages = Math.max(st.pages, 2);
-          const lines: Record<string, string> = {
-            mag: `"Jack. Jack Merrow, off ${SAILOR.ship}. Walked into the river in the fog of '69 with his pockets full of nothing. His wife pawned his medal to bury him. Moss has it still, I'll wager. Moss has everything still."`,
-            rudd: `Rudd fetches an old tally book. "${SAILOR.name}, ${SAILOR.ship}. Signed off drunk, the night of the fog. Body never found. Widow pawned his medal, I heard."`,
-            hale: `"I buried an empty coffin for a sailor in '69. ${SAILOR.name}. His widow said he'd be back. She died last winter, still waiting. She pawned his medal at Moss's to pay me, God forgive me."`,
-            quill: `"The Society has him in the fog papers: ${SAILOR.name}, of ${SAILOR.ship}, drowned 1869. First of the new dead. Every haunting on this river begins with him."`,
-            nell: `"My father worked with him. ${SAILOR.name}. Kittiwake. His widow pawned the medal they gave him. Moss'll have it."`,
-          };
-          void this.dialogue.say({ speaker: npc.res.name, text: `${lines[id]}\nYou learned his name. (Hester's journal has more now.)` });
-          this.refreshObjectives();
-        },
-      });
+          const won = await this.fight({ name: 'Knuckles Pratt, Dan\'s second', hp: 50, dmg: [6, 10], hit: 0.65, nerve: 40 }, 'Third round, Nell has Dan on the ropes, and his second climbs through to help him. You get there first.', false, false);
+          s.money = Math.round((s.money + (won ? 0.2 : 0)) * 100) / 100;
+          this.warm('nell', won ? 15 : 5);
+          await this.completeMission('bruiser', won ? 'fought' : 'lost', won ? 'Nell beat Dan Sallow fair and square, once you\'d dealt with his second. Her share of the purse is yours: £0.20. Nell Friendship +15.' : 'Dan\'s men swarmed the ring and Nell lost the belt. "Next year," she says, through a split lip. Nell Friendship +5.');
+        }, { primary: true, disabled: !this.fightNightOpen() || (!m.flags.gloves && !this.sk('strength', 4)) }));
+      }
     }
-    if (st.act1 === 'open' && id === 'silas' && !st.kinPaid) {
-      const cost = this.member('kin') ? 0.75 : 1.5;
-      out.push({
-        label: `Pay the Kin to deal with the drowned man (£${cost.toFixed(2)})`, disabled: s.money < cost,
-        onClick: () => {
-          s.money = Math.round((s.money - cost) * 100) / 100;
-          st.kinPaid = dayIndex(s.minutes);
-          addDeed(s, 'kin', 6);
-          this.hud.hidePlace();
-          void this.dialogue.say({ speaker: npc.res.name, text: '"Iron, salt and a boat with no bottom. He\'ll be someone else\'s ghost by morning. Upriver, I should think. Hollow Lane, maybe." He smiles. "Don\'t ask what we do with it."' });
-        },
-      });
+    if (placeId === 'coppercup' && this.stageOf('bruiser') === 1 && !this.mission('bruiser')!.flags.gloves) {
+      out.push(act('Search Dan Sallow\'s kit bag (Cunning 3; evenings)', async () => {
+        gainXp(s, 'cunning', 12);
+        this.mission('bruiser')!.flags.gloves = 1;
+        await this.dialogue.say({ speaker: '', text: 'Dan drinks at the bar with his back to his bag. Inside: a towel, a bottle, and a pair of gloves that weigh a pound each. Lead shot, sewn into the knuckles. You put them back exactly where they were, and keep one in your coat.' });
+        this.refreshObjectives();
+      }, { disabled: !this.sk('cunning', 3) || h < 18 }));
+    }
+    if (placeId === 'exit:wherry' && this.stageOf('cellar') === 0) {
+      const late = h >= 22 || h < 2;
+      out.push(act(this.usedToday('keg') ? 'You ran the kegs tonight' : 'Run brandy for Bessa (after 22:00)', async () => {
+        this.markUsed('keg');
+        await hourOn(60);
+        addNeed(s.needs, 'rest', -6);
+        const strong = this.sk('strength', 3);
+        gainXp(s, strong ? 'strength' : 'charisma', 10);
+        const m = this.mission('cellar')!;
+        m.flags.runs = (m.flags.runs ?? 0) + 1;
+        s.money = Math.round((s.money + 0.1) * 100) / 100;
+        addDeed(s, 'kin', 2);
+        await this.dialogue.say({ speaker: '', text: strong ? 'Two kegs on your shoulders, up the stairs, along the quay, down the Cup\'s cellar flap, and back before the constable\'s lantern turns the corner. Ten pence.' : 'You ask the constable about his feet, his wife and his chances of sergeant, while behind him six kegs go up the stairs like ducklings. Ten pence.' });
+        if (m.flags.runs >= 3) {
+          s.money = Math.round((s.money + 0.2) * 100) / 100;
+          this.warm('bessa', 12);
+          await this.completeMission('cellar', strong ? 'carried' : 'talked', 'Bessa\'s cellar is full and nobody\'s the wiser. A bonus of £0.20, Bessa Friendship +12, and the Kin know your name.');
+        } else this.refreshObjectives();
+      }, { primary: true, disabled: !late || this.usedToday('keg') }));
+    }
+    if (placeId === 'pump') {
+      if (this.stageOf('pump') === 2) out.push(act('Wrench the handle off (Strength 3; after dark)', async () => {
+        gainXp(s, 'strength', 10);
+        await this.dialogue.say({ speaker: '', text: 'You brace a boot against the trough and pull until something in the pump gives with a crack like a gunshot. Windows go up all along Back Lane. You walk away with the handle under your arm.' });
+        await this.endPump('wrenched');
+      }, { primary: true, disabled: !this.sk('strength', 3) || (h >= 6 && h < 21) }));
     }
     return out;
+  }
+
+  private async endPump(how: string): Promise<void> {
+    const s = this.state!;
+    this.warm('quill', 12);
+    s.parish.crowd += 3;
+    await this.completeMission('pump', how, 'No new fevers in Back Lane. Quill Friendship +12, and the parish talks about you: three more votes if you stand for the vestry. Fevers will be rarer in Saltwharf.');
+  }
+
+  /** The drowned man on the quay: following him (II) or facing him (V). */
+  private async quayGhost(): Promise<void> {
+    const s = this.state!;
+    if (this.stageOf('a1c2') === 2) {
+      const m = this.mission('a1c2')!;
+      if (!this.sk('occult', 2) && !m.flags.mag) {
+        await this.dialogue.say({ speaker: '', text: 'Hester\'s watch has stopped, but its hands twitch and swing like a compass in a storm. You can\'t make sense of them, and the drowned man drifts away into the fog. (Occult 2, or ask Old Mag to read the watch with you.)' });
+        return;
+      }
+      await this.dialogue.say(
+        { speaker: '', text: `${m.flags.mag ? 'Mag grips your arm. ' : ''}The watch's hands point after the drowned man as he drifts west along the quay. You follow, and the fog follows you. At the top of the Wherry Stairs he stops, and looks down, and is gone.` },
+        { speaker: '', text: 'Tom is sitting on the bottom step with the river round his ankles, soaked and blue, smiling at nothing. "He wanted to show me his ship," he says. "Kittiwake. Kittiwake. He kept saying it." You get him up the steps and home.' },
+      );
+      delete s.life.missing.tom;
+      s.life.confused.tom = dayIndex(s.minutes) + 1;
+      this.warm('tom', 10);
+      this.warm('lizzie', 10);
+      if (m.flags.mag) this.warm('mag', 6);
+      s.story.pages = Math.max(s.story.pages, 2);
+      await this.completeMission('a1c2', m.flags.mag ? 'mag' : 'watch', 'Tom is home, cold and confused. Tom +10, Lizzie +10. The drowned man kept saying a ship\'s name: Kittiwake.');
+      return;
+    }
+    if (this.stageOf('a1c5') === 0) await this.sailor();
   }
 
   /** Face the drowned sailor: steel, word or coin. */
@@ -2062,7 +2466,8 @@ export class Game {
       await this.dialogue.say({ speaker: 'The drowned sailor', text: '"...who..." The word comes up like a bubble from deep water. It does not know its own name. Neither do you.' });
       return;
     }
-    const chance = (hasMedal ? 0.55 : 0.2) + s.character.skills.occult * 0.06 + s.character.skills.charisma * 0.04;
+    // With his medal, Occult 3 or Charisma 3 makes it sure; without, it is a gamble.
+    const chance = hasMedal && (this.sk('occult', 3) || this.sk('charisma', 3)) ? 1 : (hasMedal ? 0.45 : 0.15) + s.character.skills.occult * 0.04 + s.character.skills.charisma * 0.03;
     if (Math.random() < chance) {
       if (hasMedal) removeItem(s, 'jmedal');
       await this.dialogue.say(
@@ -2089,6 +2494,7 @@ export class Game {
       s.life.confused[id] = dayIndex(s.minutes) + 1;
     }
     const sub = { steel: 'You put him down with iron and fists. The quay is quiet; the river is not grateful.', word: 'You gave him back his name. He went. The fog over the quay has thinned.', coin: 'The Kin took him away in a boat with no bottom. He is someone else\'s ghost now.' }[path];
+    for (const id of MAIN_IDS) if (!s.missions[id]?.done) s.missions[id] = { ...(s.missions[id] ?? { stage: 0, started: dayIndex(s.minutes), flags: {} }), done: true, outcome: id === 'a1c5' ? path : 'skipped' };
     await this.hud.celebrate('promotion', 'Act I complete', 'The Fog', sub);
     sendLetter(s, 'Mrs. Constance Ashby', 'A card for you', `I hear you have been on the quay at night, doing what my husband\'s friends would not.\n\nMy cousin holds séances in Mayfield, for the Velvet Court. One of them stopped being a trick. When the season opens, come. Bring Hester\'s watch.\n\nC.A.\n\n(Act II, "The Social Season", opens with Mayfield in a later district. Until then the fog thickens slowly, and Saltwharf is yours.)`);
     this.refreshObjectives();
@@ -2099,6 +2505,14 @@ export class Game {
     const s = this.state!;
     const st = s.story;
     const lines: string[] = [];
+    // II: the night after the trunk opens, Tom walks into the fog.
+    const c2 = s.missions.a1c2;
+    if (c2 && !c2.done && !c2.flags.vanish) {
+      c2.flags.vanish = 1;
+      s.life.missing.tom = 99999;
+      st.clock += 2;
+      lines.push('MISSING: Tom Fairley walked home along the quay through last night\'s fog and never arrived. Lizzie Barlow is asking everyone.');
+    }
     if (st.kinPaid !== undefined && st.act1 === 'open' && day > st.kinPaid) {
       void this.endAct1('coin');
       lines.push('Before dawn, the Kin rowed something out onto the river and came back without it.');
@@ -3005,8 +3419,8 @@ export class Game {
     if (tag === 'crier') {
       const heads = gazette(s, day, ZONES.find((z) => z.id === s.hotZone)?.name ?? 'Gull Court', [], `${s.character.first} ${s.character.last}`);
       await this.dialogue.say({ speaker: 'The crier', text: `"Oyez! ${heads[0]}! And: ${heads[1]}!" He rings his bell in your face. "For the rest, the Gazette. One penny."` });
-    } else if (tag === 'ghost:0' && s.story.act1 === 'open') {
-      await this.sailor();
+    } else if (tag === 'ghost:0' && (this.stageOf('a1c2') === 2 || this.stageOf('a1c5') === 0)) {
+      await this.quayGhost();
     } else if (tag.startsWith('ghost:')) {
       const g = this.life.ghost(Number(tag.slice(6)));
       if (!hasPerk(s, 'occult', 6) && holidayOn(day)?.id !== 'hallows') {
@@ -3127,7 +3541,8 @@ export class Game {
     const businessExtra = perks.filter((a) => a.label.startsWith('Sell to Silas'));
     const askExtra = perks.filter((a) => !romanceExtra.includes(a) && !businessExtra.includes(a));
     const seesAll = r.friendship >= 30 && (p.id === 'mag' || p.id === 'ruby' || !AUTHORED[p.id]);
-    const ask = [...this.sailorActions(npc), ...this.factionActions(npc), ...this.recommendActions(npc), ...this.lessonActions(npc), ...this.parishActions(npc), ...askExtra].map(asPie);
+    const story = this.missionActions(npc).map((a) => ({ ...asPie(a), icon: 'favour' as const }));
+    const ask = [...this.factionActions(npc), ...this.recommendActions(npc), ...this.lessonActions(npc), ...this.parishActions(npc), ...askExtra].map(asPie);
     if (seesAll) ask.unshift({ label: 'Where is everyone?', sub: 'they know', onClick: () => { this.hud.hidePlace(); this.whereIs(npc); } });
     const favours = this.favourActions(npc).map((a) => ({ ...asPie(a), icon: 'favour' as const, primary: !a.disabled }));
     const fam = this.familyActions(npc);
@@ -3136,6 +3551,7 @@ export class Game {
     const family = fam.filter((a) => !a.label.startsWith('Ask for their hand') && !a.label.startsWith('Ask about a foundling')).map(asPie);
     ask.push(...foundling);
     const items: PieItem[] = [
+      ...(story.length > 2 ? [{ label: 'Story', icon: 'favour' as const, primary: true, children: story }] : story),
       ...favours,
       { label: 'Talk', icon: 'talk', children: [...['chat', 'joke', 'gossip', 'debate', 'brag'].map(say), {
         label: 'About their life', sub: 'home, work, evenings', disabled: tired || this.usedToday(`life:${p.id}`),
@@ -3937,14 +4353,15 @@ export class Game {
     // Sickness.
     for (const [id, until] of Object.entries(L.sick)) if (until < day) delete L.sick[id];
     const healthy = RESIDENTS.filter((r) => this.present(r) && !['mag', 'quill', 'ashby'].includes(r.id) && !(L.sick[r.id] >= day)).map((r) => r.id);
-    if (!Object.keys(L.sick).length && Math.random() < 0.09 && healthy.length) {
+    if (!Object.keys(L.sick).length && Math.random() < (s.missions.pump?.done ? 0.045 : 0.09) && healthy.length) {
       const id = healthy[Math.floor(Math.random() * healthy.length)];
       L.sick[id] = day + 2;
       lines.push(`${this.nameOf(id)} has taken a fever. They're wrapped up on their step; a hot broth would do more than Quill's tonic.`);
     }
     // The strike.
     if (s.strike && day > s.strike.until && s.strike.won === undefined) {
-      const won = Math.random() < (s.strike.side === 'scab' ? 0.35 : s.strike.side === 'picket' ? 0.75 : 0.55);
+      const won = !!s.missions.strike?.flags.won || Math.random() < (s.strike.side === 'scab' ? 0.35 : s.strike.side === 'picket' ? 0.75 : 0.55);
+      if (s.missions.strike && !s.missions.strike.done) s.missions.strike = { ...s.missions.strike, done: true, outcome: won ? (s.strike.side === 'scab' ? 'crossed' : 'picket') : 'lost' };
       s.strike.won = won;
       if (won) {
         s.dockRaise = 0.1;
@@ -3955,6 +4372,7 @@ export class Game {
       }
     } else if (strikeStarts(s, day)) {
       s.strike = { day, until: day + 2, side: '' };
+      s.missions.strike = { stage: 0, started: day, flags: {} };
       lines.push('STRIKE: the dockers are out. Pickets at the Hiring Office for three days. Join them, or cross the line for double pay.');
     }
     // Scripted days.
@@ -4951,21 +5369,51 @@ export class Game {
       ${skills}
       <h3>Perks</h3><ul class="perks">${perks || '<li>None yet: they come at levels 3, 6 and 10.</li>'}</ul>
       <h3>How you are</h3>${needs}`;
-    // Missions page: the story, favours, goals, work, money and standing.
-    const story = s.hesterLetters > 0
-      ? `Hester's letters (${s.hesterLetters} of ${HESTER_LETTERS.length}) speak of Wardens, the fog and Mr. Vane's lamps. The trunk in your room will not open yet.`
-      : 'Hester left you her room, her ghost and a trunk that will not open. Mrs. Pell may know more.';
+    // Quests page: the main story by chapter, the side stories, favours and family.
+    const nm = (id: string) => (id === 'pembleton' ? 'Pembleton' : this.short(id));
+    const reqChip = (r: Req) => `<span class="req ${reqMet(s, r) ? 'ok' : 'no'}">${esc(reqText(s, r, nm))}</span>`;
+    const waysHtml = (def: MissionDef) => {
+      const m = s.missions[def.id] ?? { stage: 0, started: 0, flags: {} };
+      const ways = def.stages[Math.min(m.stage, def.stages.length - 1)].ways ?? [];
+      if (!ways.length) return '';
+      return `<ul class="ways">${ways.map((w) => {
+        const done = w.done?.(m);
+        const ok = done || !w.any || w.any.some((r) => reqMet(s, r));
+        return `<li class="${done ? 'done' : ok ? 'ok' : 'no'}">${esc(w.text)}${!done && w.any ? `<span class="reqs">${w.any.map(reqChip).join('<i>or</i>')}</span>` : ''}</li>`;
+      }).join('')}</ul>`;
+    };
+    const chapter = currentChapter(s);
+    const mains = MISSIONS.filter((d) => d.kind === 'main');
+    const OUT: Record<string, string> = { word: 'gave him his name', steel: 'put him down', coin: 'paid the Kin', mag: 'with Mag', watch: 'by the watch', named: 'named', opened: 'opened', skipped: 'passed' };
+    const mainHtml = mains.map((d) => {
+      const m = s.missions[d.id];
+      if (m?.done) return `<div class="mcard done"><b>${esc(d.title)}</b><span class="mstat">Done${m.outcome && OUT[m.outcome] ? ` · ${OUT[m.outcome]}` : ''}</span></div>`;
+      if (d === chapter) return `<div class="mcard now"><b>${esc(d.title)}</b><span class="mstat">Now · from ${esc(nm(d.giver))}</span><p class="mblurb">${esc(d.blurb)}</p><p class="mobj">${esc(objectiveOf(s, d))}</p>${waysHtml(d)}</div>`;
+      return `<div class="mcard later"><b>${esc(d.title)}</b><span class="mstat">Later</span></div>`;
+    }).join('');
+    const sides = MISSIONS.filter((d) => d.kind === 'side');
+    const sideCard = (d: MissionDef) => {
+      const st = sideStatus(s, d);
+      const m = s.missions[d.id];
+      if (st === 'active') return `<div class="mcard now"><b>${esc(d.title)}</b><span class="mstat">Under way · ${esc(nm(d.giver))}</span><p class="mobj">${esc(objectiveOf(s, d))}</p>${waysHtml(d)}</div>`;
+      if (st === 'offered') return `<div class="mcard offer"><b>${esc(d.title)}</b><span class="mstat">On offer</span><p class="mobj">${esc(d.blurb)} Talk to ${esc(nm(d.giver))}.</p></div>`;
+      if (st === 'rumour') return `<div class="mcard later"><b>${esc(d.title)}</b><span class="mstat">Rumour</span><p class="mobj">${esc(d.rumour ?? d.blurb)}</p>${(d.opens ?? []).map(reqChip).join(' ')}</div>`;
+      if (st === 'done') return `<div class="mcard done"><b>${esc(d.title)}</b><span class="mstat">${m?.outcome === 'lost' ? 'Over · it went badly' : 'Done'}</span></div>`;
+      return '';
+    };
+    const sideOrder = (d: MissionDef) => ['active', 'offered', 'rumour', 'done', 'hidden'].indexOf(sideStatus(s, d));
+    const sideHtml = [...sides].sort((a, b) => sideOrder(a) - sideOrder(b)).map(sideCard).join('') || '<p class="meta">Nothing yet.</p>';
     const favours = s.quests.filter((q) => !q.done).map((q) => `<li>${esc(q.text)}</li>`).join('') || '<li>Nobody needs anything from you just now. Make friends, and they will.</li>';
-    const goals = this.goals().filter((g) => !g.startsWith('Favour')).map((g) => `<li>${esc(g)}</li>`).join('');
-    const work = s.jobs.map((e) => `<li>${esc(title(s, e))} at the ${esc(JOBS[e.jobId].employer)}: ${esc(nextShiftText(s, e.jobId))}. ${esc(promotionText(s, e.jobId))}</li>`).join('') || '<li>Unemployed.</li>';
-    const rent = s.rent.graceUntil !== null ? `Rent of £${s.rent.amount.toFixed(2)} is overdue.` : `Rent of £${s.rent.amount.toFixed(2)} is due ${due}.`;
-    const office = officeTitle(s, c.gender === 'woman');
+    const goals = this.goals().filter((g) => !g.startsWith('Favour') && !this.storyGoals().includes(g)).map((g) => `<li>${esc(g)}</li>`).join('');
     const missionsHtml = `
-      <h3>The story · Fog Clock ${Math.round(s.story.clock)}</h3>
-      <div class="sk-bar fogclock"><i style="width:${Math.round(s.story.clock)}%"></i></div>
-      <p class="meta">The fog is ${clockWord(s.story.clock)}. At 25, 50 and 75 an urgent call; at 100, London falls. Finishing an act pushes it back.</p>
-      <p>${esc(s.story.act1 === 'done' ? `Act I, The Fog: done (${s.story.path === 'word' ? 'you gave Jack Merrow his name' : s.story.path === 'steel' ? 'you put the drowned man down' : 'the Kin took him away'}). Act II, The Social Season, waits in Mayfield.` : s.story.act1 === 'open' ? 'Act I, The Fog: Hester\'s journal and watch lead to the drowned man on the quay.' : story)}</p>
-      <ul class="perks">${this.storyGoals().map((g) => `<li>${esc(g)}</li>`).join('')}</ul>
+      <h3>Act I · The Fog</h3>
+      <div class="fogline"><span>Fog Clock ${Math.round(s.story.clock)}</span><div class="sk-bar fogclock"><i style="width:${Math.round(s.story.clock)}%"></i></div></div>
+      <p class="meta">The fog is ${clockWord(s.story.clock)}. At 25, 50 and 75 an urgent call; at 100, London falls. Finishing an act pushes it back.${s.story.act1 === 'done' ? ' Act II, The Social Season, waits in Mayfield.' : ''}</p>
+      ${mainHtml}
+      <h3>Saltwharf stories</h3>
+      ${sideHtml}
+      <h3>Favours</h3><ul class="perks">${favours}</ul>
+      ${goals ? `<h3>Goals</h3><ul class="perks">${goals}</ul>` : ''}
       <h3>Family</h3><ul class="perks">${(() => {
         const f = s.family;
         const items: string[] = [];
@@ -4974,16 +5422,41 @@ export class Game {
         else items.push('Unmarried. Court someone to Romance 60 and Friendship 40, then ask for their hand.');
         for (const id of f.children) { const p = this.rec(id); if (p?.alive) items.push(`${esc(p.first)}, ${ageOf(p, day)}`); }
         if (f.due) items.push(`A baby due in ${f.due - day} days`);
-        for (const a of f.ancestors) items.push(`<em>${esc(a.name)} (died aged ${ageOf({ birth: a.born }, a.died)})</em>`);
         return items.map((x) => `<li>${x}</li>`).join('');
       })()}</ul>
-      <h3>Favours</h3><ul class="perks">${favours}</ul>
-      <h3>Goals</h3><ul class="perks">${goals}</ul>
-      <h3>Work</h3><ul class="perks">${work}</ul>
-      <h3>Purse</h3><p>£${s.money.toFixed(2)}. ${rent}${s.debt > 0 ? ` You owe the hospital £${s.debt.toFixed(2)}.` : ''}</p>
-      <h3>Standing</h3><p>${office ? `${office} of St. Botolph. ` : ''}${s.parish.standing !== null ? `Standing for ${OFFICES[s.parish.rank].name}: ${s.parish.pledges.length} pledged, ${s.parish.crowd} won by speeches.` : OFFICES[s.parish.rank] ? `Next: ${OFFICES[s.parish.rank].name} (Study ${OFFICES[s.parish.rank].study}, ${OFFICES[s.parish.rank].friends} friends; ask Father Hale).` : ''}${s.champion ? ` ${CHAMPION_TITLE}.` : ''}</p>
       <h3>Days ahead</h3><p>${HOLIDAYS.map((h) => `${h.name}, ${h.date} ${h.month === 9 ? 'Oct' : 'Nov'}`).join(' · ')}. Today: ${s.weather}.</p>`;
-    this.hud.setJournal(Hud.titleFor(s), skillsHtml, missionsHtml, this.factionsHtml());
+    // Work page: each job in full (hours, pay, the next rank and what it needs), what else is going, money and the parish.
+    const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const daysText = (d: number[]) => (d.length === 6 && !d.includes(0) ? 'Mon–Sat' : d.length === 6 && !d.includes(1) ? 'every day but Monday' : d.map((x) => DAYS[x]).join(', '));
+    const hours = (j: (typeof JOBS)[string]) => `${formatMinutes(j.start)}–${j.end >= 1440 ? 'midnight' : formatMinutes(j.end)}, ${daysText(j.days)}`;
+    const need = (k: SkillId, n: number) => `<span class="req ${c.skills[k] >= n ? 'ok' : 'no'}">${SKILL_INFO[k].name} ${n} (you ${c.skills[k]})</span>`;
+    const jobCard = (e: (typeof s.jobs)[number]) => {
+      const j = JOBS[e.jobId];
+      const r = j.ranks[e.rank];
+      const next = j.ranks[e.rank + 1];
+      const raise = e.jobId === 'docks' && s.dockRaise ? ` + ${Math.round(s.dockRaise * 100)}% strike raise` : '';
+      const ladder = j.ranks.map((x, i) => `<span class="rung${i === e.rank ? ' here' : i < e.rank ? ' past' : ''}">${esc(rankTitle(j, i, c.gender))} · £${x.pay.toFixed(2)}</span>`).join('<i>›</i>');
+      return `<div class="mcard now"><b>${esc(title(s, e))}</b><span class="mstat">${esc(j.employer)} · ${esc(j.boss)}</span>
+        <dl class="jobdl"><dt>Hours</dt><dd>${hours(j)} (${esc(nextShiftText(s, e.jobId))})</dd>
+        <dt>Pay</dt><dd>£${r.pay.toFixed(2)} a shift${raise}. Played shifts pay more for good work: Good ×1.2, Excellent ×1.5, Poor ×0.6.</dd>
+        <dt>Skills</dt><dd>${SKILL_INFO[j.main].name} first, ${SKILL_INFO[j.second].name} second. Played shifts train both.</dd>
+        <dt>Promotion</dt><dd>${next ? `To ${esc(rankTitle(j, e.rank + 1, c.gender))} (£${next.pay.toFixed(2)}): <span class="req ${e.points >= next.points ? 'ok' : 'no'}">${e.points} / ${next.points} points</span>${next.needMain ? ' ' + need(j.main, next.needMain) : ''}${next.needSecond ? ' ' + need(j.second, next.needSecond) : ''}` : 'Top rank in Saltwharf, for now.'}</dd>
+        <dt>Mind</dt><dd>Excellent +3 points, Good +2, Fair +1, Poor −2. A missed shift is −3; at −6 you're let go.</dd></dl>
+        <div class="ladder">${ladder}</div></div>`;
+    };
+    const others = Object.values(JOBS).filter((j) => !employment(s, j.id)).map((j) => {
+      const b = hireBlocker(s, j.id);
+      const why = b === 'banned' ? 'They won\'t have you back yet.' : b === 'full' ? 'You have two jobs already.' : b === 'clash' ? 'Its hours clash with your other job.' : `Ask ${esc(j.boss)} at the ${esc(j.employer)}.`;
+      return `<div class="mcard offer"><b>${esc(j.ranks[0].title)}</b><span class="mstat">${esc(j.employer)}</span><p class="mobj">${hours(j)}. £${j.ranks[0].pay.toFixed(2)} a shift to start. ${SKILL_INFO[j.main].name} work. ${why}</p></div>`;
+    }).join('');
+    const rent = s.rent.graceUntil !== null ? `Rent of £${s.rent.amount.toFixed(2)} is overdue.` : `Rent of £${s.rent.amount.toFixed(2)} is due ${due}.`;
+    const office = officeTitle(s, c.gender === 'woman');
+    const workHtml = `
+      <h3>Your work</h3>${s.jobs.map(jobCard).join('') || '<p class="meta">Unemployed. Two jobs at once at most, if their hours don\'t clash.</p>'}
+      ${others ? `<h3>Also hiring in Saltwharf</h3>${others}` : ''}
+      <h3>Purse</h3><p>£${s.money.toFixed(2)}. ${rent}${s.debt > 0 ? ` You owe the hospital £${s.debt.toFixed(2)}.` : ''}</p>
+      <h3>Parish</h3><p>${office ? `${office} of St. Botolph. ` : ''}${s.parish.standing !== null ? `Standing for ${OFFICES[s.parish.rank].name}: ${s.parish.pledges.length} pledged, ${s.parish.crowd} won by speeches.` : OFFICES[s.parish.rank] ? `Next: ${OFFICES[s.parish.rank].name} (Study ${OFFICES[s.parish.rank].study}, ${OFFICES[s.parish.rank].friends} friends; ask Father Hale).` : ''}${s.champion ? ` ${CHAMPION_TITLE}.` : ''}</p>`;
+    this.hud.setJournal(Hud.titleFor(s), skillsHtml, missionsHtml, this.factionsHtml(), workHtml);
   }
 
   // --- Creator preview ------------------------------------------------------

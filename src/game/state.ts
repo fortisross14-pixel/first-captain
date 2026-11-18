@@ -1,3 +1,4 @@
+import type { MissionState } from './missions';
 import type { Look } from '../actors/characterModel';
 import type { Employment } from './jobs';
 import type { Relation } from './social';
@@ -146,6 +147,8 @@ export interface GameState {
   parish: Parish;
   /** A dock strike, if one is on: the day it started and which side you took. */
   strike: { day: number; until: number; side: '' | 'picket' | 'scab'; won?: boolean } | null;
+  /** Act I chapters and side stories, by mission id. */
+  missions: Record<string, MissionState>;
   /** Permanent raise at the docks after a strike won. */
   dockRaise: number;
   /** Changes in the neighbourhood: who is sick, who is missing, until which day. */
@@ -186,6 +189,7 @@ function fillLives(s: GameState): void {
   s.wear ??= { plain: 100, work: 100, sunday: 100, coat: 100 };
   s.parish ??= { rank: 0, standing: null, pledges: [], crowd: 0, lastSpeech: -1 };
   s.strike ??= null;
+  s.missions ??= {};
   s.dockRaise ??= 0;
   s.life ??= { sick: {}, missing: {}, confused: {} };
 }

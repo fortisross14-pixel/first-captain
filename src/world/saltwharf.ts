@@ -351,6 +351,28 @@ export function buildSaltwharf(): Location {
     places.push({ id: `scav:${sp.id}`, name: sp.name, description: sp.description, door: sp.stand, faceTo: { x: sp.x + 0.5, z: sp.z + 0.5 } });
   }
 
+  // The Back Lane pump: iron, a trough, and a handle worn bright.
+  {
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 1.3, 8), mat(0x2a3a34, 0.6, 0.4));
+    body.position.set(19.5, 0.65, 23.4);
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 6), mat(0x2a3a34, 0.6, 0.4));
+    cap.position.set(19.5, 1.35, 23.4);
+    const spout = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.35), mat(0x2a3a34, 0.6, 0.4));
+    spout.position.set(19.5, 0.95, 23.65);
+    const handle = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.7), mat(C.brass, 0.4, 0.6));
+    handle.position.set(19.5, 1.25, 23.1);
+    handle.rotation.x = -0.5;
+    const trough = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.3, 0.45), mat(C.stone));
+    trough.position.set(19.5, 0.15, 23.85);
+    g.add(body, cap, spout, handle, trough);
+    g.userData.placeId = 'pump';
+    root.add(g);
+    tappables.push(g);
+    grid.block(19, 23);
+    places.push({ id: 'pump', name: 'The Back Lane pump', description: 'Half of Back Lane fills its kettles here. The water comes up cold and clear and tastes, lately, a little of something.', door: { x: 19, z: 24 }, faceTo: { x: 19.5, z: 23.5 } });
+  }
+
   // Lamps: gaslights, and one cold white Vane Lamp outside the hiring office.
   const lampTiles: [number, number, boolean][] = [
     [2, 6, false], [9, 6, false], [16, 6, false], [23, 6, false], [30, 6, false],

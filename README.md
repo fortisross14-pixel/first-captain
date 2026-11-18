@@ -8,7 +8,10 @@ A dark gothic life-sim RPG set in a fictional Victorian London (1871): work, ren
 - Latest audit: [docs/AUDIT_2026-11-18.md](docs/AUDIT_2026-11-18.md) · repeat it with `node scripts/audit-metrics.cjs` and the `game-audit` skill
 - Story and world design: the *Pale Lamps Story Bible* (Claude Docs)
 
-## Current state: M13, the Fog Clock and Act I
+## Current state: M17, Act I in five chapters
+
+A prologue (Hester's letter, the train, the white lamp), then Act I in five chapters and six Saltwharf side stories. Every stage has at least two ways through, often gated by skills (talk or fight, friendship or nerve). The journal lists every chapter and story with its requirements, and a Work page with each job's hours, pay and next promotion. See [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md) for M14–M17.
+
 
 The fog thickens every night on the Fog Clock; urgent calls at 25, 50 and 75; London falls at 100. Hester's trunk, her journal and her watch lead to the drowned sailor on the quay: fight him, give him his name, or pay the Kin.
 

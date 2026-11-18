@@ -264,6 +264,27 @@ Renamed in M13 to match the Story Bible (the Dockers' Brotherhood became the Lam
 - [x] **Townsfolk keep near home**: in their free hours about two in three stay on their own doorstep (smoking, leaning, watching the street) when their usual haunt is a long walk away; children play near their house and the old watch from the step.
 - [x] **Death is final**: no carrying on as your child. The In Memoriam card, a last word from Hester's ghost, and that life's save slot is cleared.
 
+## M17 ✅ Act I in five chapters, Saltwharf's own stories, a proper journal, a prologue
+
+`src/game/missions.ts` holds the script: chapters and side stories, their stages, and the ways through each one. Every stage that asks something of you offers at least two ways (talk or fight, friendship or skill, money or nerve); the journal shows each way with its requirements, gilt when you qualify and red when you don't yet.
+
+- [x] **Prologue**: four engraved pages before the game starts, the way a story should open. Hester's letter arrives in Kent, the letter itself (naming you and your family), the train into the fog, and the quay with one white lamp. Tap through or skip.
+- [x] **Act I, "The Fog"**, now five chapters, all in Saltwharf:
+  1. *Hester's Room*: open the trunk (Occult 2, or when the fog forces it).
+  2. *The First to Vanish*: the night the trunk opens, Tom Fairley walks into the fog. Lizzie sends you to Ruby (Charisma 3, Friendship 15, or Strength 3 to lean on her); after 22:00 you follow the drowned man along the quay with Hester's watch (Occult 2, or Old Mag reads it with you at Friendship 10) and find Tom on the Wherry Stairs.
+  3. *A Name for the Drowned*: two of three records. Mag's memory (Friendship 10, or bring her food); Rudd's tally book (Friendship 15, or Cunning 3 to read it upside down); St. Botolph's burial register (Study 2, or Father Hale at Friendship 15). His name was Jack Merrow.
+  4. *The Gallantry Medal*: Moss sold it on to Silas Crane. Buy it (£0.80, £0.30 for the Kin's own), talk him round (Charisma 3), or take it (Strength 4, and the Kin remember).
+  5. *The Quay at Night*: his name and medal (certain with Occult 3 or Charisma 3, a gamble without), iron and fists (Strength 4 advised), or pay the Kin (£1.50).
+- [x] **Six side stories**, each with its own opening requirement and two or more ways through:
+  - *Letters for Lizzie* (Tom; opens after chapter II with Study 2 or Arts & Crafts 2): write the letter or press a flower card at Hester's table, deliver it, and tell Tom what Lizzie said. Lizzie's answer is not the one Tom hoped for.
+  - *Ruby's Debt* (Ruby; Friendship 10): pay Silas £1, talk him out of it (Charisma 3), or see Skint Joe off on Rope Walk after 21:00 (Strength 3).
+  - *The Hollow Lane Bruiser* (Nell; Strength 4): spar three dawns, then on fight night either expose Dan Sallow's loaded gloves (Cunning 3, at the Copper Cup) or stand in Nell's corner and fight his second (Strength 4).
+  - *Out on the Stones* (opens itself when the dockers strike): speak for the men to the owners' agent (Charisma 3), hold the gate against the Wapping men at dawn (Strength 3), or picket and hope.
+  - *The Back Lane Pump* (Dr. Quill; Study 2): bring two remedies, find the source (map the cases with Study 3, or knock on three Back Lane doors), and stop the pump (Father Hale chains it at Charisma 3, or you wrench the handle off after dark at Strength 3). Afterwards fevers are half as common.
+  - *Bessa's Cellar* (Bessa; Friendship 10 and Strength 3 or Charisma 3): three night runs of Kin brandy from the Wherry Stairs, carried (Strength) or covered by keeping the constable talking (Charisma).
+- [x] **Story bubbles**: the people involved show gilt story bubbles in their pie (grouped under "Story" when there are several), and places add story actions (Hester's table, the church, the Hiring Office, the yard, the Copper Cup, the Wherry Stairs, the new Back Lane pump).
+- [x] **Journal**: five pages. *Quests*: the Fog Clock, every chapter (done, now, later) with the current objective and its ways; Saltwharf stories under way, on offer, rumoured (with what they need) and done; favours, goals, family and the days ahead. *Work*: each job's hours, pay and grade multipliers, the next promotion with points and skills needed, the attendance rules, the whole ladder, and who else is hiring; then purse and parish.
+
 ## Next
 
 The next districts (Lantern Market, then Mayfield) and Act II, "The Social Season"; businesses.

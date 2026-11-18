@@ -131,12 +131,14 @@ export class Hud {
             <h2></h2>
             <div class="tabs" role="tablist">
               <button role="tab" data-page="skills" aria-selected="true">Skills</button>
-              <button role="tab" data-page="missions" aria-selected="false">Missions</button>
+              <button role="tab" data-page="missions" aria-selected="false">Quests</button>
+              <button role="tab" data-page="work" aria-selected="false">Work</button>
               <button role="tab" data-page="standing" aria-selected="false">Standing</button>
               <button role="tab" data-page="options" aria-selected="false">Options</button>
             </div>
             <div class="journal-body page-skills"></div>
             <div class="journal-body page-missions" hidden></div>
+            <div class="journal-body page-work" hidden></div>
             <div class="journal-body page-standing" hidden></div>
             <div class="journal-body page-options" hidden>
               <div class="opt"><span>Sound</span><button class="sound-toggle"></button></div>
@@ -277,7 +279,7 @@ export class Hud {
   private journalPage(page: string): void {
     sfx('page');
     this.el.querySelectorAll<HTMLButtonElement>('.journal-sheet.diary .tabs button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.page === page)));
-    for (const p of ['skills', 'missions', 'standing', 'options']) this.q(`.page-${p}`).hidden = p !== page;
+    for (const p of ['skills', 'missions', 'work', 'standing', 'options']) this.q(`.page-${p}`).hidden = p !== page;
   }
 
   set journalOpen(open: boolean) {
@@ -715,10 +717,11 @@ export class Hud {
     return new Promise((r) => setTimeout(r, 450));
   }
 
-  setJournal(title: string, skills: string, missions: string, standing = ''): void {
+  setJournal(title: string, skills: string, missions: string, standing = '', work = ''): void {
     this.q('.journal h2').textContent = title;
     this.q('.page-skills').innerHTML = skills;
     this.q('.page-missions').innerHTML = missions;
+    this.q('.page-work').innerHTML = work;
     this.q('.page-standing').innerHTML = standing;
   }
 
