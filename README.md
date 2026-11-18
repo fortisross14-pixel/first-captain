@@ -3,6 +3,8 @@
 A dark gothic life-sim RPG set in a fictional Victorian London (1871): work, rent, needs, relationships, factions and the fog. Low-poly 3D, angled top-down camera, built for phones and tablets.
 
 - Build plan and milestones: [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md)
+- Game dev playbook (principles and checks): [docs/GAME_DEV_PLAYBOOK.md](docs/GAME_DEV_PLAYBOOK.md)
+- Latest audit: [docs/AUDIT_2026-11-18.md](docs/AUDIT_2026-11-18.md) · repeat it with `node scripts/audit-metrics.cjs` and the `game-audit` skill
 - Story and world design: the *Pale Lamps Story Bible* (Claude Docs)
 
 ## Current state: M7, the Saltwharf vertical slice is complete
