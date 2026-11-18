@@ -285,6 +285,15 @@ Renamed in M13 to match the Story Bible (the Dockers' Brotherhood became the Lam
 - [x] **Story bubbles**: the people involved show gilt story bubbles in their pie (grouped under "Story" when there are several), and places add story actions (Hester's table, the church, the Hiring Office, the yard, the Copper Cup, the Wherry Stairs, the new Back Lane pump).
 - [x] **Journal**: five pages. *Quests*: the Fog Clock, every chapter (done, now, later) with the current objective and its ways; Saltwharf stories under way, on offer, rumoured (with what they need) and done; favours, goals, family and the days ahead. *Work*: each job's hours, pay and grade multipliers, the next promotion with points and skills needed, the attendance rules, the whole ladder, and who else is hiring; then purse and parish.
 
+## M18 ✅ Saltwharf, finished off
+
+- [x] **St. Botolph's interior**: pews, altar, three coloured windows, Father Hale at the rail. The parish register (Act I's clue; old entries about the Doyles, Pembleton's "fall" and the cholera), the poor box (Hale +2), and the Sunday service 11:00–13:00 after his sermon at the market cross (Social, Rest, Hale and the pious notice). Churchgoers sit in the pews.
+- [x] **Two more homes**: a room in Gull Court (£0.40 a month, 5 × 4, damp) and the rooms over the Copper Cup (£1.00, 9 × 6, two windows, up the taproom's back stairs). Rent them from Grubb or Bessa; your furniture comes with you and rearranges itself to fit, and Pembleton turns out to be bound to Hester's trunk, not the building. Hester's room can be taken back.
+- [x] **Pembleton on your other talents**: in the opening and whenever you ask, he explains that Saltwharf only pays for Strength and Charisma, and where Study, Arts & Crafts, Occult and Cunning will pay once other districts open.
+- [x] **One-line tips** the first time: the map, Decor, a scavenge spot, the roads out, story bubbles, your first job, your home and the church, the friends rings.
+- [x] **Friends**: a toggle on the street and in buildings puts a ring under everyone, from deep green (close friends) through yellow (acquaintances) to red (rivals), grey for strangers, with a legend. The district map shows the people you know who are out, by name and colour.
+- [x] **Back within budget**: the HUD is 15% of a portrait phone screen again, buttons are at least 44 px and text at least 13 px; a pool of six street lights follows the camera (was ten); the clock pauses under place panels, Decor and the prologue.
+
 ## Next
 
 The next districts (Lantern Market, then Mayfield) and Act II, "The Social Season"; businesses.

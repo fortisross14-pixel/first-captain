@@ -5,9 +5,8 @@ import type { Location, Place } from './location';
 import { C, mat } from './materials';
 import { rng } from './props';
 import { FURNITURE, buildFurniture, footprint, type HomeLayout } from './furniture';
+import { HOMES_TO_LET, type HomeSpec } from './homes';
 
-const W = 7;
-const D = 5;
 const WALL_H = 3;
 
 function box(w: number, h: number, d: number, color: number | THREE.Material, x: number, y: number, z: number): THREE.Mesh {
@@ -47,7 +46,10 @@ export function makeGhost(): THREE.Group {
   return rig.root;
 }
 
-export function buildHesterRoom(): Location {
+/** Your home: Hester's room by default, or wherever you have moved her trunk (and Pembleton) to. */
+export function buildHesterRoom(spec: HomeSpec = HOMES_TO_LET.hester): Location {
+  const W = spec.w;
+  const D = spec.d;
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x0b0d10);
   const grid = new Grid(W, D);
@@ -81,37 +83,39 @@ export function buildHesterRoom(): Location {
   }
 
   // Walls: the far (south) wall and the two sides. The near wall is cut away for the camera.
-  const wallM = new THREE.MeshStandardMaterial({ color: 0x7a6c58, roughness: 0.9, flatShading: true });
+  const wallM = new THREE.MeshStandardMaterial({ color: spec.wall, roughness: 0.9, flatShading: true });
   const damp = mat(0x4a4236);
   scene.add(box(W + 0.4, WALL_H, 0.2, wallM, W / 2, WALL_H / 2, D + 0.1));
   scene.add(box(0.2, WALL_H, D, wallM, W + 0.1, WALL_H / 2, D / 2));
   // West wall with a doorway at z 1–2.
   scene.add(box(0.2, WALL_H, 1, wallM, -0.1, WALL_H / 2, 0.5));
-  scene.add(box(0.2, WALL_H, 3, wallM, -0.1, WALL_H / 2, 3.5));
+  scene.add(box(0.2, WALL_H, D - 2, wallM, -0.1, WALL_H / 2, 2 + (D - 2) / 2));
   scene.add(box(0.2, 0.9, 1, wallM, -0.1, WALL_H - 0.45, 1.5));
   scene.add(box(W + 0.4, 0.25, 0.24, mat(C.woodDark), W / 2, 0.12, D + 0.02));
-  scene.add(box(1.4, 1.1, 0.04, damp, 5.6, 2.2, D - 0.02));
+  scene.add(box(1.4, 1.1, 0.04, damp, W - 1.4, 2.2, D - 0.02));
   scene.add(box(0.04, 0.9, 1.3, damp, W - 0.02, 0.7, 1.2));
 
   // Window on the far wall: glass glows with the daylight outside.
   const glass = new THREE.MeshStandardMaterial({ color: 0x223040, emissive: 0x9fb0c0, emissiveIntensity: 0.6, flatShading: true });
-  scene.add(box(1.1, 1.2, 0.05, glass, 3.5, 1.75, D - 0.03));
-  scene.add(box(1.3, 0.1, 0.18, mat(C.woodDark), 3.5, 1.1, D - 0.06));
-  scene.add(box(0.06, 1.2, 0.08, mat(C.woodDark), 3.5, 1.75, D - 0.05));
-  scene.add(box(1.1, 0.06, 0.08, mat(C.woodDark), 3.5, 1.75, D - 0.05));
+  for (const wx of spec.windows) {
+    scene.add(box(1.1, 1.2, 0.05, glass, wx, 1.75, D - 0.03));
+    scene.add(box(1.3, 0.1, 0.18, mat(C.woodDark), wx, 1.1, D - 0.06));
+    scene.add(box(0.06, 1.2, 0.08, mat(C.woodDark), wx, 1.75, D - 0.05));
+    scene.add(box(1.1, 0.06, 0.08, mat(C.woodDark), wx, 1.75, D - 0.05));
+  }
 
   // The doorway down to the street
   const door = new THREE.Group();
   door.add(box(0.06, 2.1, 0.9, mat(C.woodDark), 0.02, 1.05, 1.5));
   door.rotation.y = 0;
-  place('door', 'Stairs down', 'Two flights of crooked stairs down to Quay Street.', door, { x: 0, z: 1 }, { x: -1, z: 1.5 });
+  place('door', 'Stairs down', spec.id === 'cup' ? 'Down the back stairs into the taproom.' : spec.id === 'court' ? 'Three flights of stairs that smell of cabbage, down to Gull Court.' : 'Two flights of crooked stairs down to Quay Street.', door, { x: 0, z: 1 }, { x: -1, z: 1.5 });
 
   // Mr. Pembleton
   const ghost = makeGhost();
-  ghost.position.set(5.5, 0.15, 2.5);
+  ghost.position.set(spec.ghost.x + 0.5, 0.15, spec.ghost.z + 0.5);
   ghost.rotation.y = -Math.PI / 2 - 0.6;
-  place('pembleton', 'Mr. Pembleton', 'Late of this parish. Very late.', ghost, { x: 4, z: 2 }, { x: 5.5, z: 2.5 });
-  grid.block(5, 2);
+  place('pembleton', 'Mr. Pembleton', 'Late of this parish. Very late.', ghost, { x: spec.ghost.x - 1, z: spec.ghost.z }, { x: spec.ghost.x + 0.5, z: spec.ghost.z + 0.5 });
+  grid.block(spec.ghost.x, spec.ghost.z);
 
   // --- The furniture: rebuilt from your layout whenever it changes -----------
   const extras: Location['extras'] = {};
@@ -196,8 +200,8 @@ export function buildHesterRoom(): Location {
   const hemi = new THREE.HemisphereLight(0xb0b8c8, 0x4a3828, 1.4);
   scene.add(hemi);
   const windowLight = new THREE.DirectionalLight(0xc8d4e0, 1.4);
-  windowLight.position.set(3.5, 6, D + 4);
-  windowLight.target.position.set(3.5, 0, 1.5);
+  windowLight.position.set(W / 2, 6, D + 4);
+  windowLight.target.position.set(W / 2, 0, 1.5);
   windowLight.castShadow = true;
   windowLight.shadow.mapSize.set(1024, 1024);
   const sc = windowLight.shadow.camera;
@@ -227,7 +231,7 @@ export function buildHesterRoom(): Location {
 
   return {
     id: 'hesterRoom',
-    name: "Hester's room",
+    name: spec.name,
     scene,
     grid,
     places,
@@ -236,7 +240,7 @@ export function buildHesterRoom(): Location {
       door: { x: 0.5, z: 1.5, faceX: 3, faceZ: 1.5 },
       bed: { x: 1.5, z: 3.5, faceX: 3, faceZ: 2 },
     },
-    camera: { bounds: { minX: 3.5, maxX: 3.5, minZ: 4.8, maxZ: 4.8 }, view: 8.2, offsetZ: 0 },
+    camera: { bounds: { minX: W / 2, maxX: W / 2, minZ: D - 0.2, maxZ: D - 0.2 }, view: W + 1.2, offsetZ: 0 },
     fadeOccluders: false,
     extras,
     furnish,

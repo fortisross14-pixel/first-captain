@@ -45,6 +45,7 @@ import { Title } from '../ui/Title';
 import { Prologue } from '../ui/Prologue';
 import { installPrompt, isIOSInstallable, runInstall } from '../pwa';
 import { buildHesterRoom } from '../world/hesterRoom';
+import { HOMES_TO_LET, type HomeId } from '../world/homes';
 import type { Location, Place } from '../world/location';
 import { buildSaltwharf } from '../world/saltwharf';
 import { makeDoorIcon } from '../world/doorIcon';
@@ -198,6 +199,11 @@ export class Game {
     this.hud.onBag = () => this.openBag();
     this.hud.onPeople = () => this.openContacts();
     this.hud.onDecor = () => this.startDecor();
+    this.hud.onRelations = (on) => {
+      this.relOn = on;
+      if (on) this.tip('rings', 'Rings show how you stand: deep green for close friends, red for rivals, grey for strangers.');
+      this.updateRings();
+    };
     this.hud.onClosed = () => this.save();
     this.hud.onInstall = () => void runInstall().then(() => { if (!installPrompt && !isIOSInstallable()) this.hud.toast('Use your browser menu: "Install app" or "Add to Home Screen".', 4000); });
     this.hud.onMap = (v) => this.openMap(v);
@@ -232,6 +238,7 @@ export class Game {
     };
     icon('hesterRoom', 'exit', 0.45, 1.55, 1.5, 'door', ['saltwharf', 'hester']);
     icon('saltwharf', 'home', 11.5, 2.7, 8.95, 'hester', ['hesterRoom', 'door']);
+    icon('saltwharf', 'home', 3.5, 2.7, 16.95, 'tenements', ['hesterRoom', 'door']);
     for (const def of INTERIORS) icon(`int:${def.id}`, 'exit', def.w / 2, 1.3, 0.25, 'exit', ['saltwharf', def.id]);
     new Input(this.renderer.domElement, (x, y) => this.tap(x, y), (f) => this.rig.zoomBy(f));
 
@@ -303,6 +310,8 @@ export class Game {
     this.prevSkills = null;
     this.syncPopulation();
     this.syncHome();
+    this.homeBuilt = false;
+    this.rebuildHome();
     this.clock.minutes = s.minutes;
     this.lastSaveMinute = s.minutes;
     this.player?.rig.root.removeFromParent();
@@ -340,6 +349,7 @@ export class Game {
     if (this.state) this.state.location = id;
     if (this.decor && id !== 'hesterRoom') this.endDecor();
     this.hud.decorButton = id === 'hesterRoom';
+    this.hud.relButton = id !== 'hesterRoom';
   }
 
   private async goTo(id: LocationId, entry: string): Promise<void> {
@@ -358,6 +368,8 @@ export class Game {
     await this.hud.fade(false);
     this.busy = false;
     if (id === 'hesterRoom') await this.pembletonOnFurniture();
+    if (id === 'hesterRoom' && this.state?.tutorial.step === 'done') this.tip('ghostwork', 'Saltwharf only pays for Strength and Charisma. Ask Pembleton what your other skills are good for. Other rooms to rent: Gull Court and over the Copper Cup.');
+    if (id === 'int:church') this.tip('church', 'Sunday service is at 11:00, after Hale\'s sermon at the market cross. The registers and the poor box are here too.');
     this.save();
   }
 
@@ -373,11 +385,15 @@ export class Game {
     for (const n of this.npcs) n.held = false;
     // The door icons: a generous target; tapping one walks you there and through.
     for (const d of this.doorIcons) {
-      if (d.loc !== this.location.id) continue;
+      if (d.loc !== this.location.id || !d.sprite.visible) continue;
       const pr = d.sprite.position.clone().project(this.rig.camera);
       const sx = (pr.x * 0.5 + 0.5) * rect.width + rect.left;
       const sy = (-pr.y * 0.5 + 0.5) * rect.height + rect.top;
       if (Math.hypot(sx - clientX, sy - clientY) > 48) continue;
+      if (d.loc === 'hesterRoom') {
+        this.leaveHome();
+        return;
+      }
       if (d.to[0] === 'saltwharf' || this.state!.housed) {
         this.exitThrough(d.place, d.to);
         return;
@@ -457,7 +473,7 @@ export class Game {
     const p = new THREE.Vector3();
     if (!this.raycaster.ray.intersectPlane(this.groundPlane, p)) return;
     if (this.location.id === 'hesterRoom' && p.x < 0.9 && p.z > 0.6 && p.z < 2.4) {
-      this.exitThrough('door', ['saltwharf', 'hester']);
+      this.leaveHome();
       return;
     }
     if (this.location.id.startsWith('int:') && p.z < 0.5) {
@@ -530,8 +546,19 @@ export class Game {
 
   // --- The map --------------------------------------------------------------
 
+  /** A one-line tip, the first time something comes up. */
+  private tip(key: string, text: string): void {
+    const s = this.state;
+    if (!s) return;
+    s.tips ??= {};
+    if (s.tips[key]) return;
+    s.tips[key] = true;
+    window.setTimeout(() => this.hud.toast(`Tip · ${text}`, 6500), 400);
+  }
+
   private openMap(view: 'london' | 'district'): void {
     if (!this.state) return;
+    this.tip('map', 'Tap a building to read about it and walk there. The roads at the edges lead to other districts.');
     const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
     // Shared engraving: dark paper, hatching, waves, fog, a compass rose.
     const defs = `<defs>
@@ -604,13 +631,19 @@ export class Game {
     const Y = (z: number) => (m.h - z) * K;
     const where = (() => {
       if (this.location.id === 'saltwharf') return this.player!.position;
-      const id = this.location.id === 'hesterRoom' ? 'hester' : this.location.id.slice(4);
+      const id = this.location.id === 'hesterRoom' ? HOMES_TO_LET[this.residence()].building : this.location.id.slice(4);
       const pl = loc.places.find((p) => p.id === id);
       return pl ? new THREE.Vector2(pl.door.x + 0.5, pl.door.z + 0.5) : this.player!.position;
     })();
     const fill = (k: string) => (k === 'shop' ? 'url(#mp-hatch2)' : k === 'church' ? 'url(#mp-cross)' : k === 'open' ? 'none' : 'url(#mp-hatch)');
     const rects = m.rects.map((r) => `<g data-id="${r.placeId}" class="mp-b ${r.kind}"><rect x="${X(r.x + r.w)}" y="${Y(r.z + r.d)}" width="${r.w * K}" height="${r.d * K}" fill="${fill(r.kind)}"/>${r.kind === 'church' ? `<path d="M${X(r.x + r.w / 2)} ${Y(r.z + r.d / 2) - 12} v14 M${X(r.x + r.w / 2) - 5} ${Y(r.z + r.d / 2) - 7} h10" class="mp-crossmark"/>` : ''}<text x="${X(r.x + r.w / 2)}" y="${Y(r.z + r.d / 2) + (r.kind === 'church' ? 14 : 4)}">${esc(r.label)}</text></g>`).join('');
     const lamps = (loc.lamps ?? []).map((l) => `<circle cx="${X(l.x)}" cy="${Y(l.z)}" r="9" fill="url(#mp-glow)"/><circle cx="${X(l.x)}" cy="${Y(l.z)}" r="1.6" fill="#ffd27a"/>`).join('') + `<circle cx="${X(27.5)}" cy="${Y(15.5)}" r="13" fill="url(#mp-vane)"/><circle cx="${X(27.5)}" cy="${Y(15.5)}" r="2" fill="#fff"/>`;
+    // People you know who are out on the streets, coloured by how you stand with them.
+    const hex = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
+    const folk = this.npcs.filter((n) => n.visible && this.state!.relations[n.res.id]?.met).map((n) => {
+      const c = this.relColor(n.res.id).color;
+      return `<g class="mp-folk"><circle cx="${X(n.walker.position.x)}" cy="${Y(n.walker.position.y)}" r="5.5" fill="${hex(c)}" stroke="#0b0d10" stroke-width="1.5"/><text x="${X(n.walker.position.x)}" y="${Y(n.walker.position.y) - 8}">${esc(this.first(n.res.id))}</text></g>`;
+    }).join('');
     const svg = `<svg viewBox="0 0 ${W} ${H + 40}" class="map-district">${defs}
       <rect width="${W}" height="${H + 40}" fill="url(#mp-paper)"/>
       <rect x="0" y="${Y(4)}" width="${W}" height="${4 * K + 40}" fill="url(#mp-waves)"/>
@@ -621,6 +654,7 @@ export class Game {
       ${m.streets.map((t) => `<text x="${X(t.x)}" y="${Y(t.z)}" class="mp-street" style="text-anchor:${X(t.x) > W / 2 ? 'end' : 'start'}">${esc(t.label)}</text>`).join('')}
       <g pointer-events="none">${fogLayer(W, H + 40)}</g>
       <rect width="${W}" height="${H + 40}" fill="url(#mp-vign)" pointer-events="none"/>
+      <g pointer-events="none">${folk}</g>
       <g class="mp-you" pointer-events="none"><circle cx="${X(where.x)}" cy="${Y(where.y)}" r="16" fill="url(#mp-glow)"/><circle cx="${X(where.x)}" cy="${Y(where.y)}" r="5.5" class="you"/><circle cx="${X(where.x)}" cy="${Y(where.y)}" r="12" class="you-ring"/></g>
       ${cartouche(W / 2, 30, 270, 'SALTWHARF DOCKS', 'in the Parish of St. Botolph · 1871')}
       ${rose(W - 34, 82, 18, 'up')}
@@ -635,19 +669,210 @@ export class Game {
         title: pl.name, text: `${pl.description}${hours}`,
         go: () => {
           if (this.location.id === 'saltwharf') return this.goToPlace(pl);
-          const from = this.location.id === 'hesterRoom' ? 'hester' : this.location.id.slice(4);
+          const from = this.location.id === 'hesterRoom' ? HOMES_TO_LET[this.residence()].building : this.location.id.slice(4);
           void this.goTo('saltwharf', from).then(() => this.goToPlace(pl));
         },
       };
     });
   }
 
+  // --- St. Botolph's -----------------------------------------------------------
+
+  private churchActions(placeId: string, act: (label: string, fn: () => void | Promise<void>, opts?: Partial<Action>) => Action): Action[] {
+    const s = this.state!;
+    const day = dayIndex(s.minutes);
+    const h = this.clock.hour;
+    if (placeId === 'exit') return [act('Go out to Church Street', () => this.goTo('saltwharf', 'church'), { primary: true })];
+    if (placeId === 'register') return [
+      ...this.missionPlaceActions('church', act),
+      act(this.usedToday('register') ? 'You read the registers today' : 'Read the old registers (1 hour)', async () => {
+        this.markUsed('register');
+        this.clock.minutes += 60;
+        s.minutes = this.clock.minutes;
+        simulateNeeds(s.needs, 1, 'awake');
+        const ups = gainXp(s, 'study', 8);
+        const lines = ['1741: "Ann Doyle, drowned at the Stairs in a fog so thick the bell could not be heard." Doyle, like Old Mag.', '1790: "Augustus Pembleton, gentleman, of a fall upon the stairs at the chandlery." Somebody has pencilled beside it: "pushed?"', '1832: forty burials in one week, all of cholera, all from Back Lane.', '1871: "Hester ' + s.character.last + ', spinster, of Quay Street. No family present." The ink is hardly dry.'];
+        await this.dialogue.say({ speaker: '', text: `${lines[day % lines.length]}\n${ups.join(' ')}`.trim() });
+      }, { disabled: this.usedToday('register') }),
+    ];
+    if (placeId === 'poorbox') return [act(this.usedToday('poorbox') ? 'You gave today' : 'Give a penny to the poor box (£0.01)', () => {
+      s.money = Math.round((s.money - 0.01) * 100) / 100;
+      this.markUsed('poorbox');
+      this.warm('hale', 2);
+      sfx('coin');
+      this.hud.toast('It rattles alone at the bottom of the box. Father Hale notices, and pretends not to. Hale +2.', 3500);
+    }, { primary: true, disabled: s.money < 0.01 || this.usedToday('poorbox') })];
+    if (placeId === 'counter') {
+      const sunday = weekday(day) === 0 && h >= 11 && h < 13;
+      const hale = this.keepers.get('church');
+      return [
+        sunday
+          ? act(this.usedToday('service') ? 'You heard the service today' : 'Sit through the Sunday service (1 hour)', async () => {
+            this.markUsed('service');
+            this.clock.minutes += 60;
+            s.minutes = this.clock.minutes;
+            simulateNeeds(s.needs, 1, 'awake');
+            addNeed(s.needs, 'social', 18);
+            addNeed(s.needs, 'rest', 6);
+            this.warm('hale', 4);
+            for (const r of RESIDENTS) if (r.traits.includes('pious') && this.rel(r.id).met) this.warm(r.id, 2);
+            await this.dialogue.say({ speaker: 'Father Ambrose Hale', text: '"...and the sea gave up the dead which were in it." Hale reads it as if he means it, and the church is very quiet. Afterwards there is weak tea and gossip in the porch. (Social +18, Rest +6, Hale +4; the pious notice you came.)' });
+          }, { primary: true, disabled: this.usedToday('service') })
+          : act('Kneel at the rail a while (30 min)', () => {
+            this.clock.minutes += 30;
+            s.minutes = this.clock.minutes;
+            addNeed(s.needs, 'rest', 5);
+            addNeed(s.needs, 'health', 1);
+            this.hud.toast('Cold stone, candle smoke, the river through the walls. You feel steadier. Rest +5. (Services on Sundays, 11:00–13:00, after Hale\'s sermon at the market cross.)', 4000);
+          }, { primary: true }),
+        ...(hale?.visible ? [act('Talk to Father Hale', () => this.approach(hale))] : []),
+      ];
+    }
+    return [];
+  }
+
+  // --- Pembleton on the talents Saltwharf has no work for ------------------------
+
+  private async talentsTalk(): Promise<void> {
+    const s = this.state!;
+    const sk = s.character.skills;
+    const best = (['study', 'arts', 'occult', 'cunning'] as const).filter((k) => sk[k] >= 2);
+    const where: Record<string, string> = {
+      study: 'Inkwell Row\'s presses and archives pay clerks and copyists, and the Society\'s library pays readers.',
+      arts: 'Lantern Market has a theatre, print shops and a music hall that pay for clever hands.',
+      occult: 'The Society for Psychical Inquiry pays for second sight, and Mayfield\'s drawing rooms pay better still, for séances.',
+      cunning: 'Hollow Lane pays for quick fingers and quiet feet. Not honestly, but promptly.',
+    };
+    await this.dialogue.say(
+      { speaker: P, text: '"Saltwharf wants two things of a person: a strong back for the docks, or a quick tongue for the Copper Cup. That is all this street has ever paid for."' },
+      { speaker: P, text: best.length
+        ? `"Do not let that make you think your other gifts are wasted. ${best.map((k) => where[k]).join(' ')} When the fog lets you out of this district, they will be worth more than any crate."`
+        : '"Study, craft and the second sight have no wages here. Elsewhere in London they do: the presses of Inkwell Row, the theatres of Lantern Market, the Society. Practise them anyway."' },
+      { speaker: P, text: '"Until then: work the docks or the Cup to keep the rent paid, and keep reading, drawing and listening to the dead in the evenings. Hester did. It kept her alive, and then it did not, but that was not the reading\'s fault."' },
+    );
+  }
+
+  // --- Relationship rings: who's a friend, at a glance --------------------------
+
+  private relOn = false;
+  private ringTimer = 0;
+  private readonly rings = new Map<Npc, THREE.Mesh>();
+  private ringGeo: THREE.PlaneGeometry | null = null;
+  private ringTex: THREE.Texture | null = null;
+
+  /** Green for friends (deep green for the closest), yellow for acquaintances, red for rivals, grey for strangers. */
+  private relColor(id: string): { color: number; strong: number } {
+    const r = this.state?.relations[id];
+    if (!r?.met) return { color: 0x9a9a9a, strong: 0.28 };
+    const score = Math.max(-60, Math.min(90, r.friendship + r.romance * 0.5 - r.rivalry * 1.2));
+    const c = new THREE.Color();
+    const t = (score + 60) / 150;
+    c.setHSL(0.02 + t * 0.32, 0.78, score > 40 ? 0.5 - ((score - 40) / 50) * 0.2 : 0.52);
+    return { color: c.getHex(), strong: 1 };
+  }
+
+  private updateRings(): void {
+    const all = [...this.npcs, ...this.patrons, ...this.keepers.values()];
+    if (!this.relOn) {
+      for (const m of this.rings.values()) m.visible = false;
+      return;
+    }
+    if (!this.ringGeo) {
+      this.ringGeo = new THREE.PlaneGeometry(1.5, 1.5);
+      this.ringGeo.rotateX(-Math.PI / 2);
+      const cv = document.createElement('canvas');
+      cv.width = cv.height = 128;
+      const g = cv.getContext('2d')!;
+      const grad = g.createRadialGradient(64, 64, 10, 64, 64, 64);
+      grad.addColorStop(0, 'rgba(255,255,255,0)');
+      grad.addColorStop(0.3, 'rgba(255,255,255,0.45)');
+      grad.addColorStop(0.44, 'rgba(255,255,255,1)');
+      grad.addColorStop(0.64, 'rgba(255,255,255,1)');
+      grad.addColorStop(0.8, 'rgba(255,255,255,0.35)');
+      grad.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = grad;
+      g.fillRect(0, 0, 128, 128);
+      this.ringTex = new THREE.CanvasTexture(cv);
+    }
+    for (const n of all) {
+      let m = this.rings.get(n);
+      if (!m) {
+        m = new THREE.Mesh(this.ringGeo, new THREE.MeshBasicMaterial({ map: this.ringTex, transparent: true, depthWrite: false, toneMapped: false, fog: false }));
+        m.position.y = 0.04;
+        m.renderOrder = 2;
+        n.walker.rig.root.add(m);
+        this.rings.set(n, m);
+      }
+      const { color, strong } = this.relColor(n.res.id);
+      (m.material as THREE.MeshBasicMaterial).color.setHex(color);
+      (m.material as THREE.MeshBasicMaterial).opacity = Math.min(1, strong);
+      m.visible = true;
+    }
+  }
+
+  // --- Where you live ---------------------------------------------------------
+
+  private residence(): HomeId {
+    return this.state?.residence ?? 'hester';
+  }
+
+  /** Down from your room: to the street, or to the Cup's taproom. */
+  private leaveHome(): void {
+    const b = HOMES_TO_LET[this.residence()].building;
+    const go = () => void (b === 'coppercup' ? this.goTo('int:coppercup', 'stairs') : this.goTo('saltwharf', b));
+    const place = this.location.places.find((p) => p.id === 'door');
+    this.hud.hidePlace();
+    if (place && this.player && this.player.walkTo(place.door, go)) this.showMarker(place.door.x + 0.5, place.door.z + 0.5);
+    else go();
+  }
+
+  /** Renting somewhere else: what the landlord offers, and the move. */
+  private moveActions(to: HomeId, act: (label: string, fn: () => void | Promise<void>, opts?: Partial<Action>) => Action): Action[] {
+    const s = this.state!;
+    if (this.residence() === to) return [];
+    const h = HOMES_TO_LET[to];
+    const owed = s.rent.arrears > 0 || s.rent.graceUntil !== null;
+    return [act(`${to === 'hester' ? 'Move back into Hester\'s room' : `Rent ${h.name.replace(/^A /, 'a ').replace(/^Rooms/, 'the rooms')}`} · £${h.rent.toFixed(2)} a month`, () => this.moveTo(to), { disabled: owed })];
+  }
+
+  private async moveTo(to: HomeId): Promise<void> {
+    const s = this.state!;
+    const h = HOMES_TO_LET[to];
+    const landlord = to === 'cup' ? 'Bessa Hartigan' : 'Mr. Grubb';
+    const c = await this.dialogue.ask({ speaker: landlord, text: `${to === 'cup' ? '"Two rooms, knocked through, warm from the taproom. Noisy till midnight. A pound a month, and no bringing the fog in on your boots."' : to === 'court' ? '"Third floor back. Damp, but it\'s dry damp. Forty pence a month, and I collect on the last day, same as everywhere."' : '"The clerk left in a hurry. Something about a cold spot on the stairs." Grubb sniffs. "Sixty pence, as before."'}
+${h.blurb}` }, ['Take it', 'Not yet']);
+    if (c !== 0) return;
+    s.residence = to;
+    s.rent.amount = h.rent;
+    this.rebuildHome();
+    sfx('page');
+    await this.dialogue.say({ speaker: P, text: to === 'hester' ? '"Home again. I kept your side of the bed warm. Figuratively."' : '"You thought you could leave me? I am bound to Hester\'s trunk, not to the building, as it turns out. Where it goes, I go. Mind the stairs with it."' });
+    this.hud.toast(`${h.name} is yours from today. Rent: £${h.rent.toFixed(2)} on the last day of each month. Your furniture came with you.`, 5000);
+    await this.goTo('hesterRoom', 'door');
+    this.save();
+  }
+
+  /** Builds your home for wherever you live now, and puts your furniture in it. */
+  private rebuildHome(): void {
+    const old = this.locations.hesterRoom;
+    const spec = HOMES_TO_LET[this.residence()];
+    if (old.name === spec.name && this.homeBuilt) return;
+    this.homeBuilt = true;
+    const room = buildHesterRoom(spec);
+    // Move the way-out icon into the new room.
+    for (const d of this.doorIcons) if (d.loc === 'hesterRoom') { d.sprite.removeFromParent(); room.scene.add(d.sprite); }
+    this.locations.hesterRoom = room;
+    this.applyFurniture();
+  }
+
+  private homeBuilt = false;
+
   /** Walk to the road out toward another district (leaving whatever building you are in). */
   private walkToExit(id: string): void {
     const place = this.locations.saltwharf.places.find((p) => p.id === `exit:${id}`);
     if (!place) return;
     if (this.location.id === 'saltwharf') return this.goToPlace(place);
-    const from = this.location.id === 'hesterRoom' ? 'hester' : this.location.id.slice(4);
+    const from = this.location.id === 'hesterRoom' ? HOMES_TO_LET[this.residence()].building : this.location.id.slice(4);
     void this.goTo('saltwharf', from).then(() => this.goToPlace(place));
   }
 
@@ -704,7 +929,14 @@ export class Game {
     if (this.location.id.startsWith('int:')) {
       const bid = this.location.id.slice(4);
       if (place.id === 'exit') return [act('Go out to the street', () => this.goTo('saltwharf', bid), { primary: true })];
-      if (place.id === 'stairs') return [act('Up to your room', () => s.housed ? this.goTo('hesterRoom', 'door') : this.hud.toast('Grubb has changed the lock on your door.'), { primary: true })];
+      if (place.id === 'stairs') {
+        const mine = HOMES_TO_LET[this.residence()].building === bid;
+        if (mine) return [act('Up to your room', () => s.housed ? this.goTo('hesterRoom', 'door') : this.hud.toast('Grubb has changed the lock on your door.'), { primary: true })];
+        return bid === 'hester'
+          ? [act('Hester\'s room is let to a Vane Company clerk now', () => undefined, { disabled: true }), ...this.moveActions('hester', act)]
+          : this.moveActions('cup', act);
+      }
+      if (bid === 'church') return this.churchActions(place.id, act);
       if (place.id === 'counter') {
         const keeper = this.keepers.get(bid);
         const acts = this.streetActions(bid, act).filter((a) => !a.label.startsWith('Go up'));
@@ -715,6 +947,7 @@ export class Game {
     if (this.location.id === 'saltwharf') {
       if (place.id === 'tenements' || place.id.startsWith('house:')) return [];
       if (place.id.startsWith('exit:')) {
+        this.tip('roads', 'This road leads out of Saltwharf. The other districts open in later chapters; until then the fog turns you back.');
         const ex = EXITS.find((e) => `exit:${e.id}` === place.id)!;
         const dest = LONDON_NAMES[ex.to] ?? 'the city';
         return [
@@ -724,13 +957,14 @@ export class Game {
         ];
       }
       if (place.id.startsWith('scav:')) {
+        this.tip('scav', 'Heaps, buckets and the foreshore can each be searched once a day. Lizzie at Rag & Bone pays best for what you find.');
         const sp = SPOTS.find((x) => `scav:${x.id}` === place.id)!;
         const low = sp.kind !== 'foreshore' || this.lowTide();
         if (this.usedToday(place.id)) return [act('Picked clean. Come back tomorrow.', () => undefined, { disabled: true })];
         if (!low) return [act('The tide is in. The mud shows from 05:00 to 10:00 and 16:00 to 21:00.', () => undefined, { disabled: true })];
         return [act(sp.kind === 'foreshore' ? 'Go down and mudlark (30 min)' : 'Rummage through it (15 min)', () => this.scavenge(sp.id), { primary: true })];
       }
-      if (place.id === 'church') return [...this.missionPlaceActions('church', act), act('Father Hale is usually at the market cross in the mornings', () => undefined, { disabled: true })];
+      if (place.id === 'church') return [act('The doors are locked for the night. St. Botolph\'s opens at 07:00', () => undefined, { disabled: true })];
       if (place.id === 'pump') return [...this.missionPlaceActions('pump', act), act('Work the handle and drink (no thank you)', () => undefined, { disabled: true })];
       const inside = INTERIORS.find((d) => d.id === place.id);
       const closed = inside && !isOpen(inside, this.clock.hour) ? [act(`Closed. Opens at ${String(inside.open[0]).padStart(2, '0')}:00`, () => undefined, { disabled: true })] : [];
@@ -749,13 +983,16 @@ export class Game {
       switch (id) {
         case 'hester':
           return [
-            s.housed
-              ? act('Go up to your room', () => this.goTo('hesterRoom', 'door'), { primary: true })
-              : act(`Locked out. Pay Grubb £${s.rent.arrears.toFixed(2)}`, () => this.reclaimRoom(), { primary: true, disabled: s.money < s.rent.arrears }),
+            ...(this.residence() !== 'hester' ? this.moveActions('hester', act) : s.housed
+              ? [act('Go up to your room', () => this.goTo('hesterRoom', 'door'), { primary: true })]
+              : [act(`Locked out. Pay Grubb £${s.rent.arrears.toFixed(2)}`, () => this.reclaimRoom(), { primary: true, disabled: s.money < s.rent.arrears })]),
             act("Browse Pell's Chandlery", () => this.openShop('hester')),
           ];
         case 'tenements':
-          return [act('Sleep rough in the archway', () => this.sleep('rough'), { primary: !s.housed })];
+          return [
+            ...(this.residence() === 'court' ? (s.housed ? [act('Go up to your room', () => this.goTo('hesterRoom', 'door'), { primary: true })] : [act(`Locked out. Pay Grubb £${s.rent.arrears.toFixed(2)}`, () => this.reclaimRoom(), { primary: true, disabled: s.money < s.rent.arrears })]) : this.moveActions('court', act)),
+            act('Sleep rough in the archway', () => this.sleep('rough'), { primary: !s.housed }),
+          ];
         case 'dockoffice': {
           const day = dayIndex(s.minutes);
           const st = s.strike;
@@ -858,12 +1095,12 @@ export class Game {
       case 'door': {
         const unread = s.letters.filter((l) => !l.read).length;
         return [
-          act('Go down to Quay Street', () => this.goTo('saltwharf', 'hester'), { primary: true }),
+          act(this.residence() === 'cup' ? 'Go down to the taproom' : this.residence() === 'court' ? 'Go down to Gull Court' : 'Go down to Quay Street', () => this.leaveHome(), { primary: true }),
           act(unread ? `Read letters (${unread} new)` : 'Letters', () => this.openLetters(), { primary: unread > 0 }),
         ];
       }
       case 'pembleton':
-        return [act('Talk', () => this.chatPembleton(), { primary: true })];
+        return [act('Talk', () => this.chatPembleton(), { primary: true }), act('Ask about work for your other talents', () => this.talentsTalk())];
       default:
         return [];
     }
@@ -1209,6 +1446,7 @@ export class Game {
     const yes = await this.dialogue.ask({ speaker: B, text: job.lines.offer }, opts);
     if (yes === opts.length - 1) return;
     hire(s, jobId);
+    this.tip('work', 'Your hours, pay and what the next promotion needs are in the journal, under Work.');
     if (recOk && yes === 0) {
       const e = employment(s, jobId)!;
       e.rank = 1;
@@ -1484,6 +1722,8 @@ export class Game {
     const roll = (Math.sin((day + 3) * 4.17 + r.id.length * 9.3 + r.id.charCodeAt(0) * 0.7) + 1) / 2;
     if (st && st.act === 'drink' && st.x >= 15 && st.x <= 22 && st.z <= 9 && roll < 0.65) return { ...st, inside: 'coppercup', x: 18, z: 8 };
     if (st && st.act === 'read' && st.x <= 2 && st.z >= 10 && st.z <= 14) return { ...st, inside: 'church', x: 5, z: 34 };
+    // Sunday morning: the pious, and about a third of the rest, go to the service.
+    if (weekday(day) === 0 && hour >= 11 && hour < 13 && r.id !== 'hale' && r.id !== 'silas' && (r.traits.includes('pious') || roll < 0.33) && (s.life.sick[r.id] ?? -1) < day) return { from: 11, to: 13, x: 5, z: 34, act: 'read', inside: 'church' };
     return st;
   }
 
@@ -3160,18 +3400,25 @@ export class Game {
 
   /** Seat whoever is drinking in the Cup right now. */
   private syncPatrons(): void {
-    const loc = this.locations['int:coppercup'];
+    const bid = this.location.id.slice(4);
+    const loc = this.locations[`int:${bid}`];
     const h = Math.floor(this.clock.hour);
-    const want = RESIDENTS.filter((r) => this.stopFor(r, h)?.inside === 'coppercup').slice(0, 6);
+    const want = RESIDENTS.filter((r) => this.stopFor(r, h)?.inside === bid).slice(0, 6);
     const ids = want.map((r) => r.id).join();
     if (ids === this.patrons.map((p) => p.res.id).join()) return;
-    for (const p of this.patrons) p.walker.rig.root.removeFromParent();
-    const seats = [{ x: 0, z: 1 }, { x: 2, z: 1 }, { x: 3, z: 1 }, { x: 5, z: 1 }, { x: 6, z: 1 }, { x: 8, z: 2 }];
+    for (const p of this.patrons) {
+      p.walker.rig.root.removeFromParent();
+      this.rings.delete(p);
+    }
+    const church = bid === 'church';
+    const seats = church
+      ? [{ x: 2, z: 1 }, { x: 3, z: 1 }, { x: 5, z: 1 }, { x: 6, z: 1 }, { x: 2, z: 3 }, { x: 6, z: 3 }]
+      : [{ x: 0, z: 1 }, { x: 2, z: 1 }, { x: 3, z: 1 }, { x: 5, z: 1 }, { x: 6, z: 1 }, { x: 7, z: 2 }];
     this.patrons = want.map((r, i) => {
       const at = seats[i];
-      const n = new Npc({ ...r, home: at, schedule: [{ from: 0, to: 24, x: at.x, z: at.z, act: 'drink' }] }, loc.grid);
+      const n = new Npc({ ...r, home: at, schedule: [{ from: 0, to: 24, x: at.x, z: at.z, act: church ? 'read' : 'drink' }] }, loc.grid);
       n.follow(n.res.schedule[0], false);
-      n.walker.faceToward({ x: Math.floor(at.x / 3) * 3 + 1.5, z: 1.6 }, true);
+      n.walker.faceToward(church ? { x: at.x + 0.5, z: 6 } : { x: Math.floor(at.x / 3) * 3 + 1.5, z: 1.6 }, true);
       loc.scene.add(n.walker.rig.root);
       return n;
     });
@@ -3179,7 +3426,7 @@ export class Game {
 
   /** Who of your family is home right now; who is behind the counter. */
   private updateHome(dt: number): void {
-    if (this.location.id === 'int:coppercup' && this.state) {
+    if ((this.location.id === 'int:coppercup' || this.location.id === 'int:church') && this.state) {
       this.patronTimer -= dt;
       if (this.patronTimer <= 0) {
         this.patronTimer = 3;
@@ -3542,6 +3789,7 @@ export class Game {
     const askExtra = perks.filter((a) => !romanceExtra.includes(a) && !businessExtra.includes(a));
     const seesAll = r.friendship >= 30 && (p.id === 'mag' || p.id === 'ruby' || !AUTHORED[p.id]);
     const story = this.missionActions(npc).map((a) => ({ ...asPie(a), icon: 'favour' as const }));
+    if (story.length) this.tip('story', 'Gold bubbles are story steps. The journal\'s Quests page lists every step and the ways through it.');
     const ask = [...this.factionActions(npc), ...this.recommendActions(npc), ...this.lessonActions(npc), ...this.parishActions(npc), ...askExtra].map(asPie);
     if (seesAll) ask.unshift({ label: 'Where is everyone?', sub: 'they know', onClick: () => { this.hud.hidePlace(); this.whereIs(npc); } });
     const favours = this.favourActions(npc).map((a) => ({ ...asPie(a), icon: 'favour' as const, primary: !a.disabled }));
@@ -4638,6 +4886,13 @@ export class Game {
     const room = this.locations.hesterRoom;
     if (!s || !room.furnish) return;
     s.home ??= defaultLayout(s.owned);
+    // Anything that no longer fits (a smaller room) finds a new spot, or goes into storage.
+    for (const it of s.home.items) {
+      if (it.stored || this.canPlace(it.type, it.x, it.z, it.rot, it.uid)) continue;
+      const spot = this.freeSpot(it.type, it.rot, it.uid);
+      if (spot) Object.assign(it, spot);
+      else it.stored = true;
+    }
     for (const id of s.owned) {
       const type = id as FurnitureType;
       if (!FURNITURE[type] || s.home.items.some((i) => i.type === type)) continue;
@@ -4660,6 +4915,7 @@ export class Game {
 
   private startDecor(): void {
     if (this.location.id !== 'hesterRoom' || this.busy) return;
+    this.tip('decor', 'Tap a piece to move, turn, recolour, store or sell it. With nothing picked, change the walls and the floor.');
     this.hud.hidePlace();
     this.player!.stop();
     this.decor = { sel: null, moving: false };
@@ -4799,8 +5055,9 @@ export class Game {
   private canPlace(type: FurnitureType, x: number, z: number, rot: number, uid: number): boolean {
     const s = this.state!;
     const def = FURNITURE[type];
-    const W = 7;
-    const D = 5;
+    const spec = HOMES_TO_LET[this.residence()];
+    const W = spec.w;
+    const D = spec.d;
     const others = s.home!.items.filter((i) => !i.stored && i.uid !== uid);
     if (def.kind === 'wall') {
       if (x < 0 || x + def.w > W) return false;
@@ -4811,12 +5068,13 @@ export class Game {
     if (def.kind === 'rug') return true;
     const taken = new Set(others.filter((o) => FURNITURE[o.type].kind === 'floor').flatMap((o) => footprint(o.type, o.x, o.z, o.rot).map((t) => `${t.x},${t.z}`)));
     // Keep the doorway, Pembleton's corner and the way to the door clear.
-    for (const k of ['0,1', '1,1', '5,2']) taken.add(k);
+    for (const k of ['0,1', '1,1', `${spec.ghost.x},${spec.ghost.z}`, `${spec.ghost.x - 1},${spec.ghost.z}`]) taken.add(k);
     return !tiles.some((t) => taken.has(`${t.x},${t.z}`));
   }
 
   private freeSpot(type: FurnitureType, rot: number, uid: number): { x: number; z: number; rot: number } | null {
-    for (const r of [rot, (rot + 1) % 4]) for (let z = 4; z >= 0; z--) for (let x = 0; x < 7; x++) if (this.canPlace(type, x, z, r, uid)) return { x, z, rot: r };
+    const spec = HOMES_TO_LET[this.residence()];
+    for (const r of [rot, (rot + 1) % 4]) for (let z = spec.d - 1; z >= 0; z--) for (let x = 0; x < spec.w; x++) if (this.canPlace(type, x, z, r, uid)) return { x, z, rot: r };
     return null;
   }
 
@@ -5309,6 +5567,7 @@ export class Game {
       { speaker: P, text: 'Mind yourself. Hunger, Rest, Social, Health. Neglect them and the city will finish what poverty starts.' },
       { speaker: P, text: 'Hester kept bread in the larder. Stale, but bread. After that, the market sells hot potatoes for a couple of pennies.' },
       { speaker: P, text: 'You need work. The Dock Hiring Office wants strong backs, and Bessa at the Copper Cup is always short of hands. Go and ask.' },
+      { speaker: P, text: 'Saltwharf pays for a strong back or a quick tongue, and nothing else. If your gifts are books, craft or the dead, do not despair, and do not neglect them: London has other streets, and they will pay for those.' },
       { speaker: P, text: 'And come home before the lamps are lit. Saltwharf after dark is no place for the inexperienced.' },
     );
     s.tutorial.step = 'explore';
@@ -5605,10 +5864,17 @@ export class Game {
     if (!paused && this.location.id === 'hesterRoom') addNeed(s.needs, 'social', (this.comfort() * 0.6 * dt) / 60 * this.clock.speed);
     this.location.update(this.clock.hour, this.elapsed);
     for (const d of this.doorIcons) {
+      if (d.loc === 'saltwharf' && d.to[0] === 'hesterRoom') d.sprite.visible = HOMES_TO_LET[this.residence()].building === d.place;
       d.sprite.position.y = d.y + Math.sin(this.elapsed * 2.4) * 0.07;
       d.sprite.scale.setScalar(0.62 + Math.sin(this.elapsed * 4.8) * 0.03);
     }
     this.rig.update(dt, player.position.x, player.position.y + this.location.camera.offsetZ);
+    this.location.focus?.(player.position.x, player.position.y);
+    this.ringTimer -= dt;
+    if (this.ringTimer <= 0) {
+      this.ringTimer = 0.4;
+      this.updateRings();
+    }
 
     if (this.location.fadeOccluders) {
       this.occlusionTimer -= dt;

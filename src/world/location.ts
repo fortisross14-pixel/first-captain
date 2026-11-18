@@ -40,6 +40,8 @@ export interface Location {
   lamps?: { x: number; z: number }[];
   /** Optional objects shown only once owned (furniture), with the tiles they block. */
   extras?: Record<string, { obj: THREE.Object3D; tiles: { x: number; z: number }[] }>;
+  /** Street lights follow the camera (a pool of real lights over many lamps). */
+  focus?: (x: number, z: number) => void;
   update(hour: number, t: number): void;
   /** Hester's room: rebuild the furniture from a layout; find a placed piece's object. */
   furnish?: (layout: import('./furniture').HomeLayout, cat: boolean) => void;

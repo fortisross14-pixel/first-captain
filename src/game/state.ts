@@ -147,6 +147,10 @@ export interface GameState {
   parish: Parish;
   /** A dock strike, if one is on: the day it started and which side you took. */
   strike: { day: number; until: number; side: '' | 'picket' | 'scab'; won?: boolean } | null;
+  /** Where you live: Hester's room, Gull Court or over the Copper Cup. */
+  residence?: 'hester' | 'court' | 'cup';
+  /** Tips already shown, by key. */
+  tips?: Record<string, boolean>;
   /** Act I chapters and side stories, by mission id. */
   missions: Record<string, MissionState>;
   /** Permanent raise at the docks after a strike won. */

@@ -116,6 +116,8 @@ export class Hud {
         <div class="floaters" aria-hidden="true"></div>
         <div class="celebrate" aria-live="polite"></div>
         <div class="bubbles"></div>
+        <button class="rel-btn" hidden aria-pressed="false" aria-label="Show how you stand with people"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 19c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M16 4.5a3 3 0 0 1 0 6M18 13c2 .8 3 3 3 6"/><ellipse cx="9" cy="21" rx="6" ry="1.2" stroke-dasharray="2 2"/></svg><span>Friends</span></button>
+        <div class="rel-legend" hidden><i style="background:#1d7a34"></i>Close<i style="background:#7ac24a"></i>Friendly<i style="background:#d8b84a"></i>Known<i style="background:#c8402e"></i>Rival<i style="background:#8a8a8a"></i>Stranger</div>
         <button class="decor-btn" hidden aria-label="Decor"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4l10-10-4-4L4 16z"/><path d="M13 7l4 4"/></svg><span>Decor</span></button>
         <div class="decor-bar" hidden><div class="decor-title"></div><div class="decor-acts"></div></div>
         <div class="swatch-pop" hidden><div class="swatch-sheet"><h3></h3><div class="swatch-opts"></div></div></div>
@@ -214,6 +216,13 @@ export class Hud {
     });
     this.q('.list-close').addEventListener('click', () => this.closeList());
     this.q('.decor-btn').addEventListener('click', () => this.onDecor?.());
+    this.q('.rel-btn').addEventListener('click', () => {
+      const b = this.q('.rel-btn');
+      const on = b.getAttribute('aria-pressed') !== 'true';
+      b.setAttribute('aria-pressed', String(on));
+      this.q('.rel-legend').hidden = !on;
+      this.onRelations?.(on);
+    });
     const mapBtn = this.q('.map-btn');
     mapBtn.addEventListener('click', () => {
       play(mapBtn, 'flip', 800);
@@ -295,6 +304,17 @@ export class Hud {
   onBag: (() => void) | null = null;
   onDecor: (() => void) | null = null;
 
+  onRelations: ((on: boolean) => void) | null = null;
+
+  set relButton(v: boolean) {
+    this.q('.rel-btn').hidden = !v;
+    this.q('.rel-legend').hidden = !v || this.q('.rel-btn').getAttribute('aria-pressed') !== 'true';
+  }
+
+  set relPressed(on: boolean) {
+    this.q('.rel-btn').setAttribute('aria-pressed', String(on));
+  }
+
   set decorButton(v: boolean) {
     this.q('.decor-btn').hidden = !v;
   }
@@ -343,7 +363,7 @@ export class Hud {
     const body = m.querySelector('.map-body') as HTMLElement;
     body.innerHTML = svg;
     const card = m.querySelector('.map-card') as HTMLElement;
-    card.innerHTML = view === 'london' ? '<b>London, 1871</b><span>Tap a district.</span>' : '<b>Saltwharf Docks</b><span>Tap a building to walk there.</span>';
+    card.innerHTML = view === 'london' ? '<b>London, 1871</b><span>Tap a district.</span>' : '<b>Saltwharf Docks</b><span>Tap a building to walk there. Dots are people you know: green for friends, red for rivals.</span>';
     body.querySelectorAll<SVGElement>('[data-id]').forEach((el) => el.addEventListener('click', () => {
       const info = onPick(el.dataset.id!);
       if (!info) return;

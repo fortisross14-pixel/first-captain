@@ -935,3 +935,44 @@ button:disabled { cursor: default; }
 .journal-sheet.diary .rung.past { color: #a89c84; }
 .is-letter .pg-scene { display: none; }
 .is-letter .pg-text { max-height: 72vh; font-size: clamp(17px, 4.6vw, 22px); line-height: 1.3; }
+
+/* --- Slimmer HUD on portrait phones: under 15% of the screen ------------------ */
+@media (orientation: portrait) {
+  .topbar { padding: 4px 12px 5px; }
+  .tb-time .time, .tb-purse .money { font-size: 20px; }
+  .tb-time .date, .tb-purse .rent { font-size: 13.5px; margin-top: 1px; }
+  .topbar .tok.watch { position: relative; }
+  .topbar .tok.watch .hex { width: 36px; height: 32px; }
+  .topbar .tok.watch .hexin { width: 31px; height: 27px; }
+  .topbar .tok.watch .hexin svg { width: 26px; height: 26px; }
+  .topbar .tok.watch .lab { position: absolute; right: -9px; bottom: -3px; margin: 0; padding: 1px 4px; border-radius: 7px; font: 600 12px/1 var(--f-body); color: #0e1a36; background: var(--gilt-hi); text-shadow: none; }
+  .goals { top: calc(max(6px, env(safe-area-inset-top)) + 52px); max-width: min(64%, 250px); min-height: 44px; padding: 3px 12px; font-size: 14px; }
+  .goals[aria-expanded="true"] { max-width: calc(100% - 28px); }
+  .tok { min-height: 50px; min-width: 52px; gap: 2px; }
+  .tok .hex { width: 42px; height: 37px; }
+  .tok .hexin { width: 36px; height: 32px; }
+  .tok .hexin svg { width: 21px; height: 21px; }
+  .tok .lab { font-size: 13px; }
+  .goals .goals-rest { font-size: 14px; }
+}
+@media (orientation: portrait) {
+  .topbar .tok.watch { min-width: 44px; min-height: 44px; place-content: center; }
+  .topbar .tok.watch .lab { font-size: 13px; }
+}
+@media (orientation: portrait) {
+  .topbar { padding: 2px 12px 3px; }
+  .goals { top: calc(max(6px, env(safe-area-inset-top)) + 48px); max-width: min(58%, 220px); }
+  .tok { min-height: 48px; min-width: 48px; }
+  .tok .hex { width: 40px; height: 35px; }
+  .tok .hexin { width: 34px; height: 30px; }
+}
+
+/* Friends toggle: rings under people, green for friends, red for rivals. */
+.rel-btn { position: absolute; right: max(12px, env(safe-area-inset-right)); bottom: calc(max(10px, env(safe-area-inset-bottom)) + 84px); display: flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 12px; border-radius: 22px;
+  font: 400 15px var(--f-display); color: var(--gilt-hi); background: linear-gradient(180deg, #1f3263, #0e1a36); box-shadow: inset 0 0 0 1px var(--gilt), 0 4px 10px rgba(0, 0, 0, .5); z-index: 5; }
+.rel-btn[aria-pressed="true"] { color: #0e1a36; background: radial-gradient(ellipse at 40% 20%, #fbecbd, #d9b862 45%, #a07a32 100%); }
+.rel-legend { position: absolute; right: max(12px, env(safe-area-inset-right)); bottom: calc(max(10px, env(safe-area-inset-bottom)) + 134px); padding: 5px 9px; border-radius: 3px; font: 13px var(--f-body); color: var(--ivory); background: rgba(8, 14, 30, .82); box-shadow: inset 0 0 0 1px rgba(201, 162, 74, .5); z-index: 5; pointer-events: none; }
+.rel-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin: 0 4px 0 8px; vertical-align: -1px; }
+.rel-legend i:first-child { margin-left: 0; }
+@media (orientation: landscape) and (max-height: 600px) { .rel-btn { right: calc(108px + env(safe-area-inset-right)); bottom: 12px; } .rel-legend { right: calc(108px + env(safe-area-inset-right)); bottom: 62px; } }
+.mp-folk text { font: italic 9px var(--f-body); fill: #efe6d2; text-anchor: middle; paint-order: stroke; stroke: #0b0d10; stroke-width: 2.5px; }

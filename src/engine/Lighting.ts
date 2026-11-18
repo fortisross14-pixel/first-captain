@@ -33,13 +33,32 @@ export class Lighting {
     scene.fog = this.fog;
     scene.background = this.sky;
 
-    // Point lights are costly on phones: only a handful of lamps cast real light, the rest just glow.
-    lamps.forEach((l, i) => {
-      if (!l.vane && i % 2 === 1) return;
-      const light = new THREE.PointLight(l.vane ? 0xd8ecff : 0xffa850, 0, 10, 1.4);
-      light.position.copy(l.position);
+    // Point lights are costly on phones: a pool of six follows the camera, lighting the nearest lamps.
+    // The rest still glow.
+    this.lamps = lamps.map((l, i) => ({ position: l.position.clone(), vane: l.vane, seed: i * 1.7 }));
+    for (let i = 0; i < Math.min(Lighting.POOL, lamps.length); i++) {
+      const light = new THREE.PointLight(0xffa850, 0, 10, 1.4);
       scene.add(light);
-      this.lampLights.push({ light, vane: l.vane, seed: i * 1.7 });
+      this.lampLights.push({ light, vane: false, seed: i });
+    }
+    this.focus(center.x, center.z);
+  }
+
+  static readonly POOL = 6;
+  private readonly lamps: { position: THREE.Vector3; vane: boolean; seed: number }[];
+  private focusAt = { x: Infinity, z: Infinity };
+
+  /** Move the pool of lights to the lamps nearest (x, z). Cheap; only re-sorts after a few steps. */
+  focus(x: number, z: number): void {
+    if (Math.hypot(x - this.focusAt.x, z - this.focusAt.z) < 1.5) return;
+    this.focusAt = { x, z };
+    const near = [...this.lamps].sort((a, b) => Math.hypot(a.position.x - x, a.position.z - z) - Math.hypot(b.position.x - x, b.position.z - z));
+    this.lampLights.forEach((l, i) => {
+      const lamp = near[i];
+      l.light.position.copy(lamp.position);
+      l.light.color.setHex(lamp.vane ? 0xd8ecff : 0xffa850);
+      l.vane = lamp.vane;
+      l.seed = lamp.seed;
     });
   }
 
