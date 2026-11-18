@@ -21,7 +21,7 @@ function box(w: number, h: number, d: number, color: number | THREE.Material, x:
 export function makeGhost(): THREE.Group {
   const rig = createCharacter({
     skin: 0xffffff, hair: 0xffffff, coat: 0xffffff, trousers: 0xffffff, shirt: 0xffffff, boots: 0xffffff,
-    scarf: 0xffffff, hat: 'top', build: 0.95,
+    scarf: 0xffffff, hat: 'top', build: 0.95, hairStyle: 'wig',
   });
   const ghostMat = new THREE.MeshStandardMaterial({
     color: 0xaecbe0, emissive: 0x5d86a8, emissiveIntensity: 0.9, transparent: true, opacity: 0.55,

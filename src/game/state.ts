@@ -107,6 +107,8 @@ export interface GameState {
   /** Today's weather, chosen overnight; tomorrow's for the Gazette's forecast. */
   weather: Weather;
   tomorrow: Weather;
+  /** What you wear in each slot besides clothes: item ids. */
+  equip: Partial<Record<'hat' | 'cloak' | 'neck' | 'wrist' | 'weapon', string>>;
   /** Condition of each outfit, 0–100. */
   wear: Record<Outfit, number>;
   /** Standing in the parish: the Vestry ladder. */
@@ -139,6 +141,7 @@ function upgrade(s: GameState): GameState {
 /** Defaults for the fields added for a living Saltwharf. */
 function fillLives(s: GameState): void {
   s.quests ??= [];
+  s.equip ??= {};
   s.weather ??= 'clear';
   s.tomorrow ??= 'clear';
   s.wear ??= { plain: 100, work: 100, sunday: 100, coat: 100 };

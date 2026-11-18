@@ -1,4 +1,4 @@
-import { ITEMS, removeItem } from '../game/items';
+import { ITEMS, gear, removeItem } from '../game/items';
 import { sfx } from '../engine/sfx';
 import { addNeed } from '../game/needs';
 import type { GameState } from '../game/state';
@@ -118,7 +118,7 @@ export function runFight(root: HTMLElement, s: GameState, base: Enemy, intro: st
       if (a === 'attack') {
         xp.strength += 6;
         if (Math.random() < 0.72 + sk.strength * 0.012) {
-          const d = Math.round(rnd(4, 8) + sk.strength * 1.1);
+          const d = Math.round(rnd(4, 8) + sk.strength * 1.1 + gear(s).fight);
           enemy.hp -= d;
           enemy.morale -= 5;
           log(`You hit ${enemy.name}. −${d}.`, 'good');

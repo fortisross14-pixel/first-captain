@@ -174,6 +174,20 @@ The Animal Crossing feeling, darker: residents have their own lives and you walk
 - [x] **The darker layer**: Vane's men install a white lamp on the quay and want to put one on your stair; with Occult 3 you see the dead at night, and at Occult 6 they talk.
 - [x] Performance: creatures are merged into one or two meshes each; Quay Street by day is 118 draw calls (budget 250, was 91 before M9).
 
+## Visual pass 2 ✅ Gilt & Cameo, by night
+
+- [x] New style (see `docs/STYLE_GUIDE.md`): midnight-blue leather, gilt frames with flourished corners, ivory pages, IM Fell, Pinyon Script and EB Garamond, a hexagon dock.
+- [x] Dialogue with a cameo portrait of whoever speaks, rendered from their own 3D model; names in copperplate.
+- [x] Journal in three pages: Skills (levels, progress, next perk, mentor, needs), Missions (story, favours, goals, work, purse, standing, days ahead) and Options (sound, graphics, save, quit).
+- [x] Bag in three tabs. Equipment has slots for hat, cloak, clothes, necklace, wristband and weapon, with 14 new things to wear (caps, bowlers, top hats, bonnets, oilskin and wool cloaks, a mourning locket, a St. Christopher, a cuff, a bracelet, a blackthorn stick, a cudgel, a clasp knife and brass knuckles), each with real effects in fights, conversations, rain, robbery and the sight. Food and Other tabs; mission objects appear in Other.
+- [x] Exits are marked: a gilt door icon over the stairs in Hester's room, a house over her door in the street.
+- [x] Landscape and tablets: the dock moves to the right edge, dialogue and panels to the lower left, sheets open on the right; larger screens scale the interface up.
+- [x] Characters rebuilt with more detail: bigger heads with eyes, brows, nose, cheeks and mouth; hair styles (short, long, bun, curls, bald, Georgian wig); beards; collars and cravats, lapels, waistcoats, aprons, belts, pleated skirts, thumbs and soled boots; caps, bowlers, top hats and ribboned bonnets; cloaks, and weapons in hand. Still a few merged meshes each.
+
+## M10 (next) A city of lives
+
+Decided: a game year passes every 24 days (2 days a month); Saltwharf holds about 45–50 people and the rest of a 200–250 population lives in districts to come. Everyone gets a home, a workplace and a haunt (shown on their card once they tell you), ages, marries, has children and dies; friends invite you to weddings; relationships fade without contact; friends can recommend you for a job at rank 2.
+
 ## After the slice
 
 More districts, factions, the main story and the Fog Clock, businesses, marriage, children and aging.

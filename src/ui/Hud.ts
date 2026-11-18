@@ -1,4 +1,4 @@
-import { NEED_NAMES, SKILL_INFO, SKILLS, fullName, type GameState, type NeedId } from '../game/state';
+import { NEED_NAMES, fullName, type GameState, type NeedId } from '../game/state';
 import { sfx } from '../engine/sfx';
 import type { Place } from '../world/location';
 
@@ -19,6 +19,7 @@ const NEEDS: NeedId[] = ['hunger', 'rest', 'social', 'health'];
 
 /** Engraved emblems for the dock tokens. */
 const TOKEN = {
+  journal: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h6a2 2 0 0 1 2 2v13a2 2 0 0 0-2-2H4z"/><path d="M20 5h-6a2 2 0 0 0-2 2v13a2 2 0 0 1 2-2h6z"/></svg>',
   bag: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9h12l-1 11H7z"/><path d="M9 9V7a3 3 0 0 1 6 0v2"/><path d="M9.5 13h5"/></svg>',
   people: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3.5 19c.6-3.6 2.8-5.2 5.5-5.2s4.9 1.6 5.5 5.2"/><path d="M15.5 5.6a3 3 0 0 1 0 5.2M17.5 14.2c1.6.6 2.6 2.1 3 4.8"/></svg>',
   watch: '<svg viewBox="0 0 48 48" width="44" height="44"><circle cx="24" cy="26" r="19" class="w-case"/><circle cx="24" cy="26" r="15.5" class="w-face"/><rect x="21.5" y="2" width="5" height="4" rx="1.5" class="w-crown"/><g class="w-ticks">' +
@@ -57,20 +58,20 @@ export class Hud {
           <span class="goals-rest"></span>
         </button>
         <nav class="dock" aria-label="Menus">
-          <button class="tok diary journal-btn" aria-label="Open journal">
-            <span class="book" aria-hidden="true"><span class="page p1"></span><span class="page p2"></span><span class="cover"></span><span class="ribbon"></span></span>
+          <button class="tok journal-btn" aria-label="Open journal">
+            <span class="hex" aria-hidden="true"><span class="hexin">${TOKEN.journal}</span></span>
             <span class="lab">Journal</span>
           </button>
-          <button class="tok coin bag-btn" aria-label="Open bag">
-            <span class="coin3d" aria-hidden="true"><span class="face front">${TOKEN.bag}</span><span class="face back"><b class="bag-count"></b></span><span class="glint"></span></span>
+          <button class="tok bag-btn" aria-label="Open bag">
+            <span class="hex" aria-hidden="true"><span class="hexin">${TOKEN.bag}</span><b class="cnt bag-count"></b></span>
             <span class="lab">Bag</span>
           </button>
-          <button class="tok coin people-btn" aria-label="Open people">
-            <span class="coin3d" aria-hidden="true"><span class="face front">${TOKEN.people}</span><span class="face back"><b class="people-count"></b></span><span class="glint"></span></span>
+          <button class="tok people-btn" aria-label="Open people">
+            <span class="hex" aria-hidden="true"><span class="hexin">${TOKEN.people}</span><b class="cnt people-count"></b></span>
             <span class="lab">People</span>
           </button>
           <button class="tok watch speed" aria-label="Change time speed">
-            <span class="watch3d" aria-hidden="true">${TOKEN.watch}</span>
+            <span class="hex" aria-hidden="true"><span class="hexin">${TOKEN.watch}</span></span>
             <span class="lab speed-lab">1×</span>
           </button>
         </nav>
@@ -87,14 +88,20 @@ export class Hud {
           <div class="journal-sheet diary">
             <span class="ribbon" aria-hidden="true"></span>
             <h2></h2>
-            <div class="journal-body"></div>
-            <div class="actions settings">
-              <button class="sound-toggle"></button>
-              <button class="quality-toggle"></button>
+            <div class="tabs" role="tablist">
+              <button role="tab" data-page="skills" aria-selected="true">Skills</button>
+              <button role="tab" data-page="missions" aria-selected="false">Missions</button>
+              <button role="tab" data-page="options" aria-selected="false">Options</button>
+            </div>
+            <div class="journal-body page-skills"></div>
+            <div class="journal-body page-missions" hidden></div>
+            <div class="journal-body page-options" hidden>
+              <div class="opt"><span>Sound</span><button class="sound-toggle"></button></div>
+              <div class="opt"><span>Graphics</span><button class="quality-toggle"></button></div>
+              <div class="opt"><span>Save the game</span><button class="save">Save</button></div>
+              <div class="opt"><span>Leave Saltwharf for now</span><button class="quit">Save &amp; quit to title</button></div>
             </div>
             <div class="actions">
-              <button class="quit">Save &amp; quit to title</button>
-              <button class="save">Save</button>
               <button class="primary close-journal">Close</button>
             </div>
           </div>
@@ -103,6 +110,8 @@ export class Hud {
           <div class="journal-sheet gs ruled">
             <h2></h2>
             <p class="meta list-sub"></p>
+            <div class="tabs list-tabs" role="tablist" hidden></div>
+            <div class="list-top"></div>
             <div class="list-rows"></div>
             <div class="actions"><button class="primary list-close">Close</button></div>
           </div>
@@ -139,6 +148,7 @@ export class Hud {
       window.setTimeout(() => (this.journalOpen = true), 260);
     });
     this.q('.close-journal').addEventListener('click', () => (this.journalOpen = false));
+    this.el.querySelectorAll<HTMLButtonElement>('.journal-sheet.diary .tabs button').forEach((b) => b.addEventListener('click', () => this.journalPage(b.dataset.page!)));
     const bag = this.q('.bag-btn');
     bag.addEventListener('click', () => {
       play(bag, 'flip', 800);
@@ -209,6 +219,12 @@ export class Hud {
     });
   }
 
+  private journalPage(page: string): void {
+    sfx('page');
+    this.el.querySelectorAll<HTMLButtonElement>('.journal-sheet.diary .tabs button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.page === page)));
+    for (const p of ['skills', 'missions', 'options']) this.q(`.page-${p}`).hidden = p !== page;
+  }
+
   set journalOpen(open: boolean) {
     this.q('.journal').hidden = !open;
     if (open) this.renderJournal?.();
@@ -231,8 +247,24 @@ export class Hud {
   }
 
   /** A list of rows with buttons, used for shops and the bag. Calling it again re-renders in place. */
-  showList(title: string, sub: string, rows: ListRow[]): void {
+  showList(title: string, sub: string, rows: ListRow[], tabs?: { labels: string[]; active: number; onTab: (i: number) => void }, top = ''): void {
     const el = this.q('.listsheet');
+    const tabBar = el.querySelector('.list-tabs') as HTMLElement;
+    tabBar.hidden = !tabs;
+    if (tabs) {
+      tabBar.replaceChildren(...tabs.labels.map((l, i) => {
+        const b = document.createElement('button');
+        b.textContent = l;
+        b.setAttribute('role', 'tab');
+        b.setAttribute('aria-selected', String(i === tabs.active));
+        b.addEventListener('click', () => {
+          sfx('page');
+          tabs.onTab(i);
+        });
+        return b;
+      }));
+    }
+    (el.querySelector('.list-top') as HTMLElement).innerHTML = top;
     el.querySelector('h2')!.textContent = title;
     el.querySelector('.list-sub')!.textContent = sub;
     el.querySelector('.list-rows')!.replaceChildren(
@@ -336,10 +368,10 @@ export class Hud {
     // Token backs show counts.
     const bagN = state.inventory.reduce((a, i) => a + i.qty, 0);
     const known = Object.values(state.relations ?? {}).filter((r) => r.met).length;
-    this.q('.bag-count').textContent = String(bagN);
+    this.q('.bag-count').textContent = bagN ? String(bagN) : '';
     const unread = state.letters?.filter((l) => !l.read).length ?? 0;
     this.q('.journal-btn').dataset.letters = unread ? String(unread) : '';
-    this.q('.people-count').textContent = String(known);
+    this.q('.people-count').textContent = known ? String(known) : '';
     // Floating deltas for money and big need changes.
     if (this.lastMoney !== null && Math.abs(state.money - this.lastMoney) >= 0.005) {
       const r = this.q('.tb-purse').getBoundingClientRect();
@@ -451,25 +483,10 @@ export class Hud {
     return new Promise((r) => setTimeout(r, 450));
   }
 
-  journalHtml(state: GameState, rentLine: string, work = ''): string {
-    const c = state.character;
-    const gender = c.gender === 'man' ? 'Man' : 'Woman';
-    const attraction = { men: 'men', women: 'women', both: 'men and women' }[c.attraction];
-    return `
-      <p class="meta">${gender} · attracted to ${attraction}</p>
-      <h3>Skills</h3>
-      <table class="sheet">${SKILLS.map((s) => `<tr><td>${SKILL_INFO[s].name}</td><td class="num">${c.skills[s]} / 20</td></tr>`).join('')}</table>
-      <h3>Needs</h3>
-      <table class="sheet">${NEEDS.map((n) => `<tr><td>${NEED_NAMES[n]}</td><td class="num">${Math.round(state.needs[n])}</td></tr>`).join('')}</table>
-      <h3>Work</h3>
-      <p class="pre">${work || 'Unemployed.'}</p>
-      <h3>Purse</h3>
-      <p>£${state.money.toFixed(2)}. ${rentLine}</p>`;
-  }
-
-  setJournal(title: string, html: string): void {
+  setJournal(title: string, skills: string, missions: string): void {
     this.q('.journal h2').textContent = title;
-    this.q('.journal-body').innerHTML = html;
+    this.q('.page-skills').innerHTML = skills;
+    this.q('.page-missions').innerHTML = missions;
   }
 
   static titleFor(state: GameState): string {

@@ -1,54 +1,55 @@
-# The Pale Lamps — Style Guide: "Ghost Story"
+# The Pale Lamps — Style Guide: "Gilt & Cameo, by night"
 
-A Victorian ghost-story pamphlet printed in moonlight. Penny Dreadful's personality (torn handbills, pasted labels, ticket buttons, stamps, seals, headline moments) in Spectral Fog's palette and type. Chosen on 18 Nov 2026 from four proposals.
+The Victorian parlour after dark: midnight-blue leather, double gilt rules with flourished corners, ivory pages with engraved hatching, cameo portraits, copperplate names, and gilt hexagon medallions. Chosen on 18 Nov 2026 from three Victorian proposals (Penny Dreadful, Gilt & Cameo, Silhouette & Lantern). It takes Gilt & Cameo's fonts, frames and shapes, swaps its oxblood leather for the midnight blues, and borrows the hexagon dock and the single candle amber from Silhouette & Lantern. It replaces the earlier "Ghost Story" style.
 
-All tokens live at the top of `src/style.css`.
+All tokens live at the top of `src/style.css`; the theme itself is the "Gilt & Cameo, by night" block at the end of the file.
 
 ## Colour
 
 | Token | Value | Use |
 |---|---|---|
-| `--night` | #0A0F17 | Background, the world's edge |
-| `--sheet-hi` → `--sheet` | #18233A → #111926 | Midnight paper: every panel |
-| `--pale` | #DCEFFF | Body ink, labels, the goals label |
-| `--vane` | #F4FBFF | Titles, numbers, primary buttons; always with a soft glow |
-| `--mist` | #9FB6CC | Secondary text |
-| `--lilac` / `--lilac-deep` | #9B8FD0 / #463C7A | Speaker names, section heads, seals, the diary cover |
-| `--ember` / `--ember-deep` | #E3A35A / #B5652A | Danger and low needs only; the diary ribbon |
-
-Ember is the only warm colour in the interface; the warmth belongs to the gaslight in the world.
+| `--night` | #060A14 | Background, the world's edge |
+| `--sheet-hi` → `--sheet` → `--sheet-lo` | #17264A → #0F1A33 → #0A1226 | Midnight leather: panels, plaques, frames |
+| `--gilt-hi` / `--gilt` / `--gilt-lo` | #F0D78A / #C9A24A / #7A5A1E | Rules, corners, titles, numbers, icons, the brass primary button |
+| `--ivory` | #EFE6D2 | Pages: dialogue, the journal, goals, speech bubbles |
+| `--ink` | #1B1A24 | Text on ivory |
+| `--pale` / `--mist` | #ECE3CC / #A9B3C6 | Text on leather; secondary text |
+| `--ember` | #E7B45A | Candle amber: danger, low needs, unread letters. Use sparingly |
+| wax red | #D84A3A → #8A1A14 | Seals and stamps only |
 
 ## Type
 
-- **Cormorant Garamond** (500/600, italic) for names, titles, numbers, buttons and stamps; small caps with letter-spacing for labels.
-- **Spectral** (300/400) for anything longer than a line.
-- Italic display type never below 13.5 px; body text 15–17 px.
+- **IM Fell English** for names of places, numbers, buttons and body headings; **IM Fell English SC** for titles, tabs and labels.
+- **Pinyon Script** for people's names (dialogue, bubbles, the journal title). Never for anything longer than a name.
+- **EB Garamond** for anything longer than a line, 15–18 px.
 
 ## Shapes
 
-- **Panels** are torn sheets (`.gs`, the `--torn` clip path) with grain, faint lilac foxing and a pale ruled line inside the edge (`.ruled`).
-- **Buttons** are notched tickets (`--notch` mask). Primary: Vane-white. Secondary: ruled pale outline. Disabled: hatched.
-- **Labels** (goals, speech bubbles) are pale paper pasted on at a slight angle with a hard shadow.
-- **Stamps** (grades, PROMOTED) are double-ruled, crooked and glowing.
-- **The dock** is objects, not boxes: a lilac diary that opens, two engraved coins that flip to show a count, and Hester's pocket watch, whose hands follow the game clock.
+- **Panels** (`.gs`): leather with a fine gilt hatch, a gilt border, an inner gilt rule, and four flourished gilt corners (`--corners`).
+- **Pages**: ivory with an ink hatch, framed in navy and a gilt rule (dialogue, journal, goals, bubbles).
+- **Buttons**: navy leather plaques with a gilt edge; the primary choice is brass with navy text; disabled is hatched.
+- **The dock**: four gilt hexagon medallions (Journal, Bag, People, the pocket watch) that turn a sixth when tapped; counts sit in a small gilt badge.
+- **Tabs**: ribbon tabs; the active one is brass.
+- **Cameo**: an oval portrait in a triple gilt and navy ring, rendered from the speaker's own 3D model (`src/ui/Portraits.ts`). Narration has no cameo. Unknown speakers show a script monogram.
+- **Ways out**: a small gilt hexagon with a door and arrow (or a house, for home) floats over every exit (`src/world/doorIcon.ts`).
 
 ## Motion
 
-- Panels *paste* in (rise, settle, un-blur, 0.3–0.5 s). Text *condenses* out of blur.
-- The four big moments, queued so they never overlap, tap to skip:
-  - **Promotion:** a moonlit broadsheet slams in and a PROMOTED stamp lands.
-  - **Goal complete:** a lilac seal presses onto a handbill as a wisp of fog crosses it (rent paid, upgrades bought, the room regained, the first day).
-  - **Skill up:** a sigil draws itself in light around the new level.
-  - **New friend / courting:** a calling card turns over to show the reward.
-- Money and need changes float up from the top bar (pale for gains, ember for losses).
-- Fights shake on every blow, with a pale flash for yours and an ember flash for theirs.
-- Fog drifts and a vignette sits over the 3D world (compositor-only transforms).
-- `prefers-reduced-motion` cuts every animation to an instant.
+- Panels and pages ease up into place (`paste`, 0.35–0.5 s).
+- Dock medallions turn 60° on tap; the watch hands follow the clock.
+- Celebrations: gilt titles, wax seals pressed on, gilt motes rising.
+- Reduced-motion settings switch all of this off.
+
+## Layout
+
+- **Phone, portrait**: top bar, goals label, dock along the bottom, sheets centred.
+- **Landscape and tablets** (aspect ratio above 5:4): the dock stands on the right edge; the top bar stops short of it; dialogue and place panels sit low on the left; the journal, bag and lists open as a sheet on the right, so the street stays visible. Very short landscape screens hide dock labels and shrink the cameo.
+- **Large screens** (≥ 1000 × 700): interface pieces are scaled up 1.28×.
 
 ## Rules
 
-1. Opaque sheets only; no backdrop blur (it costs frames over WebGL on older phones).
-2. One glow per element; glow means "Vane-lit", so use it for titles, numbers and primary actions only.
-3. Ember means danger or loss. Never decorative.
-4. New screens reuse `.gs`, `.ruled`, the ticket buttons and the paste/condense motions; no new frame styles without updating this guide.
-5. HUD budget: top bar + goals + dock tokens ≈ 17% of a portrait phone (measured with `scripts/audit-metrics.cjs`). The dock tokens are deliberately larger than the 44 px minimum; that is the 2-point overshoot of the 15% target.
+1. Gilt is for edges, titles and things you can press; never fill large areas with it.
+2. Ivory is for what people say and write; leather is for the game talking to you.
+3. One warm accent (amber) for danger and attention; wax red only for seals.
+4. HUD coverage stays near 17% on a phone in portrait.
+5. Touch targets ≥ 44 px; body text ≥ 15 px; labels ≥ 12 px.

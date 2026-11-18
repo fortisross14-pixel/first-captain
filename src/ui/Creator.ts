@@ -7,8 +7,8 @@ import {
 const SKIN = [0xf0cfb0, 0xe0b896, 0xc89a78, 0x9a6a48, 0x6a4430];
 const HAIR = [0x15110e, 0x3a2618, 0x6a4428, 0x9a4a22, 0xc8a870, 0x8a8a8a];
 const COAT = [0x3c4a3a, 0x3a3a48, 0x5a3a2e, 0x4a4038, 0x6a2e2e, 0x2a2e34];
-const HATS: Look['hat'][] = ['cap', 'bonnet', 'top', 'none'];
-const HAT_NAMES: Record<Look['hat'], string> = { cap: 'Cap', bonnet: 'Bonnet', top: 'Top hat', none: 'None' };
+const HATS: Look['hat'][] = ['cap', 'bowler', 'bonnet', 'top', 'none'];
+const HAT_NAMES: Record<Look['hat'], string> = { cap: 'Cap', bowler: 'Bowler', bonnet: 'Bonnet', top: 'Top hat', none: 'None' };
 const BUILDS = [{ name: 'Slight', v: 0.9 }, { name: 'Average', v: 1 }, { name: 'Broad', v: 1.12 }];
 const NAMES: Record<Gender, string[]> = {
   man: ['Thomas', 'Arthur', 'Edmund', 'Silas', 'Walter', 'Jonah'],
@@ -30,7 +30,7 @@ export class Creator {
       attraction: 'men',
       look: {
         skin: SKIN[1], hair: HAIR[1], coat: COAT[0], trousers: 0x3a2e2a, shirt: 0xd8ccb0, boots: 0x1e1a16,
-        scarf: 0x8a2e26, hat: 'bonnet', hatColor: 0x3a342c, skirt: true, build: 1,
+        scarf: 0x8a2e26, hat: 'bonnet', hatColor: 0x3a342c, skirt: true, build: 1, hairStyle: 'bun',
       },
       skills: { study: 0, strength: 0, arts: 0, charisma: 0, cunning: 0, occult: 0 },
     };
@@ -58,6 +58,7 @@ export class Creator {
           <div class="row"><span class="lbl">Hair</span>${swatches('hair', HAIR)}</div>
           <div class="row"><span class="lbl">Coat</span>${swatches('coat', COAT)}</div>
           <div class="row"><span class="lbl">Clothing</span>${seg('skirt', [['0', 'Trousers'], ['1', 'Skirt']])}</div>
+          <div class="row"><span class="lbl">Hair</span>${seg('hairStyle', [['short', 'Short'], ['long', 'Long'], ['bun', 'Bun'], ['curls', 'Curls'], ['bald', 'Bald']])}</div>
           <div class="row"><span class="lbl">Hat</span>${seg('hat', HATS.map((h) => [h, HAT_NAMES[h]] as [string, string]))}</div>
           <div class="row"><span class="lbl">Build</span>${seg('build', BUILDS.map((b) => [String(b.v), b.name] as [string, string]))}</div>
           <h3>Skills <span class="points"></span></h3>
@@ -125,6 +126,7 @@ export class Creator {
         // Sensible defaults the player can still change.
         d.look.skirt = g === 'woman';
         d.look.hat = g === 'woman' ? 'bonnet' : 'cap';
+        d.look.hairStyle = g === 'woman' ? 'bun' : 'short';
         d.attraction = g === 'woman' ? 'men' : 'women';
         if (NAMES[g === 'man' ? 'woman' : 'man'].includes(d.first)) {
           d.first = NAMES[g][Math.floor(Math.random() * 6)];
@@ -135,6 +137,7 @@ export class Creator {
     else if (field === 'skirt') d.look.skirt = value === '1';
     else if (field === 'hat') d.look.hat = value as Look['hat'];
     else if (field === 'build') d.look.build = Number(value);
+    else if (field === 'hairStyle') d.look.hairStyle = value as Look['hairStyle'];
   }
 
   private get pointsLeft(): number {
@@ -157,6 +160,7 @@ export class Creator {
     mark('skirt', d.look.skirt ? '1' : '0');
     mark('hat', d.look.hat);
     mark('build', String(d.look.build ?? 1));
+    mark('hairStyle', d.look.hairStyle ?? (d.look.skirt ? 'bun' : 'short'));
     for (const s of SKILLS) {
       const row = this.el.querySelector(`[data-skill="${s}"]`)!;
       row.querySelector('.val')!.textContent = String(d.skills[s]);

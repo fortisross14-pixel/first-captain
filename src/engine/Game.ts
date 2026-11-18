@@ -21,12 +21,13 @@ import { HOT_ZONES, NOTORIOUS, ZONES, dangerAt, zoneAt } from '../game/danger';
 import { CHAMPION_TITLE, FIGHT_NIGHT, LADDER, type Bout } from '../game/fightnight';
 import { CONGRATS, HESTER_LETTERS, gazette, sendLetter } from '../game/letters';
 import { CIRCLES, addFact, knowledgeOf, reactions, spreadGossip, type FactKind, type Pending } from '../game/world';
-import { OUTFIT_NAMES, type Outfit, ITEMS, SHOPS, addItem, buy, canCarry, owns, removeItem, sell, sellPrice, slots, usedSlots, useItem } from '../game/items';
+import { OUTFIT_NAMES, SLOT_NAMES, gear, isFood, type Outfit, type Slot, ITEMS, SHOPS, addItem, buy, canCarry, owns, removeItem, sell, sellPrice, slots, usedSlots, useItem } from '../game/items';
 import { SHOP_KEEPERS, VOICES } from '../game/voices';
 import {
   canStartShift, checkAttendance, completeShift, dayStart, employment, gainXp, hire, hireBlocker, leave, nextShiftText,
   promotionText, title,
 } from '../game/work';
+import { xpToNext } from '../game/jobs';
 import { playBar } from '../minigames/bar';
 import { ENEMIES, runFight, type Enemy } from '../minigames/fight';
 import { playCargo } from '../minigames/cargo';
@@ -38,6 +39,8 @@ import { Title } from '../ui/Title';
 import { buildHesterRoom } from '../world/hesterRoom';
 import type { Location, Place } from '../world/location';
 import { buildSaltwharf } from '../world/saltwharf';
+import { makeDoorIcon } from '../world/doorIcon';
+import { Portraits } from '../ui/Portraits';
 import { CameraRig } from './CameraRig';
 import { Clock } from './Clock';
 import { Input } from './Input';
@@ -78,6 +81,8 @@ export class Game {
   private readonly tully: Player;
   private dangerTimer = 0;
   private readonly life: Life;
+  private readonly portraits: Portraits;
+  private readonly doorIcons: { sprite: THREE.Sprite; y: number }[] = [];
   private ambientTimer = 4;
   private chatTimer = 12;
   private chat: { a: Npc; b: Npc; lines: [string, string][]; i: number; t: number; spread: import('../game/world').Fact | null } | null = null;
@@ -174,6 +179,17 @@ export class Game {
       return `${qualityLabel(next)} (after reload)`;
     };
     this.dialogue = new Dialogue(container);
+    this.portraits = new Portraits(this.renderer);
+    this.dialogue.portraitFor = (name) => this.portraitOf(name);
+    // Ways in and out are marked: the stairs down from Hester's room, and her door from the street.
+    const icon = (loc: Location, kind: 'exit' | 'home', x: number, y: number, z: number) => {
+      const sp = makeDoorIcon(kind);
+      sp.position.set(x, y, z);
+      loc.scene.add(sp);
+      this.doorIcons.push({ sprite: sp, y });
+    };
+    icon(this.locations.hesterRoom, 'exit', 0.45, 1.55, 1.5);
+    icon(this.locations.saltwharf, 'home', 11.5, 2.7, 8.95);
     new Input(this.renderer.domElement, (x, y) => this.tap(x, y), (f) => this.rig.zoomBy(f));
 
     window.addEventListener('resize', () => this.resize());
@@ -244,7 +260,7 @@ export class Game {
     this.applyUpgrades();
     this.applyFurniture();
     this.locations.saltwharf.setWeather?.(s.weather);
-    if (s.outfit && s.outfit !== 'plain') this.dress(s.outfit);
+    this.refreshLook();
     this.hud.visible = true;
     this.resize();
     this.refreshObjectives();
@@ -605,6 +621,10 @@ export class Game {
                   if (def.upgrade) {
                     this.applyFurniture();
                     if (def.outfit) this.dress(def.outfit);
+                    else if (def.slot) {
+                      s.equip[def.slot as Exclude<Slot, 'clothes'>] = itemId;
+                      this.refreshLook();
+                    }
                     this.hud.closeList();
                     void this.hud.celebrate('goal', 'Yours now', def.name, def.blurb);
                   }
@@ -726,20 +746,65 @@ export class Game {
     this.hud.toast(`An hour on the bag. Strength practice.${ups.length ? ` ${ups.join(' ')}` : ''}`, 3500);
   }
 
-  private openBag(): void {
+  private bagTab = 0;
+
+  /** The bag: what you wear, what you eat, and everything else. */
+  private openBag(tab = this.bagTab): void {
     const s = this.state!;
-    const render = () => {
-      const rows: ListRow[] = s.inventory.map((it) => {
-        const def = ITEMS[it.id];
-        const actions: Action[] = [];
-        if (def.use) actions.push({ label: def.verb ?? 'Use', onClick: () => { const m = useItem(s, it.id); if (m) this.hud.toast(m); render(); } });
-        actions.push({ label: 'Drop', onClick: () => { removeItem(s, it.id); render(); } });
-        return { label: `${def.name} ×${it.qty}`, sub: def.blurb, actions };
-      });
-      if (rows.length === 0) rows.push({ label: 'Your bag is empty.', sub: 'Buy food at the market, supplies at the chandlery.', actions: [] });
-      this.hud.showList('Bag', `${usedSlots(s)} / ${slots(s)} slots · Strength adds room`, rows);
+    this.bagTab = tab;
+    const esc = (t: string) => t.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
+    const again = () => this.openBag(this.bagTab);
+    const tabs = { labels: ['Equipment', 'Food', 'Other'], active: tab, onTab: (i: number) => this.openBag(i) };
+    const sub = `${usedSlots(s)} / ${slots(s)} slots · Strength adds room`;
+    const itemRow = (it: { id: string; qty: number }): ListRow => {
+      const def = ITEMS[it.id];
+      const actions: Action[] = [];
+      if (def.use) actions.push({ label: def.verb ?? 'Use', onClick: () => { const m = useItem(s, it.id); if (m) this.hud.toast(m); again(); } });
+      actions.push({ label: 'Drop', onClick: () => { removeItem(s, it.id); again(); } });
+      const fx = def.use ? Object.entries(def.use).map(([k, v]) => `${NEED_NAMES[k as NeedId]} +${v}`).join(', ') : '';
+      return { label: `${def.name} ×${it.qty}`, sub: [def.blurb, fx].filter(Boolean).join(' · '), actions };
     };
-    render();
+    if (tab === 0) {
+      const worn = (sl: Slot) => (sl === 'clothes' ? OUTFIT_NAMES[s.outfit] : s.equip[sl as Exclude<Slot, 'clothes'>] ? ITEMS[s.equip[sl as Exclude<Slot, 'clothes'>]!].name : '');
+      const cell = (sl: Slot) => `<div class="slot${worn(sl) ? '' : ' empty'}"><span>${SLOT_NAMES[sl]}</span><b>${esc(worn(sl) || 'empty')}</b></div>`;
+      const top = `<div class="doll"><div class="col">${cell('hat')}${cell('cloak')}${cell('clothes')}</div>
+        <div class="fig" aria-hidden="true"><svg viewBox="0 0 60 140"><circle cx="30" cy="20" r="11"/><path d="M12 40 Q30 32 48 40 L52 96 H8 Z"/><path d="M8 44 L2 84 M52 44 L58 84" stroke-width="6" stroke-linecap="round"/><path d="M18 96 L16 136 M42 96 L44 136" stroke-width="8" stroke-linecap="round"/></svg></div>
+        <div class="col">${cell('neck')}${cell('wrist')}${cell('weapon')}</div></div>`;
+      const rows: ListRow[] = [];
+      const outfits: Outfit[] = ['plain', ...(['work', 'sunday', 'coat'] as Outfit[]).filter((o) => owns(s, o))];
+      for (const o of outfits) {
+        rows.push({
+          label: `${OUTFIT_NAMES[o]}${s.outfit === o ? ' · wearing' : ''}`,
+          sub: `Clothes · ${this.condition(o)}${o === 'plain' ? ' · what you arrived in' : ` · ${ITEMS[o].blurb}`}`,
+          actions: s.outfit === o ? [] : [{ label: 'Wear', onClick: () => { this.dress(o); again(); } }],
+        });
+      }
+      for (const id of s.owned.filter((x) => ITEMS[x]?.slot && ITEMS[x].slot !== 'clothes')) {
+        const def = ITEMS[id];
+        const sl = def.slot as Exclude<Slot, 'clothes'>;
+        const on = s.equip[sl] === id;
+        rows.push({
+          label: `${def.name}${on ? ' · wearing' : ''}`,
+          sub: `${SLOT_NAMES[sl]} · ${def.blurb}`,
+          actions: [{ label: on ? 'Take off' : 'Wear', onClick: () => { if (on) delete s.equip[sl]; else s.equip[sl] = id; this.refreshLook(); sfx('flip'); again(); } }],
+        });
+      }
+      if (rows.length <= 1) rows.push({ label: 'Nothing else to wear yet.', sub: 'Hats and cloaks at Rag & Bone; weapons, lockets and medals at Moss the Pawnbroker.', actions: [] });
+      this.hud.showList('Bag', sub, rows, tabs, top);
+      return;
+    }
+    if (tab === 1) {
+      const rows = s.inventory.filter((i) => isFood(i.id)).map(itemRow);
+      if (!rows.length) rows.push({ label: 'No food.', sub: 'The market sells bread, potatoes, pies, and onions, eels and mutton for the stove.', actions: [] });
+      this.hud.showList('Bag', sub, rows, tabs);
+      return;
+    }
+    const rows = s.inventory.filter((i) => !isFood(i.id)).map(itemRow);
+    for (const q of s.quests.filter((x) => x.kind === 'lost' && x.found)) {
+      rows.unshift({ label: q.thing!.replace(/^(his|her|my|the) /, (m) => (m === 'the ' ? 'The ' : `${this.short(q.who)}'s `)), sub: `Mission · return it to ${this.short(q.who)}`, actions: [] });
+    }
+    if (!rows.length) rows.push({ label: 'Nothing else.', sub: 'Bandages and tonics at Pell\'s Chandlery; penny dreadfuls at the market.', actions: [] });
+    this.hud.showList('Bag', sub, rows, tabs);
   }
 
   // --- Work -----------------------------------------------------------------
@@ -988,6 +1053,21 @@ export class Game {
     if (st && s.weather === 'rain' && ['grubb', 'hale', 'quill', 'ashby', 'lizzie'].includes(r.id) && st.act !== 'mend') return null;
     if (st && (s.life.confused[r.id] ?? -1) >= day) return { ...st, act: 'confused' };
     return st;
+  }
+
+  /** The face for a speaker's name, rendered from their model. */
+  private portraitOf(name: string): string | null {
+    const s = this.state;
+    if (!s) return null;
+    let look: Look | null = null;
+    if (name === 'You') look = this.outfitLook(s.outfit);
+    else if (name === P) look = { skin: 0xcfe6f4, hair: 0xf2f6fa, coat: 0x7a96b0, trousers: 0x6a86a0, shirt: 0xf0f4f8, boots: 0x4a5a6a, scarf: 0xffffff, hat: 'top', hatColor: 0x8aa6c0, hairStyle: 'wig', eyes: 0x6a8aaa };
+    else if (name === NOTORIOUS.name) look = { skin: 0xb08a6a, hair: 0x15110e, coat: 0x1e1a18, trousers: 0x1a1614, shirt: 0x5a2a22, boots: 0x0e0c0a, hat: 'cap', hatColor: 0x121010, build: 1.25, beard: 0x15110e };
+    else {
+      const r = RESIDENTS.find((x) => x.name === name || this.short(x.id) === name || name.endsWith(x.name));
+      if (r) look = r.look;
+    }
+    return look ? this.portraits.get(JSON.stringify(look), look) : null;
   }
 
   /** A speech bubble over a point in the street. */
@@ -1840,7 +1920,7 @@ export class Game {
     // Robbery: at most once a night; likelier on dangerous streets, with a fat purse or fine clothes.
     if (dark && s.lastRobberyDay !== day && !this.stalker) {
       const dress = s.outfit === 'sunday' ? 1.4 : s.outfit === 'coat' ? 1.25 : 1;
-      const rate = 0.004 * this.dangerHere() * (1 + s.money * 0.6) * dress * (s.notoriety >= 3 ? 0.5 : 1) * (this.friend('ruby') ? 0.5 : 1) * (hasPerk(s, 'strength', 6) ? 0.67 : 1);
+      const rate = 0.004 * this.dangerHere() * (1 + s.money * 0.6) * dress * (s.notoriety >= 3 ? 0.5 : 1) * (this.friend('ruby') ? 0.5 : 1) * (hasPerk(s, 'strength', 6) ? 0.67 : 1) * gear(s).robbery;
       if (Math.random() < rate * gameMinutes) {
         this.startStalker();
         return;
@@ -2443,7 +2523,20 @@ export class Game {
   }
 
   private outfitLook(o: Outfit): Look {
-    const base = this.state!.character.look;
+    const look = this.clothesLook(o);
+    const e = this.state!.equip;
+    const hat = e.hat ? ITEMS[e.hat].gear : undefined;
+    if (hat?.hat) {
+      look.hat = hat.hat;
+      look.hatColor = hat.color;
+    }
+    if (e.cloak) look.cloak = ITEMS[e.cloak].gear?.color;
+    if (e.weapon) look.weapon = ITEMS[e.weapon].gear?.weapon;
+    return look;
+  }
+
+  private clothesLook(o: Outfit): Look {
+    const base = { ...this.state!.character.look };
     const woman = this.state!.character.gender === 'woman';
     if (o === 'work') return { ...base, coat: 0x4a3a2e, hat: 'cap', hatColor: 0x2e2a26, scarf: 0x6a5a3a };
     if (o === 'sunday') return { ...base, coat: 0x1b1f2a, shirt: 0xf2efe6, hat: woman ? 'bonnet' : 'top', hatColor: 0x1b1f2a, scarf: undefined };
@@ -2455,6 +2548,15 @@ export class Game {
   private dress(o: Outfit): void {
     const s = this.state!;
     s.outfit = o;
+    this.refreshLook();
+    sfx('flip');
+    this.hud.toast(o === 'plain' ? 'You change back into your travelling clothes.' : `You change into your ${OUTFIT_NAMES[o].replace(/^Docker's /, "docker's ")}.`);
+  }
+
+  /** Rebuild the player's model from clothes and equipment. */
+  private refreshLook(): void {
+    const s = this.state!;
+    const o = s.outfit;
     const old = this.player!;
     const p = new Player(this.location.grid, this.outfitLook(o), old.position.x, old.position.y);
     p.faceToward({ x: old.position.x, z: old.position.y + 1 }, true);
@@ -2462,19 +2564,10 @@ export class Game {
     this.location.scene.add(p.rig.root);
     this.player = p;
     this.applyUpgrades();
-    sfx('flip');
-    this.hud.toast(o === 'plain' ? 'You change back into your travelling clothes.' : `You change into your ${OUTFIT_NAMES[o].replace(/^Docker's /, "docker's ")}.`);
   }
 
   private chooseOutfit(): void {
-    const s = this.state!;
-    const outfits: Outfit[] = ['plain', ...(['work', 'sunday', 'coat'] as Outfit[]).filter((o) => owns(s, o))];
-    const rows: ListRow[] = outfits.map((o) => ({
-      label: `${OUTFIT_NAMES[o]}${s.outfit === o ? ' · wearing' : ''}`,
-      sub: o === 'plain' ? 'What you arrived in.' : ITEMS[o].blurb,
-      actions: s.outfit === o ? [] : [{ label: 'Wear', onClick: () => { this.hud.closeList(); this.dress(o); } }],
-    }));
-    this.hud.showList('Change clothes', 'Rag & Bone sells more', rows);
+    this.openBag(0);
   }
 
   /** What someone says the first time they see you in new clothes. */
@@ -2507,13 +2600,14 @@ export class Game {
     const s = this.state!;
     const res = RESIDENTS.find((r) => r.id === id)!;
     const w = s.wear[s.outfit];
-    if (w < 15) return -0.08;
+    const g = gear(s).dress * (res.cls === 'middle' ? 1 : 0.6);
+    if (w < 15) return -0.08 + g;
     const k = w < 40 ? 0.5 : 1;
     const office = res.cls === 'middle' ? s.parish.rank * 0.04 : 0;
-    if (s.outfit === 'coat') return 0.08 * k + office;
-    if (s.outfit === 'work') return (CIRCLES.docks.includes(id) ? 0.08 : 0) * k + office;
-    if (s.outfit === 'sunday') return (res.cls === 'middle' ? 0.1 : res.traits.includes('jovial') || res.traits.includes('cynical') ? -0.05 : 0.02) * k + office;
-    return office;
+    if (s.outfit === 'coat') return 0.08 * k + office + g;
+    if (s.outfit === 'work') return (CIRCLES.docks.includes(id) ? 0.08 : 0) * k + office + g;
+    if (s.outfit === 'sunday') return (res.cls === 'middle' ? 0.1 : res.traits.includes('jovial') || res.traits.includes('cynical') ? -0.05 : 0.02) * k + office + g;
+    return office + g;
   }
 
   /** The jealousy confrontation, when you next speak to someone who has heard. */
@@ -2602,7 +2696,7 @@ export class Game {
       this.player!.teleport(this.location.grid, e.x, e.z);
     }
     const mode = outdoors ? 'roughSleep' : 'asleep';
-    const scarf = outdoors && owns(s, 'scarf');
+    const scarf = outdoors && (owns(s, 'scarf') || gear(s).warm);
     const mattress = !outdoors && owns(s, 'mattress');
     for (let m = 0; m < minutes; m += 10) {
       simulateNeeds(s.needs, 10 / 60, mode);
@@ -2897,29 +2991,44 @@ export class Game {
   private renderJournal(): void {
     const s = this.state;
     if (!s) return;
-    const due = this.clock.formatShortDate(this.clock.rentDue);
-    const rentLine = s.rent.graceUntil !== null
-      ? `Rent of £${s.rent.amount.toFixed(2)} is overdue.`
-      : `Rent of £${s.rent.amount.toFixed(2)} is due ${due}.`;
-    const debtLine = s.debt > 0 ? ` You owe the hospital £${s.debt.toFixed(2)}.` : '';
-    const work = s.jobs
-      .map((e) => `${title(s, e)} at the ${JOBS[e.jobId].employer}: ${nextShiftText(s, e.jobId)}. ${promotionText(s, e.jobId)}`)
-      .join('\n');
     const esc = (t: string) => t.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
-    const perks = PERKS_OWNED(s).map((p) => `<li><b>${esc(p.name)}</b> (${SKILL_INFO[p.skill].name} ${p.level}): ${esc(p.text)}</li>`).join('');
-    const next = SKILLS.map((k) => nextPerk(s, k)).filter(Boolean).map((p) => `<li>${SKILL_INFO[p!.skill].name} ${p!.level}: ${esc(p!.name)}</li>`).join('');
-    const mentors = SKILLS.map((k) => `${SKILL_INFO[k].name}: ${esc(this.first(MENTORS[k].who))}`).join(' · ');
-    const favours = s.quests.filter((q) => !q.done).map((q) => `<li>${esc(q.text)}</li>`).join('') || '<li>Nobody needs anything from you just now.</li>';
-    const office = officeTitle(s, s.character.gender === 'woman');
-    const extra = `
+    const c = s.character;
+    const due = this.clock.formatShortDate(this.clock.rentDue);
+    const attraction = { men: 'men', women: 'women', both: 'men and women' }[c.attraction];
+    // Skills page: level, progress to the next, perks, mentors, and how you feel.
+    const skills = SKILLS.map((k) => {
+      const lvl = c.skills[k];
+      const pct = lvl >= 20 ? 100 : Math.min(100, Math.round((s.skillXp[k] / xpToNext(lvl)) * 100));
+      const np = nextPerk(s, k);
+      const m = MENTORS[k];
+      return `<div class="skillrow"><div class="sk-h"><span>${SKILL_INFO[k].name}</span><b>${lvl}<small> / 20</small></b></div>
+        <div class="sk-bar"><i style="width:${pct}%"></i></div>
+        <div class="sk-sub">${np ? `At ${np.level}: <em>${esc(np.name)}</em>` : 'Every perk learned'} · mentor ${esc(this.short(m.who))}</div></div>`;
+    }).join('');
+    const perks = PERKS_OWNED(s).map((p) => `<li><b>${esc(p.name)}</b>: ${esc(p.text)}</li>`).join('');
+    const needs = (['hunger', 'rest', 'social', 'health'] as NeedId[]).map((n) => `<div class="needrow"><span>${NEED_NAMES[n]}</span><div class="sk-bar"><i style="width:${Math.round(s.needs[n])}%"></i></div><b>${Math.round(s.needs[n])}</b></div>`).join('');
+    const skillsHtml = `<p class="meta">${c.gender === 'man' ? 'Man' : 'Woman'} · attracted to ${attraction}</p>
+      ${skills}
+      <h3>Perks</h3><ul class="perks">${perks || '<li>None yet: they come at levels 3, 6 and 10.</li>'}</ul>
+      <h3>How you are</h3>${needs}`;
+    // Missions page: the story, favours, goals, work, money and standing.
+    const story = s.hesterLetters > 0
+      ? `Hester's letters (${s.hesterLetters} of ${HESTER_LETTERS.length}) speak of Wardens, the fog and Mr. Vane's lamps. The trunk in your room will not open yet.`
+      : 'Hester left you her room, her ghost and a trunk that will not open. Mrs. Pell may know more.';
+    const favours = s.quests.filter((q) => !q.done).map((q) => `<li>${esc(q.text)}</li>`).join('') || '<li>Nobody needs anything from you just now. Make friends, and they will.</li>';
+    const goals = this.goals().filter((g) => !g.startsWith('Favour')).map((g) => `<li>${esc(g)}</li>`).join('');
+    const work = s.jobs.map((e) => `<li>${esc(title(s, e))} at the ${esc(JOBS[e.jobId].employer)}: ${esc(nextShiftText(s, e.jobId))}. ${esc(promotionText(s, e.jobId))}</li>`).join('') || '<li>Unemployed.</li>';
+    const rent = s.rent.graceUntil !== null ? `Rent of £${s.rent.amount.toFixed(2)} is overdue.` : `Rent of £${s.rent.amount.toFixed(2)} is due ${due}.`;
+    const office = officeTitle(s, c.gender === 'woman');
+    const missionsHtml = `
+      <h3>The story</h3><p>${esc(story)}</p>
       <h3>Favours</h3><ul class="perks">${favours}</ul>
-      <h3>Perks</h3><ul class="perks">${perks || '<li>None yet. They come at skill 3, 6 and 10.</li>'}</ul>
-      <p class="meta">Next: </p><ul class="perks">${next}</ul>
-      <p class="meta">Mentors: ${mentors}. Make friends with them for free lessons.</p>
-      <h3>Clothes</h3><p>${esc(OUTFIT_NAMES[s.outfit])}: ${this.condition()} (${Math.round(s.wear[s.outfit])}%).</p>
-      <h3>Parish</h3><p>${office ? `${office} of St. Botolph.` : 'No office.'} ${s.parish.standing !== null ? `Standing for ${OFFICES[s.parish.rank].name}: ${s.parish.pledges.length} pledged, ${s.parish.crowd} from speeches.` : OFFICES[s.parish.rank] ? `Next: ${OFFICES[s.parish.rank].name}, needs Study ${OFFICES[s.parish.rank].study} and ${OFFICES[s.parish.rank].friends} friends. Ask Father Hale.` : ''}</p>
-      <h3>Days ahead</h3><p>${HOLIDAYS.map((h) => `${h.name}, ${h.date} ${h.month === 9 ? 'Oct' : 'Nov'}`).join(' · ')}. Weather today: ${s.weather}.</p>`;
-    this.hud.setJournal(Hud.titleFor(s), this.hud.journalHtml(s, rentLine + debtLine, work) + extra);
+      <h3>Goals</h3><ul class="perks">${goals}</ul>
+      <h3>Work</h3><ul class="perks">${work}</ul>
+      <h3>Purse</h3><p>£${s.money.toFixed(2)}. ${rent}${s.debt > 0 ? ` You owe the hospital £${s.debt.toFixed(2)}.` : ''}</p>
+      <h3>Standing</h3><p>${office ? `${office} of St. Botolph. ` : ''}${s.parish.standing !== null ? `Standing for ${OFFICES[s.parish.rank].name}: ${s.parish.pledges.length} pledged, ${s.parish.crowd} won by speeches.` : OFFICES[s.parish.rank] ? `Next: ${OFFICES[s.parish.rank].name} (Study ${OFFICES[s.parish.rank].study}, ${OFFICES[s.parish.rank].friends} friends; ask Father Hale).` : ''}${s.champion ? ` ${CHAMPION_TITLE}.` : ''}</p>
+      <h3>Days ahead</h3><p>${HOLIDAYS.map((h) => `${h.name}, ${h.date} ${h.month === 9 ? 'Oct' : 'Nov'}`).join(' · ')}. Today: ${s.weather}.</p>`;
+    this.hud.setJournal(Hud.titleFor(s), skillsHtml, missionsHtml);
   }
 
   // --- Creator preview ------------------------------------------------------
@@ -3024,7 +3133,7 @@ export class Game {
       // Rain soaks you outdoors, unless you have a good coat on.
       const mins = this.clock.minutes - before;
       if (s.weather === 'rain' && this.location.id === 'saltwharf' && mins > 0) {
-        if (s.outfit !== 'coat') addNeed(s.needs, 'health', (-1.5 * mins) / 60);
+        if (s.outfit !== 'coat' && !gear(s).rain) addNeed(s.needs, 'health', (-1.5 * mins) / 60);
         this.wearOut((2 * mins) / 60);
       }
       this.checkQuests();
@@ -3041,7 +3150,7 @@ export class Game {
       const hol = holidayOn(day)?.id ?? (holidayOn(dayIndex(s.minutes - 6 * 60))?.id === 'hallows' && this.clock.hour < 6 ? 'hallows' : null);
       this.life.update(dt, this.elapsed, {
         hour: this.clock.hour, day, weather: s.weather, player: player.position,
-        sight: hasPerk(s, 'occult', 3) || hol === 'hallows', holiday: hol,
+        sight: s.character.skills.occult + gear(s).occult >= 3 || hol === 'hallows', holiday: hol,
         headline: this.headline ??= gazette(s, day, 'Gull Court', [], '')[0],
         lost: s.quests.filter((q) => q.kind === 'lost' && !q.found && q.at).map((q) => ({ id: q.id, x: q.at!.x, z: q.at!.z })),
       });
@@ -3061,6 +3170,10 @@ export class Game {
     // A comfortable room tops up Social while you are home.
     if (!paused && this.location.id === 'hesterRoom') addNeed(s.needs, 'social', (this.comfort() * 0.6 * dt) / 60 * this.clock.speed);
     this.location.update(this.clock.hour, this.elapsed);
+    for (const d of this.doorIcons) {
+      d.sprite.position.y = d.y + Math.sin(this.elapsed * 2.4) * 0.07;
+      d.sprite.scale.setScalar(0.62 + Math.sin(this.elapsed * 4.8) * 0.03);
+    }
     this.rig.update(dt, player.position.x, player.position.y + this.location.camera.offsetZ);
 
     if (this.location.fadeOccluders) {

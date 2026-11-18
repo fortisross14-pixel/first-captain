@@ -5,27 +5,39 @@
    ========================================================================== */
 :root {
   color-scheme: dark;
-  --night: #0a0f17;
-  --sheet: #111926;
-  --sheet-hi: #18233a;
-  --sheet-lo: #0d141f;
-  --pale: #dcefff;
-  --vane: #f4fbff;
-  --mist: #9fb6cc;
-  --lilac: #9b8fd0;
-  --lilac-deep: #463c7a;
-  --ember: #e3a35a;
+  /* Gilt & Cameo, by night: midnight-blue leather, gilt rules, ivory pages, one candle amber. */
+  --night: #060a14;
+  --sheet: #0f1a33;
+  --sheet-hi: #17264a;
+  --sheet-lo: #0a1226;
+  --pale: #ece3cc;
+  --vane: #fff1cc;
+  --mist: #a9b3c6;
+  --lilac: #d9b862;
+  --lilac-deep: #1a2a52;
+  --ember: #e7b45a;
   --ember-deep: #b5652a;
-  --rule: rgba(220, 239, 255, 0.3);
-  --glow: 0 0 12px rgba(200, 230, 255, 0.45);
-  --f-display: 'Cormorant Garamond', 'Iowan Old Style', Georgia, serif;
-  --f-body: 'Spectral', Georgia, 'Times New Roman', serif;
-  --torn: polygon(0 3px, 6% 0, 14% 2px, 24% 0, 37% 3px, 49% 1px, 61% 3px, 73% 0, 86% 2px, 100% 0, 100% calc(100% - 2px), 91% 100%, 79% calc(100% - 3px), 66% 100%, 52% calc(100% - 2px), 39% 100%, 26% calc(100% - 3px), 12% 100%, 0 calc(100% - 2px));
-  --notch: radial-gradient(circle 5px at 0 50%, transparent 98%, #000) left / 51% 100% no-repeat, radial-gradient(circle 5px at 100% 50%, transparent 98%, #000) right / 51% 100% no-repeat;
+  --gilt: #c9a24a;
+  --gilt-hi: #f0d78a;
+  --gilt-lo: #7a5a1e;
+  --ivory: #efe6d2;
+  --ink: #1b1a24;
+  --rule: rgba(201, 162, 74, 0.5);
+  --glow: 0 0 10px rgba(240, 215, 138, 0.35);
+  --f-display: 'IM Fell English', 'Iowan Old Style', Georgia, serif;
+  --f-sc: 'IM Fell English SC', 'IM Fell English', Georgia, serif;
+  --f-script: 'Pinyon Script', 'Snell Roundhand', cursive;
+  --f-body: 'EB Garamond', Georgia, 'Times New Roman', serif;
+  --hatch: repeating-linear-gradient(45deg, rgba(201, 162, 74, 0.05) 0 1px, transparent 1px 5px);
+  --hatch-ink: repeating-linear-gradient(45deg, rgba(27, 26, 36, 0.05) 0 1px, transparent 1px 5px);
+  --hexclip: polygon(25% 3%, 75% 3%, 100% 50%, 75% 97%, 25% 97%, 0 50%);
+  --torn: none;
+  --notch: none;
+  --corners: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2026%2026%22%3E%3Cg%20transform%3D%22rotate%280%2013%2013%29%22%3E%3Cpath%20d%3D%22M2%2024%20V8%20C2%204%204%202%208%202%20H24%22%20fill%3D%22none%22%20stroke%3D%22%23e8c66a%22%20stroke-width%3D%221.8%22/%3E%3Cpath%20d%3D%22M6%2020%20C6%2012%2012%206%2020%206%22%20fill%3D%22none%22%20stroke%3D%22%23c9a24a%22%20stroke-width%3D%221.1%22/%3E%3Ccircle%20cx%3D%227.5%22%20cy%3D%227.5%22%20r%3D%222.4%22%20fill%3D%22%23f0d78a%22/%3E%3Cpath%20d%3D%22M12%204%20C14%208%2010%2012%204%2012%22%20fill%3D%22none%22%20stroke%3D%22%23c9a24a%22%20stroke-width%3D%220.9%22/%3E%3C/g%3E%3C/svg%3E") top left / 24px no-repeat, url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2026%2026%22%3E%3Cg%20transform%3D%22rotate%2890%2013%2013%29%22%3E%3Cpath%20d%3D%22M2%2024%20V8%20C2%204%204%202%208%202%20H24%22%20fill%3D%22none%22%20stroke%3D%22%23e8c66a%22%20stroke-width%3D%221.8%22/%3E%3Cpath%20d%3D%22M6%2020%20C6%2012%2012%206%2020%206%22%20fill%3D%22none%22%20stroke%3D%22%23c9a24a%22%20stroke-width%3D%221.1%22/%3E%3Ccircle%20cx%3D%227.5%22%20cy%3D%227.5%22%20r%3D%222.4%22%20fill%3D%22%23f0d78a%22/%3E%3Cpath%20d%3D%22M12%204%20C14%208%2010%2012%204%2012%22%20fill%3D%22none%22%20stroke%3D%22%23c9a24a%22%20stroke-width%3D%220.9%22/%3E%3C/g%3E%3C/svg%3E") top right / 24px no-repeat, url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2026%2026%22%3E%3Cg%20transform%3D%22rotate%28180%2013%2013%29%22%3E%3Cpath%20d%3D%22M2%2024%20V8%20C2%204%204%202%208%202%20H24%22%20fill%3D%22none%22%20stroke%3D%22%23e8c66a%22%20stroke-width%3D%221.8%22/%3E%3Cpath%20d%3D%22M6%2020%20C6%2012%2012%206%2020%206%22%20fill%3D%22none%22%20stroke%3D%22%23c9a24a%22%20stroke-width%3D%221.1%22/%3E%3Ccircle%20cx%3D%227.5%22%20cy%3D%227.5%22%20r%3D%222.4%22%20fill%3D%22%23f0d78a%22/%3E%3Cpath%20d%3D%22M12%204%20C14%208%2010%2012%204%2012%22%20fill%3D%22none%22%20stroke%3D%22%23c9a24a%22%20stroke-width%3D%220.9%22/%3E%3C/g%3E%3C/svg%3E") bottom right / 24px no-repeat, url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2026%2026%22%3E%3Cg%20transform%3D%22rotate%28270%2013%2013%29%22%3E%3Cpath%20d%3D%22M2%2024%20V8%20C2%204%204%202%208%202%20H24%22%20fill%3D%22none%22%20stroke%3D%22%23e8c66a%22%20stroke-width%3D%221.8%22/%3E%3Cpath%20d%3D%22M6%2020%20C6%2012%2012%206%2020%206%22%20fill%3D%22none%22%20stroke%3D%22%23c9a24a%22%20stroke-width%3D%221.1%22/%3E%3Ccircle%20cx%3D%227.5%22%20cy%3D%227.5%22%20r%3D%222.4%22%20fill%3D%22%23f0d78a%22/%3E%3Cpath%20d%3D%22M12%204%20C14%208%2010%2012%204%2012%22%20fill%3D%22none%22%20stroke%3D%22%23c9a24a%22%20stroke-width%3D%220.9%22/%3E%3C/g%3E%3C/svg%3E") bottom left / 24px no-repeat;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--night); overflow: hidden; overscroll-behavior: none; }
-body { font-family: var(--f-body); font-weight: 300; color: var(--pale); -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+body { font-family: var(--f-body); font-weight: 400; color: var(--pale); -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
 #game { position: fixed; inset: 0; }
 #game canvas { display: block; touch-action: none; }
 :focus-visible { outline: 2px solid var(--vane); outline-offset: 2px; }
@@ -439,3 +451,219 @@ button:disabled { cursor: default; }
 .atmo.rainy .vignette { background: radial-gradient(ellipse at 50% 48%, rgba(20, 30, 44, .12) 40%, rgba(6, 10, 18, .6) 100%); }
 .journal-body ul.perks { margin: 4px 0 10px; padding-left: 18px; }
 .journal-body ul.perks li { margin: 3px 0; line-height: 1.35; }
+
+/* ==========================================================================
+   Gilt & Cameo, by night
+   The Victorian parlour after dark: midnight-blue leather, double gilt rules with
+   flourished corners, ivory pages with engraved hatching, cameo portraits,
+   copperplate names, and gilt hexagon medallions in the dock.
+   ========================================================================== */
+
+/* --- Surfaces: framed leather -------------------------------------------- */
+.gs {
+  clip-path: none;
+  color: var(--pale);
+  background: var(--corners), var(--hatch), linear-gradient(180deg, var(--sheet-hi), var(--sheet) 75%);
+  border: 1.5px solid var(--gilt);
+  outline: 1px solid rgba(201, 162, 74, 0.45);
+  outline-offset: -6px;
+  box-shadow: 0 0 0 3px var(--sheet-lo), 0 0 0 4px rgba(201, 162, 74, 0.35), 0 10px 26px rgba(0, 0, 0, 0.6);
+  border-radius: 2px;
+}
+.ruled { outline: 1px solid rgba(201, 162, 74, 0.45); outline-offset: -6px; }
+@keyframes paste { 0% { opacity: 0; transform: translateY(12px) scale(.98); } 100% { opacity: 1; transform: none; } }
+
+/* --- Buttons: navy leather plaques; the primary one is brass -------------- */
+.panel .actions button, .journal .actions button, .modal button, .list-row button, .dialogue .choices button,
+.title-buttons button, .creator-actions button, .mg-intro button, .fight-actions button, .seg button, .opt button {
+  -webkit-mask: none; mask: none; border-radius: 3px;
+  font: 400 16px/1.1 var(--f-display); letter-spacing: .01em; color: var(--gilt-hi);
+  background: var(--hatch), linear-gradient(180deg, #1f3263, #0e1a36);
+  box-shadow: inset 0 0 0 1px var(--gilt), inset 0 0 0 3px #0a1226, inset 0 0 0 4px rgba(201, 162, 74, .3), 0 2px 4px rgba(0, 0, 0, .5);
+  text-shadow: 0 1px 1px #000;
+}
+.panel .actions button.primary, .journal .actions button.primary, .modal button.primary, .list-row button:first-child:last-child,
+.dialogue .choices button:first-child, .title-buttons button.primary, .creator-actions button.primary, .mg-intro button.primary, .fight-actions button.primary {
+  color: #0e1a36; text-shadow: 0 1px 0 rgba(255, 240, 200, .6);
+  background: radial-gradient(ellipse at 40% 20%, #fbecbd, #d9b862 45%, #a07a32 100%);
+  box-shadow: inset 0 0 0 1px #7a5a1e, inset 0 0 0 3px rgba(255, 240, 200, .35), 0 2px 5px rgba(0, 0, 0, .55);
+}
+.panel .actions button:active, .journal .actions button:active, .modal button:active, .list-row button:active, .dialogue .choices button:active,
+.title-buttons button:active, .creator-actions button:active, .mg-intro button:active, .fight-actions button:active, .seg button:active, .opt button:active { transform: translateY(1px); filter: brightness(1.15); }
+.panel .actions button:disabled, .list-row button:disabled, .creator-actions button:disabled, .fight-actions button:disabled {
+  color: rgba(236, 227, 204, .42); text-shadow: none;
+  background: repeating-linear-gradient(135deg, rgba(201, 162, 74, .08) 0 4px, transparent 4px 8px), #0c1529;
+  box-shadow: inset 0 0 0 1px rgba(201, 162, 74, .3);
+}
+
+/* --- Top bar ---------------------------------------------------------------- */
+.topbar { padding: 8px 14px 9px; }
+.tb-time .time, .tb-purse .money { font: 400 22px/1 var(--f-display); color: var(--gilt-hi); text-shadow: 0 1px 2px #000; }
+.tb-time .date, .tb-purse .rent { font: italic 400 12.5px/1.25 var(--f-body); color: #cdbf9c; }
+.tb-needs .need { color: var(--gilt); }
+.tb-needs .need svg { filter: none; }
+.tb-needs .need .bar { background: rgba(201, 162, 74, .16); border-radius: 0; height: 4px; box-shadow: inset 0 0 0 1px rgba(201, 162, 74, .3); }
+.tb-needs .need .bar i { background: linear-gradient(180deg, var(--gilt-hi), var(--gilt) 55%, var(--gilt-lo)); box-shadow: none; }
+
+/* Goals: an ivory label in a gilt frame. */
+.goals { transform: translateX(-50%); font: italic 400 15px/1.2 var(--f-display); color: var(--ink);
+  background: var(--hatch-ink), linear-gradient(180deg, #f6efde, var(--ivory)); border: 1px solid var(--gilt);
+  box-shadow: 0 0 0 3px var(--sheet), 0 0 0 4px rgba(201, 162, 74, .6), 0 6px 14px rgba(0, 0, 0, .55); border-radius: 2px; }
+.goals:active { transform: translateX(-50%) scale(.97); }
+.goals[aria-expanded="true"] { transform: translateX(-50%); }
+.goals .goals-rest { font: 400 13px/1.35 var(--f-body); color: #4a4232; }
+
+/* --- The dock: gilt hexagon medallions --------------------------------------- */
+.dock { background: linear-gradient(180deg, transparent, rgba(4, 7, 14, .78) 45%); }
+.tok { min-height: 66px; min-width: 66px; gap: 4px; padding: 0; }
+.tok .hex { position: relative; width: 52px; height: 46px; display: grid; place-items: center; clip-path: var(--hexclip);
+  background: linear-gradient(160deg, #fbecbd, #c9a24a 40%, #7a5a1e 85%); transition: transform .35s cubic-bezier(.3, 1.4, .5, 1); filter: drop-shadow(0 3px 5px rgba(0, 0, 0, .7)); }
+.tok .hexin { width: 44px; height: 39px; display: grid; place-items: center; clip-path: var(--hexclip); color: var(--gilt-hi);
+  background: radial-gradient(circle at 40% 30%, #253a6e, #0f1a33 65%, #08101f); }
+.tok .hexin svg { width: 24px; height: 24px; }
+.tok.watch .hexin svg { width: 36px; height: 36px; }
+.tok .lab { font: italic 400 14px/1 var(--f-display); color: var(--gilt-hi); text-shadow: 0 1px 2px #000, 0 0 6px #000; }
+.tok:active .hex, .tok.open .hex, .tok.flip .hex, .tok.whirl .hex { transform: rotate(60deg) scale(1.06); }
+.tok .cnt { position: absolute; right: 2px; bottom: 3px; min-width: 16px; height: 16px; padding: 0 3px; border-radius: 8px; font: 600 11px/16px var(--f-body); color: #0e1a36; background: var(--gilt-hi); text-align: center; }
+.tok .cnt:empty, .tok .cnt[data-zero] { display: none; }
+.tok .w-case { fill: #0f1a33; stroke: var(--gilt); stroke-width: 1.5; }
+.tok .w-face { fill: var(--ivory); }
+.tok .w-crown { fill: var(--gilt); }
+.tok .w-ticks line { stroke: #3a3224; stroke-width: 1.2; }
+.tok .w-hour { stroke: #0e1a36; stroke-width: 2.2; stroke-linecap: round; }
+.tok .w-min { stroke: #0e1a36; stroke-width: 1.4; stroke-linecap: round; }
+.tok .w-pin { fill: var(--ember-deep); }
+.journal-btn[data-letters]:not([data-letters=""])::after { background: var(--ember); color: #1b1208; box-shadow: 0 0 0 2px var(--sheet), 0 0 10px var(--ember); }
+
+/* --- Place panel ----------------------------------------------------------------- */
+.panel { padding: 18px 20px 16px; }
+.panel h2 { font: 400 24px/1.1 var(--f-sc); color: var(--gilt-hi); text-shadow: 0 1px 2px #000; letter-spacing: .02em; }
+.panel p { font-size: 16px; color: var(--pale); }
+
+/* --- Dialogue: a cameo, a copperplate name, an ivory card ----------------------- */
+.dialogue { padding: 50px 20px 14px; color: var(--ink); clip-path: none; margin-top: 60px;
+  background: var(--hatch-ink), linear-gradient(180deg, #f7f0df, var(--ivory));
+  border: 1px solid var(--gilt);
+  box-shadow: 0 0 0 5px var(--sheet), 0 0 0 6px var(--gilt), 0 0 0 8px var(--sheet-lo), 0 14px 30px rgba(0, 0, 0, .7); border-radius: 2px; }
+.dialogue.narration { padding-top: 18px; }
+.dialogue .cameo { position: absolute; left: 14px; top: -62px; width: 92px; height: 110px; border-radius: 50%; overflow: hidden;
+  background: radial-gradient(ellipse at 50% 35%, #3a5490, #17264a 60%, #0a1226);
+  box-shadow: 0 0 0 3px var(--sheet), 0 0 0 6px var(--gilt), 0 0 0 7px #fbecbd, 0 0 0 9px var(--sheet-lo), 0 8px 18px rgba(0, 0, 0, .7); }
+.dialogue .cameo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.dialogue .cameo .mono { display: grid; place-items: center; width: 100%; height: 100%; font: 400 44px var(--f-script); color: var(--gilt-hi); }
+.dialogue .speaker { position: absolute; left: 118px; top: -36px; font: 400 30px/1 var(--f-script); color: var(--gilt-hi); text-shadow: 0 2px 3px #000, 0 0 10px rgba(0, 0, 0, .8); white-space: nowrap; }
+.dialogue .text { font: 400 17px/1.5 var(--f-body); color: var(--ink); }
+.dialogue.narration .text { font-style: italic; }
+.dialogue .hint { font: italic 400 13.5px var(--f-display); color: #7a6a4a; }
+
+/* --- Toasts, bubbles, floaters --------------------------------------------- */
+.toast { font: italic 400 16px/1.35 var(--f-display); color: var(--pale); }
+.bubble { font: 400 14px/1.35 var(--f-body); color: var(--ink); background: linear-gradient(180deg, #f7f0df, var(--ivory)); border: 1px solid var(--gilt);
+  box-shadow: 0 0 0 2px var(--sheet), 0 4px 10px rgba(0, 0, 0, .6); transform: translate(-50%, -100%); border-radius: 2px; }
+.bubble::after { background: var(--ivory); }
+.bubble b { font: 400 17px/1 var(--f-script); color: #7a5a1e; margin-bottom: 2px; }
+.floater { font: 400 18px var(--f-display); }
+.floater.gain { color: var(--gilt-hi); text-shadow: 0 0 8px rgba(240, 215, 138, .8), 0 1px 2px #000; }
+
+/* --- The journal: a leather-bound book with ribbon tabs -------------------------- */
+.journal, .modal { background: radial-gradient(ellipse at center, rgba(4, 7, 14, .55), rgba(4, 7, 14, .88)); }
+.journal-sheet h2 { font: 400 28px/1.1 var(--f-sc); color: var(--gilt-hi); text-shadow: 0 1px 2px #000; }
+.journal-sheet h3 { font: 400 15px var(--f-sc); letter-spacing: .08em; text-transform: none; color: var(--gilt); font-variant: normal; }
+.journal-sheet.diary { color: var(--ink); border-radius: 3px; padding: 22px 22px 18px;
+  background: var(--hatch-ink), linear-gradient(180deg, #f7f0df, var(--ivory));
+  box-shadow: inset 0 0 0 1px rgba(122, 90, 30, .5), 0 0 0 8px var(--sheet), 0 0 0 9px var(--gilt), 0 0 0 12px var(--sheet-lo), 0 18px 40px rgba(0, 0, 0, .7); }
+.journal-sheet.diary::before { display: none; }
+.journal-sheet.diary h2 { color: var(--sheet); font: 400 30px var(--f-script); text-align: center; }
+.journal-sheet.diary h3 { color: #6a4e1a; border-bottom: 1px solid rgba(201, 162, 74, .6); padding-bottom: 3px; margin-top: 16px; }
+.journal-sheet.diary h3::before { content: "❦ "; color: var(--gilt); }
+.journal-sheet.diary .meta, .journal-sheet.diary p { color: #3a3428; }
+.journal-sheet.diary .ribbon { background: linear-gradient(180deg, #7a2a2a, #a23a30); }
+.journal-sheet.diary .actions button { color: var(--gilt-hi); }
+.tabs { display: flex; gap: 4px; margin: 12px -4px 4px; border-bottom: 2px solid var(--gilt); }
+.tabs button { flex: 1; min-height: 42px; padding: 0 6px; font: 400 15px var(--f-sc); color: #e8d6a8; border-radius: 6px 6px 0 0;
+  background: linear-gradient(180deg, #1f3263, #0e1a36); box-shadow: inset 0 0 0 1px rgba(201, 162, 74, .7); }
+.tabs button[aria-selected="true"] { color: var(--sheet); background: linear-gradient(180deg, #fbecbd, #d9b862); box-shadow: inset 0 0 0 1px #7a5a1e; }
+.skillrow { margin: 10px 0 12px; }
+.sk-h { display: flex; justify-content: space-between; align-items: baseline; font: 400 17px var(--f-display); }
+.sk-h b { font: 400 18px var(--f-display); font-variant-numeric: lining-nums; }
+.sk-h small { font-size: 13px; color: #7a6a4a; }
+.sk-bar { position: relative; height: 7px; margin-top: 4px; background: #ddd0b2; box-shadow: inset 0 0 0 1px rgba(122, 90, 30, .55); }
+.sk-bar i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(180deg, var(--gilt-hi), var(--gilt) 55%, var(--gilt-lo)); }
+.sk-sub { font: italic 400 13px/1.3 var(--f-body); color: #5a4e38; margin-top: 3px; }
+.sk-sub em { font-style: normal; color: #6a4e1a; }
+.needrow { display: grid; grid-template-columns: 70px 1fr 30px; align-items: center; gap: 10px; margin: 6px 0; font-size: 15px; }
+.needrow b { text-align: right; font: 400 16px var(--f-display); }
+.journal-body ul.perks { padding-left: 18px; }
+.journal-sheet.diary ul.perks li { color: #2a2620; }
+.journal-sheet.diary .opt { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid rgba(201, 162, 74, .45); font: 400 17px var(--f-display); color: var(--ink); }
+.journal-sheet.diary .opt button { min-width: 120px; }
+
+/* --- Lists (shops, the bag, people) --------------------------------------------- */
+.lr-label { font: 400 18px/1.2 var(--f-display); color: var(--gilt-hi); }
+.lr-sub { color: #b8bccb; font-size: 14px; }
+.list-row { border-bottom: 1px solid rgba(201, 162, 74, .22); }
+.list-tabs { margin-top: 10px; }
+.doll { display: grid; grid-template-columns: 1fr 70px 1fr; gap: 8px; align-items: center; margin: 12px 0 4px; }
+.doll .col { display: grid; gap: 6px; }
+.doll .fig svg { width: 100%; height: 150px; fill: rgba(201, 162, 74, .55); stroke: rgba(201, 162, 74, .55); }
+.slot { padding: 6px 8px; min-height: 48px; font-size: 11.5px; color: #cdbf9c; background: linear-gradient(180deg, #17264a, #0e1a36); box-shadow: inset 0 0 0 1px rgba(201, 162, 74, .6), inset 0 0 0 3px #0a1226; border-radius: 2px; }
+.slot span { display: block; font: 400 12px var(--f-sc); letter-spacing: .04em; color: var(--gilt); }
+.slot b { display: block; font: 400 14px/1.15 var(--f-display); color: var(--pale); }
+.slot.empty b { font-style: italic; color: rgba(236, 227, 204, .4); }
+
+/* --- Reports and stamps ---------------------------------------------------------- */
+.modal-body p { font-size: 16.5px; }
+.stamp-slot.on { font: 400 22px var(--f-sc); color: #f6d0b0; border: 0; padding: 14px 16px; border-radius: 50%; text-shadow: 0 1px 1px #000;
+  background: radial-gradient(circle at 40% 35%, #d84a3a, #8a1a14 70%); box-shadow: inset 0 0 0 4px #a2261c, inset 0 0 0 6px #6a1410, 0 4px 10px rgba(0, 0, 0, .6); }
+
+/* --- Celebrations: gilt frames, wax seals ---------------------------------------- */
+.cel .tt { font: 400 40px/1.05 var(--f-display); color: var(--gilt-hi); text-shadow: 0 0 18px rgba(240, 215, 138, .6), 0 2px 3px #000; }
+.cel .k { font: 400 14px var(--f-sc); color: var(--gilt); letter-spacing: .12em; }
+.cel .ss { font: italic 400 15px/1.4 var(--f-body); color: #d8cdb0; }
+.cel .motes span { background: var(--gilt-hi); box-shadow: 0 0 10px var(--gilt-hi); }
+.cel-promotion .stamp { font: 400 20px var(--f-sc); color: #f6d0b0; border: 0; border-radius: 50%; padding: 18px 12px; background: radial-gradient(circle at 40% 35%, #d84a3a, #8a1a14 70%); box-shadow: inset 0 0 0 4px #a2261c, inset 0 0 0 6px #6a1410, 0 6px 14px rgba(0, 0, 0, .6); text-shadow: 0 1px 1px #000; }
+.cel-goal .seal { color: #f6d0b0; font-family: var(--f-sc); background: radial-gradient(circle at 38% 35%, #d84a3a, #8a1a14 70%); box-shadow: inset 0 0 0 4px #a2261c, inset 0 0 0 6px #6a1410, 0 6px 14px rgba(0, 0, 0, .6); }
+.cel-goal .wisp { background: linear-gradient(90deg, transparent, rgba(240, 215, 138, .25), transparent); }
+.cel-skill .sigil circle, .cel-skill .sigil path { stroke: var(--gilt-hi); }
+
+/* --- Title and character creation ----------------------------------------------- */
+.title-screen h1 { font-family: var(--f-display); color: var(--gilt-hi); }
+.title-screen .kicker, .title-screen .sub { font-family: var(--f-sc); color: var(--gilt); }
+.creator h2 { font-family: var(--f-sc); color: var(--gilt-hi); }
+.creator h3 { font-family: var(--f-sc); color: var(--gilt); }
+.seg button.on { color: var(--sheet); background: linear-gradient(180deg, #fbecbd, #d9b862); }
+
+/* --- Tablets and landscape: the dock stands on the right; panels open beside the street --- */
+@media (min-aspect-ratio: 5/4) {
+  .dock { left: auto; top: 0; bottom: 0; right: 0; width: calc(96px + env(safe-area-inset-right)); flex-direction: column; justify-content: center; gap: 10px;
+    padding: 12px max(8px, env(safe-area-inset-right)) 12px 8px; background: linear-gradient(90deg, transparent, rgba(4, 7, 14, .7) 40%); }
+  .topbar { right: calc(104px + env(safe-area-inset-right)); max-width: 760px; }
+  .goals { left: calc(50% - 50px); }
+  .panel, .dialogue { left: max(16px, env(safe-area-inset-left)); translate: none; width: min(46vw, 540px); bottom: max(16px, env(safe-area-inset-bottom)); }
+  .journal, .modal, .listsheet { place-items: center end; padding-right: calc(112px + env(safe-area-inset-right)); }
+  .journal-sheet { width: min(48vw, 500px); }
+  .modal { place-items: center; padding-right: 112px; }
+  .toast { left: calc(50% - 48px); }
+}
+@media (min-aspect-ratio: 5/4) and (max-height: 520px) {
+  .tok { min-height: 54px; }
+  .tok .lab { display: none; }
+  .dialogue { padding-top: 40px; }
+  .dialogue .cameo { width: 72px; height: 86px; top: -48px; }
+  .dialogue .speaker { left: 96px; top: -30px; font-size: 26px; }
+  .dialogue .text { font-size: 15.5px; }
+}
+/* Tablets in portrait: keep sheets a readable width, a little larger type. */
+@media (min-width: 700px) and (max-aspect-ratio: 5/4) {
+  .panel, .dialogue { width: min(calc(100% - 40px), 600px); }
+  .journal-sheet { width: min(100%, 560px); }
+  .dialogue .text { font-size: 18px; }
+}
+/* Big screens: scale the interface up so it reads at arm's length. */
+@media (min-width: 1000px) and (min-height: 700px) {
+  .topbar, .goals, .dock, .panel, .journal-sheet, .dialogue, .toast { zoom: 1.28; }
+}
+.creator-sheet { background: var(--corners), var(--hatch), linear-gradient(180deg, var(--sheet-hi), var(--sheet) 80%) !important; border-top: 1.5px solid var(--gilt); box-shadow: 0 0 0 3px var(--sheet-lo), 0 0 0 4px rgba(201, 162, 74, .35), 0 -10px 30px rgba(0, 0, 0, .6); }
+.creator .sname { font-family: var(--f-display); color: var(--gilt-hi); }
+.creator input { font-family: var(--f-display); border-color: rgba(201, 162, 74, .6); }
+.stepper button { box-shadow: inset 0 0 0 1px var(--gilt) !important; color: var(--gilt-hi); }

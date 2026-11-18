@@ -2,6 +2,29 @@ import { addNeed } from './needs';
 import type { GameState, NeedId } from './state';
 
 export type Outfit = 'plain' | 'work' | 'sunday' | 'coat';
+/** Where something is worn. Clothes are the outfit; the rest are kept in `equip`. */
+export type Slot = 'hat' | 'cloak' | 'clothes' | 'neck' | 'wrist' | 'weapon';
+export const SLOT_NAMES: Record<Slot, string> = { hat: 'Hat', cloak: 'Cloak', clothes: 'Clothes', neck: 'Necklace', wrist: 'Wristband', weapon: 'Weapon' };
+
+/** What worn things do. */
+export interface Gear {
+  /** Extra damage per blow in fights. */
+  fight?: number;
+  /** First impressions, all classes (negative for menacing things with respectable folk). */
+  dress?: number;
+  /** Multiplies the chance of being robbed. */
+  robbery?: number;
+  /** Rain costs no Health. */
+  rain?: boolean;
+  /** Counts as Occult for seeing the dead. */
+  occult?: number;
+  /** Sleeping rough rests better. */
+  warm?: boolean;
+  /** Look: hat kind and colour, cloak colour, weapon in hand. */
+  hat?: 'cap' | 'top' | 'bonnet' | 'bowler';
+  color?: number;
+  weapon?: 'stick' | 'cudgel' | 'knife' | 'knuckles';
+}
 export const OUTFIT_NAMES: Record<Outfit, string> = { plain: 'Your travelling clothes', work: "Docker's jacket", sunday: 'Sunday best', coat: 'Respectable coat' };
 
 export interface ItemDef {
@@ -19,6 +42,9 @@ export interface ItemDef {
   furniture?: boolean;
   /** Clothes you can wear. */
   outfit?: Outfit;
+  /** Equipment: the slot it goes in and what it does. */
+  slot?: Slot;
+  gear?: Gear;
 }
 
 export const ITEMS: Record<string, ItemDef> = {
@@ -46,6 +72,22 @@ export const ITEMS: Record<string, ItemDef> = {
   work: { id: 'work', name: "Docker's jacket", price: 0.3, upgrade: true, outfit: 'work', blurb: 'Dockers trust you in it; Cargo Stacking plays as if Strength were 1 higher.' },
   sunday: { id: 'sunday', name: 'Sunday best', price: 0.8, upgrade: true, outfit: 'sunday', blurb: 'Respectable folk warm to you; the market mocks you; robbers think you are rich.' },
   trinket: { id: 'trinket', name: 'Carved trinket', price: 0.12, blurb: 'A little ship carved from driftwood. Moss will buy it.' },
+  // Equipment: bought once, worn in a slot.
+  flatcap: { id: 'flatcap', name: 'Tweed flat cap', price: 0.08, upgrade: true, slot: 'hat', gear: { hat: 'cap', color: 0x4a4236, dress: 0.01 }, blurb: 'Every docker in London owns one. Blend in.' },
+  bowler: { id: 'bowler', name: 'Bowler hat', price: 0.35, upgrade: true, slot: 'hat', gear: { hat: 'bowler', color: 0x1a1a1e, dress: 0.04 }, blurb: 'Clerks and foremen wear them. People assume you can read.' },
+  tophat: { id: 'tophat', name: 'Silk top hat', price: 0.7, upgrade: true, slot: 'hat', gear: { hat: 'top', color: 0x121216, dress: 0.06, robbery: 1.2 }, blurb: 'A gentleman\'s hat. Footpads think so too.' },
+  bonnet: { id: 'bonnet', name: 'Straw bonnet', price: 0.25, upgrade: true, slot: 'hat', gear: { hat: 'bonnet', color: 0xc8b088, dress: 0.04 }, blurb: 'Ribboned and respectable.' },
+  oilskin: { id: 'oilskin', name: 'Oilskin cape', price: 0.4, upgrade: true, slot: 'cloak', gear: { color: 0x3a3a2a, rain: true }, blurb: 'Rain runs off it: no Health lost to the wet.' },
+  woolcloak: { id: 'woolcloak', name: 'Heavy wool cloak', price: 0.5, upgrade: true, slot: 'cloak', gear: { color: 0x2a2a3a, warm: true, dress: 0.02 }, blurb: 'Sleep rough without the cold getting in.' },
+  locket: { id: 'locket', name: 'Mourning locket', price: 0.3, upgrade: true, slot: 'neck', gear: { occult: 2 }, blurb: 'A curl of someone\'s hair under glass. The dead notice it (+2 Occult for seeing them).' },
+  medal: { id: 'medal', name: 'St. Christopher medal', price: 0.2, upgrade: true, slot: 'neck', gear: { robbery: 0.8 }, blurb: 'For travellers. Footpads are superstitious (a fifth less likely to rob you).' },
+  cuff: { id: 'cuff', name: 'Leather wrist cuff', price: 0.15, upgrade: true, slot: 'wrist', gear: { fight: 1 }, blurb: 'Steadies the wrist: +1 damage a blow.' },
+  bracelet: { id: 'bracelet', name: 'Copper bracelet', price: 0.12, upgrade: true, slot: 'wrist', gear: { dress: 0.03 }, blurb: 'Polished bright. A small vanity people like.' },
+  stick: { id: 'stick', name: 'Blackthorn stick', price: 0.2, upgrade: true, slot: 'weapon', gear: { fight: 2, weapon: 'stick' }, blurb: 'A walking stick until it isn\'t: +2 damage a blow.' },
+  cudgel: { id: 'cudgel', name: 'Lead-weighted cudgel', price: 0.35, upgrade: true, slot: 'weapon', gear: { fight: 4, weapon: 'cudgel', dress: -0.04, robbery: 0.75 }, blurb: '+4 damage a blow; robbers think twice; respectable people cross the street.' },
+  knife: { id: 'knife', name: 'Clasp knife', price: 0.3, upgrade: true, slot: 'weapon', gear: { fight: 3, weapon: 'knife', dress: -0.03 }, blurb: '+3 damage a blow. Constables frown at it.' },
+  knuckles: { id: 'knuckles', name: 'Brass knuckles', price: 0.25, upgrade: true, slot: 'weapon', gear: { fight: 3, weapon: 'knuckles' }, blurb: '+3 damage a blow, and they fit in a pocket.' },
+  dreadful: { id: 'dreadful', name: 'Penny dreadful', price: 0.01, use: { social: 5 }, verb: 'Read', blurb: '"Varney the Vampyre, part XLI." Lurid, cheap, impossible to put down.' },
   // Second-hand furniture from Moss, for Hester's room.
   rug: { id: 'rug', name: 'Turkey rug', price: 0.4, upgrade: true, furniture: true, blurb: 'Comfort: the room tops up Social while you are home.' },
   curtains: { id: 'curtains', name: 'Velvet curtains', price: 0.35, upgrade: true, furniture: true, blurb: 'Comfort; and darker nights mean deeper sleep.' },
@@ -65,10 +107,10 @@ export interface Shop {
 }
 
 export const SHOPS: Record<string, Shop> = {
-  market: { name: 'Saltwharf Market', keeper: 'the stallholders', stock: ['potato', 'apple', 'bread', 'onion', 'eel', 'mutton', 'eelpie', 'meatpie'], buys: 0 },
+  market: { name: 'Saltwharf Market', keeper: 'the stallholders', stock: ['potato', 'apple', 'bread', 'onion', 'eel', 'mutton', 'eelpie', 'meatpie', 'dreadful'], buys: 0 },
   hester: { name: "Pell's Chandlery", keeper: 'Mrs. Pell', stock: ['candle', 'candle2', 'coal', 'bandage', 'tonic', 'mattress', 'chest'], buys: 0 },
-  clothier: { name: 'Rag & Bone Clothiers', keeper: 'Lizzie Barlow', stock: ['work', 'sunday', 'coat', 'scarf', 'gloves', 'apron', 'boots'], buys: 0 },
-  pawnbroker: { name: 'Moss the Pawnbroker', keeper: 'Moss', stock: ['rug', 'curtains', 'mirror', 'bookshelf', 'workbench'], buys: 0.4 },
+  clothier: { name: 'Rag & Bone Clothiers', keeper: 'Lizzie Barlow', stock: ['work', 'sunday', 'coat', 'flatcap', 'bowler', 'bonnet', 'tophat', 'oilskin', 'woolcloak', 'cuff', 'bracelet', 'scarf', 'gloves', 'apron', 'boots'], buys: 0 },
+  pawnbroker: { name: 'Moss the Pawnbroker', keeper: 'Moss', stock: ['stick', 'cudgel', 'knife', 'knuckles', 'locket', 'medal', 'rug', 'curtains', 'mirror', 'bookshelf', 'workbench'], buys: 0.4 },
 };
 
 /** Item slots: Strength makes for a bigger load. */
@@ -129,3 +171,22 @@ export function sell(s: GameState, shop: Shop, id: string, rate = shop.buys): nu
   s.money = Math.round((s.money + p) * 100) / 100;
   return p;
 }
+
+/** Everything worn, summed. */
+export function gear(s: GameState): Required<Pick<Gear, 'fight' | 'dress' | 'robbery' | 'occult'>> & { rain: boolean; warm: boolean } {
+  const out = { fight: 0, dress: 0, robbery: 1, occult: 0, rain: false, warm: false };
+  for (const id of Object.values(s.equip ?? {})) {
+    const g = id ? ITEMS[id]?.gear : undefined;
+    if (!g) continue;
+    out.fight += g.fight ?? 0;
+    out.dress += g.dress ?? 0;
+    out.robbery *= g.robbery ?? 1;
+    out.occult += g.occult ?? 0;
+    out.rain ||= !!g.rain;
+    out.warm ||= !!g.warm;
+  }
+  return out;
+}
+
+/** Food is anything you eat or cook with; the rest is "other". */
+export const isFood = (id: string) => ['potato', 'bread', 'apple', 'eelpie', 'meatpie', 'onion', 'eel', 'mutton', 'stew', 'broth'].includes(id);
