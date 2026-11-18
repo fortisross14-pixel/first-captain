@@ -14,6 +14,12 @@ export const FIRED_AT = -6;
 /** Days before an employer will take you back after firing you. */
 export const REHIRE_BAN_DAYS = 28;
 
+/** Autopilot pays one grade below the last played shift, and never above Good. */
+export function autopilotGrade(last: Grade): Grade {
+  const order: Grade[] = ['excellent', 'good', 'fair', 'poor'];
+  return order[Math.min(order.length - 1, Math.max(1, order.indexOf(last) + 1))];
+}
+
 export function gradeFor(percent: number): Grade {
   if (percent >= 0.9) return 'excellent';
   if (percent >= 0.65) return 'good';

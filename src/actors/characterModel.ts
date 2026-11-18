@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { mat } from '../world/materials';
+import { mergeChildren } from '../world/merge';
 
 export interface Look {
   skin: number;
@@ -121,6 +122,7 @@ export function createCharacter(look: Look): Rig {
     head.add(bonnet);
   }
   body.add(head);
+  mergeChildren(root);
 
   return { root, body, legL: legs[0], legR: legs[1], armL: arms[0], armR: arms[1], head };
 }

@@ -49,7 +49,7 @@ const url = process.argv[2] || 'http://localhost:4173/first-captain/?debug';
       const r = e.getBoundingClientRect();
       return r.width * r.height;
     };
-    const hud = ['.col.left', '.col.right', '.bottom-left', '.speed'].reduce((a, s) => a + area(s), 0);
+    const hud = ['.topbar', '.goals', '.bottom-left', '.speed'].reduce((a, s) => a + area(s), 0);
     const n = G.npcs.find((x) => x.visible);
     const p = n.walker.rig.root.position;
     const cam = G.rig.camera;

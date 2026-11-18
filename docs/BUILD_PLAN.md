@@ -126,6 +126,10 @@ After the slice: more districts, factions, the main story and the Fog Clock, bus
 - [x] Balancing pass: conversations give about 40% less, night robberies are a third rarer. A full pass on pay, prices and needs comes once the slice has been played on real phones
 - [x] Deploy workflow now names the `github-pages` environment, so the live link shows on the repository page and in each run
 
+## Audit fixes (after M7)
+
+The P1 list from `docs/AUDIT_2026-11-18.md`, done: money sinks and upgrades, relationship rewards and resident voices, goals and the morning summary, the autopilot rule, shift reminders, the slim HUD, touch fixes, and merged geometry (541 → 91 draw calls). Next: the visual and style pass.
+
 ## After the slice
 
 More districts, factions, the main story and the Fog Clock, businesses, marriage, children and aging.

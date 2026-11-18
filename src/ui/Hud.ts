@@ -16,6 +16,15 @@ export interface Action {
 
 const NEEDS: NeedId[] = ['hunger', 'rest', 'social', 'health'];
 
+/** Small line icons so the needs need no text labels. */
+const svg = (d: string) => `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const ICONS: Record<NeedId, string> = {
+  hunger: svg('<path d="M4 13c0-4 3.6-7 8-7s8 3 8 7v4H4z"/><path d="M8 10l1 2M12 9v3M16 10l-1 2"/>'),
+  rest: svg('<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>'),
+  social: svg('<circle cx="8.5" cy="8" r="3"/><circle cx="16.5" cy="9" r="2.5"/><path d="M3 19c.5-3.5 2.8-5 5.5-5s5 1.5 5.5 5M14 18.5c.3-2.4 1.6-3.6 3.5-3.6s3 1.2 3.5 3.6"/>'),
+  health: svg('<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>'),
+};
+
 /** In-game overlay: clock, purse, needs, objectives, place panel, journal, toasts and fades. */
 export class Hud {
   private readonly el: HTMLElement;
@@ -26,24 +35,17 @@ export class Hud {
     root.insertAdjacentHTML(
       'beforeend',
       `<div class="hud" hidden>
-        <div class="col left">
-          <div class="card clock">
-            <div class="district"></div>
-            <div class="date"></div>
-            <div class="time"></div>
-          </div>
-          <div class="card needs">${NEEDS.map(
-            (n) => `<div class="need" data-need="${n}"><span>${NEED_NAMES[n]}</span><div class="bar"><i></i></div></div>`,
+        <div class="topbar card">
+          <div class="tb-time"><div class="time"></div><div class="date"></div></div>
+          <div class="tb-needs">${NEEDS.map(
+            (n) => `<div class="need" data-need="${n}" role="img" aria-label="${NEED_NAMES[n]}" title="${NEED_NAMES[n]}">${ICONS[n]}<div class="bar"><i></i></div></div>`,
           ).join('')}</div>
+          <div class="tb-purse"><div class="money"></div><div class="rent"></div></div>
         </div>
-        <div class="col right">
-          <div class="card purse">
-            <div class="money"></div>
-            <div class="rent"></div>
-            <div class="jobline"></div>
-          </div>
-          <div class="card objectives" hidden><div class="obj-title">To do</div><ul></ul></div>
-        </div>
+        <button class="goals" aria-expanded="false" hidden>
+          <span class="goals-first"></span>
+          <span class="goals-rest"></span>
+        </button>
         <div class="bottom-left">
           <button class="journal-btn" aria-label="Open journal">Journal</button>
           <button class="bag-btn" aria-label="Open bag">Bag</button>
@@ -51,6 +53,7 @@ export class Hud {
         </div>
         <button class="speed" aria-label="Change time speed">1×</button>
         <div class="toast" role="status"></div>
+        <div class="bubbles"></div>
         <div class="panel" hidden>
           <h2></h2>
           <p></p>
@@ -95,8 +98,20 @@ export class Hud {
     this.q('.journal-btn').addEventListener('click', () => (this.journalOpen = true));
     this.q('.close-journal').addEventListener('click', () => (this.journalOpen = false));
     this.q('.bag-btn').addEventListener('click', () => this.onBag?.());
+    const goals = this.q('.goals');
+    goals.addEventListener('click', () => {
+      goals.setAttribute('aria-expanded', String(goals.getAttribute('aria-expanded') !== 'true'));
+      this.renderGoals();
+    });
     this.q('.people-btn').addEventListener('click', () => this.onPeople?.());
     this.q('.list-close').addEventListener('click', () => (this.q('.listsheet').hidden = true));
+    // Tap the dark backdrop around a sheet to close it.
+    for (const sel of ['.journal:not(.listsheet)', '.listsheet']) {
+      const el = this.q(sel);
+      el.addEventListener('click', (e) => {
+        if (e.target === el) el.hidden = true;
+      });
+    }
     this.q('.sound-toggle').addEventListener('click', () => this.onSound && (this.q('.sound-toggle').textContent = this.onSound()));
     this.q('.quality-toggle').addEventListener('click', () => this.onQuality && (this.q('.quality-toggle').textContent = this.onQuality()));
     this.q('.journal .save').addEventListener('click', () => this.onSave());
@@ -192,34 +207,43 @@ export class Hud {
       const e = this.q(sel);
       if (e.textContent !== text) e.textContent = text;
     };
-    set('.district', district);
-    set('.date', date);
+    set('.date', `${date.replace(/ \d{4}$/, '')} · ${district}`);
     set('.time', time);
     set('.money', `£${state.money.toFixed(2)}`);
-    set('.jobline', jobLine);
+    this.jobLine = jobLine;
     set('.rent', !state.housed
-      ? `Homeless · Grubb wants £${state.rent.arrears.toFixed(2)}`
-      : state.rent.graceUntil !== null ? 'Rent overdue!' : `Rent £${state.rent.amount.toFixed(2)} due ${rentDue}`);
+      ? `Homeless`
+      : state.rent.graceUntil !== null ? 'Rent overdue!' : `Rent ${rentDue}`);
+    if (this.lastJobLine !== jobLine) {
+      this.lastJobLine = jobLine;
+      this.renderGoals();
+    }
     for (const n of NEEDS) {
       const v = state.needs[n];
       const row = this.el.querySelector(`[data-need="${n}"]`) as HTMLElement;
       (row.querySelector('i') as HTMLElement).style.width = `${v}%`;
+      row.setAttribute('aria-label', `${NEED_NAMES[n]} ${Math.round(v)}`);
       row.classList.toggle('low', v < 25);
     }
   }
 
-  setObjectives(items: { text: string; done: boolean }[]): void {
-    // Only what is left to do, to keep the phone screen clear.
-    const left = items.filter((i) => !i.done);
-    const card = this.q('.objectives');
-    card.hidden = left.length === 0;
-    this.q('.objectives ul').replaceChildren(
-      ...left.map((i) => {
-        const li = document.createElement('li');
-        li.textContent = i.text;
-        return li;
-      }),
-    );
+  private jobLine = '';
+  private lastJobLine = '';
+  private goalItems: string[] = [];
+
+  /** Goals and work, shown as one tappable line that expands. */
+  setGoals(items: string[]): void {
+    this.goalItems = items;
+    this.renderGoals();
+  }
+
+  private renderGoals(): void {
+    const btn = this.q<HTMLButtonElement>('.goals');
+    const lines = [...this.jobLine.split('\n').filter(Boolean), ...this.goalItems];
+    btn.hidden = lines.length === 0;
+    const open = btn.getAttribute('aria-expanded') === 'true';
+    this.q('.goals-first').textContent = lines[0] ?? '';
+    this.q('.goals-rest').textContent = open ? lines.slice(1).join('\n') : lines.length > 1 ? `+${lines.length - 1}` : '';
   }
 
   showPlace(place: Place, actions: Action[]): void {
@@ -242,6 +266,19 @@ export class Hud {
 
   hidePlace(): void {
     this.q('.panel').hidden = true;
+  }
+
+  /** A speech bubble at a screen position, for a passer-by's greeting. */
+  bubble(name: string, text: string, x: number, y: number): void {
+    const b = document.createElement('div');
+    b.className = 'bubble';
+    const n = document.createElement('b');
+    n.textContent = name;
+    b.append(n, document.createTextNode(text));
+    b.style.left = `${Math.max(80, Math.min(window.innerWidth - 80, x))}px`;
+    b.style.top = `${Math.max(90, y)}px`;
+    this.q('.bubbles').appendChild(b);
+    setTimeout(() => b.remove(), 3200);
   }
 
   toast(text: string, ms = 2600): void {

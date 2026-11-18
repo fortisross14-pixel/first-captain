@@ -11,11 +11,13 @@ export class Dialogue {
   private readonly choicesEl: HTMLElement;
   private readonly hintEl: HTMLElement;
   private advance: (() => void) | null = null;
+  private readonly catcher: HTMLElement;
 
   constructor(root: HTMLElement) {
     root.insertAdjacentHTML(
       'beforeend',
-      `<div class="dialogue" hidden>
+      `<div class="dialogue-catch" hidden></div>
+      <div class="dialogue" hidden>
         <div class="speaker"></div>
         <div class="text"></div>
         <div class="choices"></div>
@@ -27,13 +29,17 @@ export class Dialogue {
     this.textEl = this.el.querySelector('.text') as HTMLElement;
     this.choicesEl = this.el.querySelector('.choices') as HTMLElement;
     this.hintEl = this.el.querySelector('.hint') as HTMLElement;
-    this.el.addEventListener('click', () => {
+    // Tap the box, or anywhere else on screen, to continue.
+    this.catcher = root.querySelector('.dialogue-catch') as HTMLElement;
+    const next = () => {
       const a = this.advance;
       if (a) {
         this.advance = null;
         a();
       }
-    });
+    };
+    this.el.addEventListener('click', next);
+    this.catcher.addEventListener('click', next);
   }
 
   get open(): boolean {
@@ -42,6 +48,7 @@ export class Dialogue {
 
   private show(line: Line): void {
     this.el.hidden = false;
+    this.catcher.hidden = false;
     this.speakerEl.textContent = line.speaker;
     this.textEl.textContent = line.text;
     this.el.classList.remove('pop');
@@ -83,6 +90,7 @@ export class Dialogue {
 
   close(): void {
     this.el.hidden = true;
+    this.catcher.hidden = true;
     this.choicesEl.replaceChildren();
   }
 }

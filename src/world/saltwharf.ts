@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Lighting } from '../engine/Lighting';
 import { Grid } from './grid';
 import type { Location, Place } from './location';
+import { mergeSubtree } from './merge';
 import { C, mat } from './materials';
 import {
   makeBarge, makeBarrel, makeBollard, makeBuilding, makeCrateStack, makeFence, makeLamp,
@@ -265,6 +266,19 @@ export function buildSaltwharf(): Location {
     grid.block(x, z);
     lamps.push({ position: new THREE.Vector3(x + 0.5, lightY, z + 0.5), vane });
   }
+
+  // --- Merge static scenery to save draw calls ------------------------------
+  // Tappable groups merge on their own, so fading one building still works.
+  for (const t of tappables) mergeSubtree(t);
+  mergeSubtree(barge);
+  mergeSubtree(barge2);
+  const statics = new THREE.Group();
+  for (const c of [...root.children]) {
+    if (tappables.includes(c) || c === water || c === tiles || c === barge || c === barge2) continue;
+    statics.add(c);
+  }
+  root.add(statics);
+  mergeSubtree(statics);
 
   const lighting = new Lighting(scene, new THREE.Vector3(MAP_W / 2, 0, MAP_H / 2), lamps, CAMERA_DISTANCE);
 

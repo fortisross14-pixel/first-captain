@@ -154,7 +154,7 @@ export function buildHesterRoom(): Location {
   const candle = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.18, 6), new THREE.MeshStandardMaterial({ color: 0xe8dcc0, emissive: 0xffb050, emissiveIntensity: 0.4 }));
   candle.position.set(3.6, 0.87, 2.6);
   table.add(candle);
-  scene.add(table);
+  place('table', 'Table and chair', 'A rickety table, one chair and a candle stub. Hester read here every night.', table, { x: 3, z: 1 }, { x: 3.5, z: 2.5 });
   grid.block(3, 2);
 
   // The doorway down to the street

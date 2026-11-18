@@ -68,6 +68,12 @@ export interface GameState {
   /** Up to two jobs. */
   jobs: Employment[];
   inventory: { id: string; qty: number }[];
+  /** Upgrades bought for good. */
+  owned: string[];
+  /** Money when you last woke, for the day's summary. */
+  dayStartMoney: number;
+  /** Per-day flags for perks used ("bessa:12" = Bessa's free pint on day 12). */
+  used: Record<string, number>;
   relations: Record<string, Relation>;
   /** Fights won or faced down; robbers think twice. */
   notoriety: number;
@@ -115,6 +121,9 @@ export function newGame(character: Character): GameState {
     lastChatMinute: -9999,
     jobs: [],
     inventory: [],
+    owned: [],
+    dayStartMoney: 1.0,
+    used: {},
     relations: {},
     notoriety: 0,
     lastRobberyDay: -1,

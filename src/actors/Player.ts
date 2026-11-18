@@ -14,6 +14,8 @@ export class Player {
   private phase = 0;
   private stride = 0;
   private onArrive: (() => void) | null = null;
+  /** Good boots make you quicker. */
+  speedMult = 1;
 
   constructor(private grid: Grid, look: Look, x: number, z: number) {
     this.rig = createCharacter(look);
@@ -73,7 +75,7 @@ export class Player {
       const dx = target.x - this.position.x;
       const dz = target.z - this.position.y;
       const dist = Math.hypot(dx, dz);
-      const step = SPEED * dt;
+      const step = SPEED * this.speedMult * dt;
       if (dist <= step) {
         this.position.set(target.x, target.z);
         this.path.shift();
