@@ -4,7 +4,7 @@ export const TRAITS = ['open', 'shy', 'eccentric', 'serious', 'intellectual', 'r
 export type Trait = (typeof TRAITS)[number];
 export type SocialClass = 'lower' | 'middle' | 'upper';
 
-export type InteractionId = 'chat' | 'joke' | 'compliment' | 'flirt' | 'gossip' | 'debate' | 'brag' | 'confide' | 'insult' | 'gift' | 'business';
+export type InteractionId = 'chat' | 'joke' | 'compliment' | 'flirt' | 'gossip' | 'debate' | 'brag' | 'confide' | 'insult' | 'gift' | 'business' | 'help' | 'treat';
 export type Meter = 'friendship' | 'romance' | 'rivalry' | 'business';
 
 export interface Relation {
@@ -46,22 +46,24 @@ export const INTERACTIONS: Interaction[] = [
   { id: 'flirt', label: 'Flirt', skill: 'charisma', meter: 'romance', gain: 5, difficulty: 0.1 },
   { id: 'business', label: 'Propose business', skill: 'cunning', meter: 'business', gain: 6, difficulty: 0.15 },
   { id: 'gift', label: 'Give a gift', skill: 'charisma', meter: 'friendship', gain: 5, difficulty: -0.3 },
+  { id: 'help', label: 'Lend a hand', skill: 'strength', meter: 'friendship', gain: 7, difficulty: -0.3 },
+  { id: 'treat', label: 'Treat them', skill: 'charisma', meter: 'friendship', gain: 6, difficulty: -0.35 },
   { id: 'insult', label: 'Insult', skill: 'strength', meter: 'rivalry', gain: 10, difficulty: 0 },
 ];
 
 /** What each personality warms to and what turns them off (Story Bible, Relationships). */
 export const TRAIT_PREFS: Record<Trait, { likes: InteractionId[]; dislikes: InteractionId[]; name: string }> = {
   open: { name: 'Open', likes: ['chat', 'gossip', 'joke', 'confide'], dislikes: ['insult'] },
-  shy: { name: 'Shy', likes: ['chat', 'compliment', 'gift'], dislikes: ['joke', 'brag'] },
+  shy: { name: 'Shy', likes: ['chat', 'compliment', 'gift', 'help'], dislikes: ['joke', 'brag'] },
   eccentric: { name: 'Eccentric', likes: ['confide', 'debate', 'joke'], dislikes: ['chat'] },
-  serious: { name: 'Serious', likes: ['chat', 'confide', 'business'], dislikes: ['joke', 'flirt'] },
+  serious: { name: 'Serious', likes: ['chat', 'confide', 'business', 'help'], dislikes: ['joke', 'flirt'] },
   intellectual: { name: 'Intellectual', likes: ['debate', 'confide'], dislikes: ['gossip', 'brag'] },
   romantic: { name: 'Romantic', likes: ['compliment', 'flirt', 'gift'], dislikes: ['insult', 'business'] },
-  jovial: { name: 'Jovial', likes: ['joke', 'gossip', 'brag'], dislikes: ['debate'] },
-  proud: { name: 'Proud', likes: ['compliment'], dislikes: ['insult', 'brag', 'debate'] },
-  pious: { name: 'Pious', likes: ['chat', 'confide', 'gift'], dislikes: ['insult', 'gossip', 'flirt'] },
+  jovial: { name: 'Jovial', likes: ['joke', 'gossip', 'brag', 'treat'], dislikes: ['debate'] },
+  proud: { name: 'Proud', likes: ['compliment', 'treat'], dislikes: ['insult', 'brag', 'debate', 'help'] },
+  pious: { name: 'Pious', likes: ['chat', 'confide', 'gift', 'help'], dislikes: ['insult', 'gossip', 'flirt'] },
   cynical: { name: 'Cynical', likes: ['joke', 'gossip', 'business'], dislikes: ['compliment', 'confide'] },
-  greedy: { name: 'Greedy', likes: ['business', 'gift'], dislikes: ['confide'] },
+  greedy: { name: 'Greedy', likes: ['business', 'gift', 'treat'], dislikes: ['confide'] },
   brave: { name: 'Brave', likes: ['brag', 'joke'], dislikes: ['gossip'] },
 };
 
@@ -109,6 +111,8 @@ const LINES: Partial<Record<InteractionId, { ok: string[]; bad: string[] }>> = {
   flirt: { ok: ['A look held a second too long. They don\'t look away.'], bad: ['They laugh, but not in the way you hoped.'] },
   business: { ok: ['"Now you\'re talking sense." You shake on the idea of something.'], bad: ['"Come back when you\'ve got capital and a plan."'] },
   gift: { ok: ['They take it with real thanks.'], bad: ['They take it, but it doesn\'t seem to mean much.'] },
+  help: { ok: ['Half an hour of carrying, holding and fetching. They thank you twice, the second time as if they mean it.', 'You lend a hand without being asked. They notice.'], bad: ['You get in the way more than you help. They are polite about it.'] },
+  treat: { ok: ['A pie and a pint, on you. They tuck in, and talk.', 'You stand them a hot potato from the barrow. Small things are remembered here.'], bad: ['They take it, a little stiffly. Nobody likes owing.'] },
 };
 
 /** Resolves one interaction and updates the relation. */

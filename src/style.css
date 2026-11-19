@@ -1336,3 +1336,6 @@ button:disabled { cursor: default; }
 .lr-sub { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
 .list-row.open .lr-sub { -webkit-line-clamp: unset; display: block; }
 .lr-text { cursor: pointer; min-width: 0; }
+.mhint { margin: 4px 0 0; font: italic 14px var(--f-body); color: var(--mist); }
+.mdone { margin-top: 14px; font: 14px var(--f-body); color: var(--mist); }
+.mdone summary { cursor: pointer; font: 600 12.5px var(--f-display); letter-spacing: .14em; color: var(--gilt); }

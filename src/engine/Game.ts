@@ -8,6 +8,7 @@ import { AUTHORED_RESIDENTS, RESIDENTS, stopAt, type Resident, type Stop } from 
 import {
   AUTHORED, HAUNTS, HOMES, JOB_KINDS, ageOf, authoredRecords, babyNames, childRecord, fullNameOf, generatePopulation, roleOf, scheduleFor, simulateNight, voiceFor,
   type LifeEvent, type PersonRec,
+  DAYS_PER_YEAR,
 } from '../game/population';
 import { RECIPES, cookMult, ingredients, missing as recipeMissing } from '../game/food';
 import { LESSON_XP, MENTORS, PERKS, hasPerk, nextPerk, perkAt } from '../game/skills';
@@ -57,7 +58,7 @@ import { HOUSES, OLD_HOMES } from '../world/saltwharfHomes';
 import { MAIN_IDS, MISSION, MISSIONS, currentChapter, objectiveOf, reqMet, reqText, sideStatus, type MissionDef, type MissionState, type Req } from '../game/missions';
 import { Portraits } from '../ui/Portraits';
 import { CameraRig } from './CameraRig';
-import { Clock } from './Clock';
+import { Clock, dayOfMinutes } from './Clock';
 import { Input } from './Input';
 import { Sound } from './Sound';
 import { sfx } from './sfx';
@@ -68,8 +69,18 @@ const P = 'Mr. Pembleton';
 const DAY = 24 * 60;
 const HOSPITAL_BILL = 0.15;
 
-/** Months since October 1871, so October 1871 is 0. */
-const monthIndex = (d: Date) => (d.getFullYear() - 1871) * 12 + d.getMonth() - 9;
+/** Weeks since the start: rent for week n is collected on the Sunday that begins week n + 1. */
+const weekIndex = (minutes: number) => Math.floor(dayOfMinutes(minutes) / 7);
+
+/** Pembleton's advice on each skill (the mentor's name passed in). */
+const SKILL_ADVICE: Record<SkillId, (mentor: string) => string> = {
+  occult: (m) => `"The sight grows when you look. ${m} has it, and teaches a friend. Hester's journal, once you have it. And the dead on the quay after ten, for those who can see them. Sleep with the window open, if you are brave."`,
+  strength: (m) => `"Haul crates on the docks. The bag at the boxing yard. ${m} will spar with you, and enjoy it. Eat properly: a back needs bread."`,
+  charisma: (m) => `"Talk to people, every day, even the dull ones. Pour pints at the Copper Cup. ${m} can teach you to work a room."`,
+  cunning: (m) => `"Gossip, haggle, rummage the heaps for what others miss. ${m} teaches the rest, for a price, and the price is never only money."`,
+  study: (m) => `"Read at Hester's table, by daylight or a candle. ${m} lends books and gives lessons, and will not stop talking about Gibbon."`,
+  arts: (m) => `"Mend your own coat. Cook at the stove. Carve at a workbench, once you own one. ${m} at Rag & Bone will show you a stitch."`,
+};
 
 const LONDON_NAMES: Record<string, string> = {
   market: 'Lantern Market', hollow: 'Hollow Lane', inkwell: 'Inkwell Row and Greymourne', ironmonger: 'Ironmonger\'s Cross',
@@ -253,6 +264,34 @@ export class Game {
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) this.save();
     });
+    // Closing the tab or the app: save on the way out. And ask the browser to keep our storage.
+    window.addEventListener('pagehide', () => this.save());
+    window.addEventListener('pale-lamps-import', (e) => this.hud.onImport?.((e as CustomEvent<string>).detail));
+    void navigator.storage?.persist?.().catch(() => false);
+    this.hud.onExport = () => {
+      if (!this.state) return;
+      this.save();
+      const blob = new Blob([JSON.stringify(this.state)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `pale-lamps-${this.state.character.first}-${this.state.character.last}.json`.toLowerCase().replace(/\s+/g, '-');
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      this.hud.toast('Saved to a file. Keep it somewhere safe; Load a file brings this life back on any device.', 5000);
+    };
+    this.hud.onImport = (text) => {
+      try {
+        const st = JSON.parse(text) as GameState;
+        if (st?.version !== 1 || !st.character) throw new Error('not a save');
+        if (!confirm(`Load the life of ${st.character.first} ${st.character.last} into slot ${currentSlot()}? The life in this slot now will be replaced.`)) return;
+        saveGame(st, currentSlot());
+        location.reload();
+      } catch {
+        this.hud.toast('That file is not a Pale Lamps save.', 3500);
+      }
+    };
     this.resize();
     // Testing aid: ?debug exposes the game object to the console.
     if (new URLSearchParams(location.search).has('debug')) (window as unknown as { game: Game }).game = this;
@@ -771,6 +810,64 @@ export class Game {
 
   // --- Pembleton on the talents Saltwharf has no work for ------------------------
 
+  /** You learn a way through a story step: by trying, by being told, or by seeing it offered. */
+  private reveal(id: string, idx?: number[]): void {
+    const m = this.mission(id) ?? this.startMission(id);
+    const def = MISSION(id);
+    const st = def.stages[Math.min(m.stage, def.stages.length - 1)];
+    (st.ways ?? []).forEach((_, i) => { if (!idx || idx.includes(i)) m.flags[`w${m.stage}:${i}`] = 1; });
+  }
+
+  private wayKnown(id: string, i: number): boolean {
+    const m = this.mission(id);
+    return !!m?.flags[`w${m.stage}:${i}`];
+  }
+
+  /** Pembleton's Ask: the trunk, the chapter you're on, work, and how to get better at what you lack. */
+  private pembletonAsk(): void {
+    const s = this.state!;
+    const ch = currentChapter(s);
+    const A = (label: string, fn: () => void | Promise<void>, opts: Partial<Action> = {}): Action => ({ label, onClick: () => { this.hud.hidePlace(); void fn(); }, ...opts });
+    const acts: Action[] = [];
+    if (ch?.id === 'a1c1') acts.push(A('About the trunk', async () => {
+      this.reveal('a1c1');
+      await this.dialogue.say(
+        { speaker: P, text: '"Hester\'s trunk opens for people with the sight. She locked it so, against the curious, the Vane men and, I suspect, me."' },
+        { speaker: P, text: '"If you have not the sight, wait. The fog is thickening every night, and when it comes up these stairs, the trunk will not care what you have. Neither, I am afraid, will the fog."' },
+      );
+      this.refreshObjectives();
+    }, { primary: true }));
+    const HINTS: Record<string, string[]> = {
+      a1c2: ['"Lizzie at Rag & Bone has been asking for the boy all morning. Start there."', '"Ruby sees everything after dark. She will tell a friend, or a charmer. Or someone who frightens her, though she will not forgive it."', '"Hester\'s watch points at the dead, if you can read it: that takes Occult 2. Old Mag can read it for a friend."'],
+      a1c3: ['"Three places keep the drowned: Mag\'s memory, Rudd\'s tally books and the register at St. Botolph\'s. Two will do. Mag likes her friends, and her food. Rudd likes his. The register likes a reader."'],
+      a1c4: ['"Moss buys from widows. Ask him."', '"Silas will sell it, if you can pay. A silver tongue might move him. A fist would too, but the Kin keep long memories."'],
+      a1c5: ['"His name and something he loved will give him peace, if you have the sight or the tongue for it: Occult 3, or Charisma 3. Iron and fists will put him down; take Strength 4. Or pay the Kin, and never know."'],
+    };
+    if (ch && HINTS[ch.id] && !(ch.id === 'a1c2' && !s.missions.a1c2?.flags.vanish)) {
+      acts.push(A(`About ${ch.title.replace(/^[IVX]+\. /, '').toLowerCase().replace(/^the /, 'the ')}`, async () => {
+        const m = this.mission(ch.id)!;
+        this.reveal(ch.id);
+        await this.dialogue.say({ speaker: P, text: HINTS[ch.id][Math.min(m.stage, HINTS[ch.id].length - 1)] });
+        this.refreshObjectives();
+      }, { primary: true }));
+    }
+    acts.push(A('About work', () => this.talentsTalk()));
+    // How to get better at the skills your story or your job needs.
+    const want = new Set<SkillId>();
+    if (ch?.id === 'a1c1' && this.wayKnown('a1c1', 0) && !this.sk('occult', 2)) want.add('occult');
+    for (const e of s.jobs) { want.add(JOBS[e.jobId].main); want.add(JOBS[e.jobId].second); }
+    for (const d of MISSIONS) {
+      const m = s.missions[d.id];
+      if (!m || m.done) continue;
+      (d.stages[Math.min(m.stage, d.stages.length - 1)].ways ?? []).forEach((w, i) => {
+        if (!m.flags[`w${m.stage}:${i}`]) return;
+        for (const r of w.any ?? []) if ('skill' in r && s.character.skills[r.skill] < r.level) want.add(r.skill);
+      });
+    }
+    for (const k of [...want].slice(0, 3)) acts.push(A(`How do I get better at ${SKILL_INFO[k].name}?`, () => this.dialogue.say({ speaker: P, text: SKILL_ADVICE[k](this.short(MENTORS[k].who)) })));
+    this.hud.showPlace({ id: 'pembleton', name: 'Ask Pembleton', description: '"Well? Out with it. I have all the time in the world. Literally."', door: { x: 0, z: 0 }, faceTo: { x: 0, z: 0 } }, acts);
+  }
+
   private async talentsTalk(): Promise<void> {
     const s = this.state!;
     const sk = s.character.skills;
@@ -809,11 +906,23 @@ export class Game {
     return { color: c.getHex(), strong: 1 };
   }
 
+  private storyIds = new Set<string>();
+  private storyAt = 0;
+
   private updateRings(): void {
     const all = [...this.npcs, ...this.patrons, ...this.keepers.values()];
-    if (!this.relOn) {
+    const held = all.filter((n) => n.held);
+    if (!this.relOn && !held.length) {
       for (const m of this.rings.values()) m.visible = false;
       return;
+    }
+    // Who has a story step or a favour for you (purple), refreshed every couple of seconds.
+    if (this.elapsed - this.storyAt > 2 && this.state) {
+      this.storyAt = this.elapsed;
+      this.storyIds = new Set([
+        ...all.filter((n) => this.missionActions(n, true).length > 0).map((n) => n.res.id),
+        ...this.state.quests.filter((q) => !q.done).map((q) => q.who),
+      ]);
     }
     if (!this.ringGeo) {
       this.ringGeo = new THREE.PlaneGeometry(1.5, 1.5);
@@ -833,6 +942,11 @@ export class Game {
       this.ringTex = new THREE.CanvasTexture(cv);
     }
     for (const n of all) {
+      if (!this.relOn && !n.held) {
+        const old = this.rings.get(n);
+        if (old) old.visible = false;
+        continue;
+      }
       let m = this.rings.get(n);
       if (!m) {
         m = new THREE.Mesh(this.ringGeo, new THREE.MeshBasicMaterial({ map: this.ringTex, transparent: true, depthWrite: false, toneMapped: false, fog: false }));
@@ -841,7 +955,7 @@ export class Game {
         n.walker.rig.root.add(m);
         this.rings.set(n, m);
       }
-      const { color, strong } = this.relColor(n.res.id);
+      const { color, strong } = this.storyIds.has(n.res.id) ? { color: 0xa66cf0, strong: 1 } : this.relColor(n.res.id);
       (m.material as THREE.MeshBasicMaterial).color.setHex(color);
       (m.material as THREE.MeshBasicMaterial).opacity = Math.min(1, strong);
       m.visible = true;
@@ -870,14 +984,14 @@ export class Game {
     if (this.residence() === to) return [];
     const h = HOMES_TO_LET[to];
     const owed = s.rent.arrears > 0 || s.rent.graceUntil !== null;
-    return [act(`${to === 'hester' ? 'Move back into Hester\'s room' : `Rent ${h.name.replace(/^A /, 'a ').replace(/^Rooms/, 'the rooms')}`} · £${h.rent.toFixed(2)} a month`, () => this.moveTo(to), { disabled: owed })];
+    return [act(`${to === 'hester' ? 'Move back into Hester\'s room' : `Rent ${h.name.replace(/^A /, 'a ').replace(/^Rooms/, 'the rooms')}`} · £${h.rent.toFixed(2)} a week`, () => this.moveTo(to), { disabled: owed })];
   }
 
   private async moveTo(to: HomeId): Promise<void> {
     const s = this.state!;
     const h = HOMES_TO_LET[to];
     const landlord = to === 'cup' ? 'Bessa Hartigan' : 'Mr. Grubb';
-    const c = await this.dialogue.ask({ speaker: landlord, text: `${to === 'cup' ? '"Two rooms, knocked through, warm from the taproom. Noisy till midnight. A pound a month, and no bringing the fog in on your boots."' : to === 'court' ? '"Third floor back. Damp, but it\'s dry damp. Forty pence a month, and I collect on the last day, same as everywhere."' : '"The clerk left in a hurry. Something about a cold spot on the stairs." Grubb sniffs. "Sixty pence, as before."'}
+    const c = await this.dialogue.ask({ speaker: landlord, text: `${to === 'cup' ? '"Two rooms, knocked through, warm from the taproom. Noisy till midnight. Fifty pence a week, Sundays, and no bringing the fog in on your boots."' : to === 'court' ? '"Third floor back. Damp, but it\'s dry damp. Twenty pence a week, and I collect on Sundays, same as everywhere."' : '"The clerk left in a hurry. Something about a cold spot on the stairs." Grubb sniffs. "Thirty pence a week, as before."'}
 ${h.blurb}` }, ['Take it', 'Not yet']);
     if (c !== 0) return;
     s.residence = to;
@@ -885,7 +999,7 @@ ${h.blurb}` }, ['Take it', 'Not yet']);
     this.rebuildHome();
     sfx('page');
     await this.dialogue.say({ speaker: P, text: to === 'hester' ? '"Home again. I kept your side of the bed warm. Figuratively."' : '"You thought you could leave me? I am bound to Hester\'s trunk, not to the building, as it turns out. Where it goes, I go. Mind the stairs with it."' });
-    this.hud.toast(`${h.name} is yours from today. Rent: £${h.rent.toFixed(2)} on the last day of each month. Your furniture came with you.`, 5000);
+    this.hud.toast(`${h.name} is yours from today. Rent: £${h.rent.toFixed(2)} every Sunday. Your furniture came with you.`, 5000);
     await this.goTo('hesterRoom', 'door');
     this.save();
   }
@@ -976,10 +1090,10 @@ ${h.blurb}` }, ['Take it', 'Not yet']);
       }
       if (bid === 'church') return this.churchActions(place.id, act);
       if (place.id === 'counter') {
+        // The counter is where you stand; the trade itself is in the keeper's Business bubble.
         const keeper = this.keepers.get(bid);
-        const acts = this.streetActions(bid, act).filter((a) => !a.label.startsWith('Go up'));
-        if (keeper?.visible) acts.push(act(`Talk to ${this.short(keeper.res.id)}`, () => this.approach(keeper)));
-        return acts;
+        if (!keeper?.visible) return [act('Nobody behind the counter just now', () => undefined, { disabled: true })];
+        return [act(`Talk to ${this.short(keeper.res.id)}`, () => this.approach(keeper), { primary: true }), ...this.missionPlaceActions(bid, act)];
       }
     }
     if (this.location.id === 'saltwharf') {
@@ -1005,8 +1119,9 @@ ${h.blurb}` }, ['Take it', 'Not yet']);
       if (place.id === 'church') return [act('The doors are locked for the night. St. Botolph\'s opens at 07:00', () => undefined, { disabled: true })];
       if (place.id === 'pump') return [...this.missionPlaceActions('pump', act), act('Work the handle and drink (no thank you)', () => undefined, { disabled: true })];
       const inside = INTERIORS.find((d) => d.id === place.id);
-      const closed = inside && !isOpen(inside, this.clock.hour) ? [act(`Closed. Opens at ${String(inside.open[0]).padStart(2, '0')}:00`, () => undefined, { disabled: true })] : [];
-      return [...closed, ...this.streetActions(place.id, act)];
+      // Shut is shut: no asking for work or buying through the keyhole.
+      if (inside && !isOpen(inside, this.clock.hour)) return [act(`Closed. Opens at ${String(inside.open[0]).padStart(2, '0')}:00`, () => undefined, { disabled: true })];
+      return this.streetActions(place.id, act);
     }
     return this.roomActions(place, act);
   }
@@ -1138,7 +1253,7 @@ ${h.blurb}` }, ['Take it', 'Not yet']);
         ];
       }
       case 'pembleton':
-        return [act('Talk', () => this.chatPembleton(), { primary: true }), act('Ask about work for your other talents', () => this.talentsTalk())];
+        return [act('Talk', () => this.chatPembleton(), { primary: true }), act('Ask him…', () => this.pembletonAsk())];
       default:
         return [];
     }
@@ -2076,7 +2191,7 @@ ${h.blurb}` }, ['Take it', 'Not yet']);
       const wedding = this.rec(a)?.courting?.wedding ?? e.day + 4;
       if (known(a) || known(b)) lines.push(`${name(a)} and ${name(b)} are to be married, ${wedding - e.day} days from now.`);
       const f = friendOf([a, b]);
-      if (f && (local(a) || local(b))) sendLetter(s, `${name(a)} & ${name(b)}`, 'An invitation', `${s.character.first},\n\nWe are to be married on ${this.clock.formatShortDate(new Date(1871, 9, 1 + wedding))}, at eleven, at the market cross; Father Hale will do it, and there's a supper at the Copper Cup after. Come. It wouldn't be right without you.\n\n${this.first(f)}`);
+      if (f && (local(a) || local(b))) sendLetter(s, `${name(a)} & ${name(b)}`, 'An invitation', `${s.character.first},\n\nWe are to be married on ${this.clock.formatShortDate(wedding)}, at eleven, at the market cross; Father Hale will do it, and there's a supper at the Copper Cup after. Come. It wouldn't be right without you.\n\n${this.first(f)}`);
     } else if (e.kind === 'wedding') {
       if (local(a) || local(b)) s.ceremonies.push({ kind: 'wedding', ids: [a, b], names: `${name(a)} and ${name(b)}`, day: e.day });
       if (known(a) || known(b)) lines.push(`Today ${name(a)} marries ${name(b)}, at eleven at the market cross.`);
@@ -2255,7 +2370,9 @@ ${h.blurb}` }, ['Take it', 'Not yet']);
   private async tryTrunk(): Promise<void> {
     const s = this.state!;
     if (!this.trunkReady()) {
-      await this.dialogue.say({ speaker: 'You', text: 'The lid will not move. The lock is old, but well made.' }, { speaker: P, text: 'Leave that be. Not yet. When the fog comes up the stairs, then.' });
+      this.reveal('a1c1', [0]);
+      await this.dialogue.say({ speaker: 'You', text: 'The lid will not move. Something in the lock wants more than a key. (You need Occult 2.)' }, { speaker: P, text: '"Leave that be. Not yet."' });
+      this.refreshObjectives();
       return;
     }
     s.story.trunk = true;
@@ -2321,6 +2438,7 @@ ${h.blurb}` }, ['Take it', 'Not yet']);
     m.stage = stage;
     sfx('page');
     const def = MISSION(id);
+    if (def.kind === 'side') this.reveal(id);
     this.hud.toast(`${def.title.replace(/^[IVX]+\. /, '')}: ${objectiveOf(this.state!, def)}`, 5000);
     this.refreshObjectives();
     this.save();
@@ -2352,7 +2470,7 @@ ${h.blurb}` }, ['Take it', 'Not yet']);
   }
 
   /** Story bubbles for someone: chapters, side stories on offer, and what each stage needs of them. */
-  private missionActions(npc: Npc): Action[] {
+  private missionActions(npc: Npc, dry = false): Action[] {
     const s = this.state!;
     const id = npc.res.id;
     const h = this.clock.hour;
@@ -2369,6 +2487,7 @@ ${h.blurb}` }, ['Take it', 'Not yet']);
       this.advance('a1c2', 1);
     }));
     if (c2 === 1 && id === 'ruby') {
+      if (!dry) this.reveal('a1c2');
       const lead = async (how: 'charm' | 'friend' | 'lean') => {
         if (how === 'lean') {
           const r = this.rel('ruby');
@@ -2394,6 +2513,7 @@ ${h.blurb}` }, ['Take it', 'Not yet']);
     const c3 = this.stageOf('a1c3');
     const f3 = this.mission('a1c3')?.flags;
     if (c3 === 0 && f3) {
+      if (!dry && ['mag', 'rudd', 'hale'].includes(id)) this.reveal('a1c3', [['mag', 'rudd', 'hale'].indexOf(id)]);
       if (id === 'mag' && !f3.mag) {
         out.push(A('Ask about the Kittiwake (Friendship 10)', () => this.clue('mag'), { disabled: this.rel('mag').friendship < 10 }));
         const food = s.inventory.find((i) => isFood(i.id));
@@ -2410,6 +2530,7 @@ ${h.blurb}` }, ['Take it', 'Not yet']);
       this.advance('a1c4', 1);
     }));
     if (c4 === 1 && id === 'silas') {
+      if (!dry) this.reveal('a1c4');
       const price = this.member('kin') ? 0.3 : 0.8;
       const got = async (how: string, text: string) => {
         if (canCarry(s, 'jmedal')) addItem(s, 'jmedal');
@@ -2437,6 +2558,7 @@ ${h.blurb}` }, ['Take it', 'Not yet']);
 
     // V. The Quay at Night: the coin ending.
     if (this.stageOf('a1c5') === 0 && id === 'silas' && s.story.kinPaid === undefined) {
+      if (!dry) this.reveal('a1c5', [2]);
       const cost = this.member('kin') ? 0.75 : 1.5;
       out.push(A(`Pay the Kin to deal with the drowned man (£${cost.toFixed(2)})`, async () => {
         s.money = Math.round((s.money - cost) * 100) / 100;
@@ -2537,6 +2659,7 @@ ${h.blurb}` }, ['Take it', 'Not yet']);
     const yes = await this.dialogue.ask({ speaker: npc.res.name, text: lines[id] ?? MISSION(id).blurb }, ['I\'ll help', 'Not now']);
     if (yes !== 0) return;
     this.startMission(id);
+    this.reveal(id);
     sfx('page');
     const def = MISSION(id);
     await this.hud.celebrate('goal', 'A new story', def.title, objectiveOf(s, def));
@@ -2702,6 +2825,7 @@ ${h.blurb}` }, ['Take it', 'Not yet']);
     if (this.stageOf('a1c2') === 2) {
       const m = this.mission('a1c2')!;
       if (!this.sk('occult', 2) && !m.flags.mag) {
+        this.reveal('a1c2');
         await this.dialogue.say({ speaker: '', text: 'Hester\'s watch has stopped, but its hands twitch and swing like a compass in a storm. You can\'t make sense of them, and the drowned man drifts away into the fog. (Occult 2, or ask Old Mag to read the watch with you.)' });
         return;
       }
@@ -3146,7 +3270,7 @@ ${h.blurb}` }, ['Take it', 'Not yet']);
   // --- A family of your own --------------------------------------------------
 
   private playerAge(day = dayIndex(this.state!.minutes)): number {
-    return ageOf({ birth: this.state!.character.birth ?? -504 }, day);
+    return ageOf({ birth: this.state!.character.birth ?? -21 * DAYS_PER_YEAR }, day);
   }
 
   /** Proposing, and the things only a spouse or a child of yours can do. */
@@ -3405,7 +3529,7 @@ ${h.blurb}` }, ['Take it', 'Not yet']);
     const yes = await this.dialogue.ask({ speaker: 'Father Ambrose Hale', text: `"There is a ${g === 'man' ? 'boy' : 'girl'} at the Foundling Hospital, ${age} years old, who has stopped asking when ${g === 'man' ? 'his' : 'her'} mother is coming. ${names[0]}, they call ${g === 'man' ? 'him' : 'her'}."` }, [`Bring ${names[0]} home`, 'Not yet']);
     if (yes !== 0) return;
     const f = s.family;
-    const child = childRecord({ first: names[0], last: s.character.last, gender: g, parents: ['you', ...(f.spouse ? [f.spouse] : [])], home: 'hester', birth: day - age * 24, day, cls: 'lower' });
+    const child = childRecord({ first: names[0], last: s.character.last, gender: g, parents: ['you', ...(f.spouse ? [f.spouse] : [])], home: 'hester', birth: day - age * DAYS_PER_YEAR, day, cls: 'lower' });
     s.people.push(child);
     f.children.push(child.id);
     const r = this.rel(child.id);
@@ -3509,7 +3633,7 @@ ${h.blurb}` }, ['Take it', 'Not yet']);
     const kids = s.family.children.map((id) => this.rec(id)).filter((p) => p?.alive) as PersonRec[];
     const spouse = s.family.spouse ? this.nameOf(s.family.spouse) : null;
     const summary = [
-      `${c.first} ${c.last} died in ${c.gender === 'man' ? 'his' : 'her'} sleep in Hester's room, aged ${age}, after ${Math.max(1, Math.floor(day / 24))} year${Math.floor(day / 24) > 1 ? 's' : ''} in Saltwharf.`,
+      `${c.first} ${c.last} died in ${c.gender === 'man' ? 'his' : 'her'} sleep in Hester's room, aged ${age}, after ${Math.max(1, Math.floor(day / DAYS_PER_YEAR))} year${Math.floor(day / DAYS_PER_YEAR) > 1 ? 's' : ''} in Saltwharf.`,
       spouse ? `Survived by ${spouse}.` : `${c.gender === 'man' ? 'He' : 'She'} never married, or outlived the one ${c.gender === 'man' ? 'he' : 'she'} did.`,
       kids.length ? `Children: ${kids.map((k) => `${k.first} (${ageOf(k, day)})`).join(', ')}.` : 'No children of their own.',
       `${friends} friends walked behind the coffin. They left £${s.money.toFixed(2)}.`,
@@ -3585,6 +3709,13 @@ ${h.blurb}` }, ['Take it', 'Not yet']);
       q.place = ask.place;
       q.until = dayIndex(start);
       q.text = `Meet ${this.short(id)} at ${PLACE_NAMES[ask.place!] ?? ask.place} at ${String(ask.hour).padStart(2, '0')}:00${dayIndex(start) > day ? ' tomorrow' : ''}`;
+    }
+    // Whoever asks tells you where to find them.
+    if (ask.kind !== 'invite') {
+      s.known[id] = { ...(s.known[id] ?? {}), home: true };
+      const home = this.lifeOf(id).home;
+      if (home && home !== '?') q.text += `. ${this.first(id)} lives in ${home}`;
+      await this.dialogue.say({ speaker: name, text: `"${home && home !== '?' ? `You'll find me in ${home}, if I'm not about.` : 'You\'ll find me about.'} Thank you, ${me}."` });
     }
     s.quests.push(q);
     sfx('page');
@@ -3770,7 +3901,9 @@ ${h.blurb}` }, ['Take it', 'Not yet']);
     npc.held = true;
     npc.walker.stop();
     const c = npc.walker.cell;
-    const spot = [[0, -1], [1, 0], [-1, 0], [0, 1], [1, -1], [-1, -1], [1, 1], [-1, 1]]
+    const bidHere = this.location.id.startsWith('int:') ? this.location.id.slice(4) : '';
+    const counter = bidHere && this.keepers.get(bidHere) === npc ? this.location.places.find((p) => p.id === 'counter') : undefined;
+    const spot = counter ? counter.door : [[0, -1], [1, 0], [-1, 0], [0, 1], [1, -1], [-1, -1], [1, 1], [-1, 1]]
       .map(([dx, dz]) => ({ x: c.x + dx, z: c.z + dz }))
       .filter((p) => this.location.grid.isWalkable(p.x, p.z))
       .sort((a, b) => Math.hypot(a.x - player.position.x, a.z - player.position.y) - Math.hypot(b.x - player.position.x, b.z - player.position.y))[0];
@@ -3810,7 +3943,8 @@ ${h.blurb}` }, ['Take it', 'Not yet']);
       const i = INTERACTIONS.find((x) => x.id === id)!;
       return {
         label: i.label,
-        disabled: tired || (i.id === 'gift' && s.inventory.length === 0),
+        sub: i.id === 'help' ? (this.usedToday(`help:${p.id}`) ? 'tomorrow' : '30 min') : i.id === 'treat' ? '£0.02' : i.id === 'gift' && s.inventory.length === 0 ? 'nothing to give' : undefined,
+        disabled: tired || (i.id === 'gift' && s.inventory.length === 0) || (i.id === 'treat' && s.money < 0.02) || (i.id === 'help' && this.usedToday(`help:${p.id}`)),
         onClick: () => {
           this.hud.hidePlace();
           if (i.id === 'gift') this.chooseGift(npc);
@@ -3825,11 +3959,16 @@ ${h.blurb}` }, ['Take it', 'Not yet']);
     const perks = this.perkActions(npc);
     const romanceExtra = perks.filter((a) => a.label.startsWith('Walk by the river'));
     const businessExtra = perks.filter((a) => a.label.startsWith('Sell to Silas'));
+    // Behind their own counter, a keeper's trade (work, the shop, rooms to let) is business.
+    const bidHere = this.location.id.startsWith('int:') ? this.location.id.slice(4) : '';
+    const trade: Action[] = bidHere && bidHere !== 'church' && this.keepers.get(bidHere) === npc
+      ? this.streetActionsBase(bidHere, (label, fn, opts) => ({ label, onClick: () => { this.hud.hidePlace(); void fn(); }, ...opts })).filter((a) => !/^(Go up|Locked out)/.test(a.label))
+      : [];
     const askExtra = perks.filter((a) => !romanceExtra.includes(a) && !businessExtra.includes(a));
     const seesAll = r.friendship >= 30 && (p.id === 'mag' || p.id === 'ruby' || !AUTHORED[p.id]);
     const story = this.missionActions(npc).map((a) => ({ ...asPie(a), icon: 'favour' as const }));
-    if (story.length) this.tip('story', 'Gold bubbles are story steps. The journal\'s Quests page lists every step and the ways through it.');
-    const ask = [...this.factionActions(npc), ...this.recommendActions(npc), ...this.lessonActions(npc), ...this.parishActions(npc), ...askExtra].map(asPie);
+    if (story.length) this.tip('story', 'A glowing Ask bubble means they have something to do with your story. The journal\'s Quests page keeps what you have learned.');
+    const ask: PieItem[] = [...story, ...[...this.factionActions(npc), ...this.recommendActions(npc), ...this.lessonActions(npc), ...this.parishActions(npc), ...askExtra].map(asPie)];
     if (seesAll) ask.unshift({ label: 'Where is everyone?', sub: 'they know', onClick: () => { this.hud.hidePlace(); this.whereIs(npc); } });
     const favours = this.favourActions(npc).map((a) => ({ ...asPie(a), icon: 'favour' as const, primary: !a.disabled }));
     const fam = this.familyActions(npc);
@@ -3838,18 +3977,17 @@ ${h.blurb}` }, ['Take it', 'Not yet']);
     const family = fam.filter((a) => !a.label.startsWith('Ask for their hand') && !a.label.startsWith('Ask about a foundling')).map(asPie);
     ask.push(...foundling);
     const items: PieItem[] = [
-      ...(story.length > 2 ? [{ label: 'Story', icon: 'favour' as const, primary: true, children: story }] : story),
       ...favours,
       { label: 'Talk', icon: 'talk', children: [...['chat', 'joke', 'gossip', 'debate', 'brag'].map(say), {
         label: 'About their life', sub: 'home, work, evenings', disabled: tired || this.usedToday(`life:${p.id}`),
         onClick: () => { this.hud.hidePlace(); void this.askAboutLife(npc); },
       }] },
-      { label: 'Kind', icon: 'kind', children: ['compliment', 'confide', 'gift'].map(say) },
+      { label: 'Kind', icon: 'kind', children: ['compliment', 'help', 'treat', 'gift', 'confide'].map(say) },
       ...(family.length ? [{ label: 'Family', icon: 'family' as const, children: family }] : []),
       { label: 'Romance', icon: 'romance', children: [say('flirt'), ...romanceExtra.map(asPie), ...propose] },
-      { label: 'Business', icon: 'business', children: [say('business'), ...businessExtra.map(asPie)] },
+      { label: 'Business', icon: 'business', primary: trade.length > 0, children: [...trade.map(asPie), say('business'), ...businessExtra.map(asPie)] },
       { label: 'Mean', icon: 'mean', children: [say('insult')] },
-      ...(ask.length ? [{ label: 'Ask', icon: 'ask' as const, children: ask }] : []),
+      ...(ask.length ? [{ label: 'Ask', icon: 'ask' as const, primary: story.length > 0, children: ask }] : []),
     ];
     const head = new THREE.Vector3(npc.walker.position.x, 1.5, npc.walker.position.y).project(this.rig.camera);
     const life = this.lifeOf(p.id);
@@ -4270,6 +4408,17 @@ ${h.blurb}` }, ['Take it', 'Not yet']);
     const before = { f: r.friendship, ro: r.romance };
     const dress = this.dressBonus(npc.res.id) + (this.friend('hannah') ? 0.04 : 0) + (this.usedToday('mirror') ? 0.06 : 0);
     const mood = ((seed - Math.floor(seed)) - 0.5) * 0.2 + dress;
+    // Favours cost something: half an hour and some sweat, or two pennies.
+    if (i.id === 'help') {
+      this.markUsed(`help:${npc.res.id}`);
+      this.clock.minutes += 30;
+      s.minutes = this.clock.minutes;
+      addNeed(s.needs, 'rest', -4);
+    }
+    if (i.id === 'treat') {
+      s.money = Math.round((s.money - 0.02) * 100) / 100;
+      addNeed(s.needs, 'social', 4);
+    }
     const out = interact(s, npc.res, r, i, mood);
     r.seen = dayIndex(s.minutes);
     if (out.success && i.id === 'chat') out.text = VOICES[npc.res.id].chat;
@@ -4674,7 +4823,7 @@ ${h.blurb}` }, ['Take it', 'Not yet']);
       }
     } else if (strikeStarts(s, day)) {
       s.strike = { day, until: day + 2, side: '' };
-      s.missions.strike = { stage: 0, started: day, flags: {} };
+      s.missions.strike = { stage: 0, started: day, flags: { 'w0:0': 1, 'w0:1': 1, 'w0:2': 1 } };
       lines.push('STRIKE: the dockers are out. Pickets at the Hiring Office for three days. Join them, or cross the line for double pay.');
     }
     // Scripted days.
@@ -4696,7 +4845,7 @@ ${h.blurb}` }, ['Take it', 'Not yet']);
     const render = () => {
       const rows: ListRow[] = [...s.letters].reverse().slice(0, 20).map((l) => ({
         label: `${l.read ? '' : '● '}${l.from}`,
-        sub: `${l.subject} · ${this.clock.formatShortDate(new Date(1871, 9, 1 + l.day))}`,
+        sub: `${l.subject} · ${this.clock.formatShortDate(l.day)}`,
         actions: [{ label: 'Read', onClick: () => void this.readLetter(l.id) }],
       }));
       if (!rows.length) rows.push({ label: 'No letters yet.', sub: 'Friends write when there is news.', actions: [] });
@@ -5425,7 +5574,7 @@ ${h.blurb}` }, ['Take it', 'Not yet']);
       ? `Today: ${shifts.map((e) => `${title(s, e)} at ${String(Math.floor(JOBS[e.jobId].start / 60)).padStart(2, '0')}:00`).join(', ')}`
       : s.jobs.length ? 'Today: no shifts. A day of your own.' : 'Today: no work yet. The Dock Hiring Office and the Copper Cup are hiring.');
     if (s.housed) {
-      const days = Math.max(0, Math.ceil((this.clock.rentDue.getTime() - this.clock.date.getTime()) / 86_400_000));
+      const days = Math.max(0, this.clock.rentDueDay - this.clock.day);
       lines.push(`Rent: £${s.rent.amount.toFixed(2)} in ${days} day${days === 1 ? '' : 's'}${s.money >= s.rent.amount ? ' (you have it)' : ''}`);
     } else lines.push(`Homeless: Grubb wants £${s.rent.arrears.toFixed(2)} to let you back in`);
     lines.push(...world);
@@ -5477,7 +5626,7 @@ ${h.blurb}` }, ['Take it', 'Not yet']);
     await this.dialogue.say({ speaker: 'Mr. Grubb', text: news });
     if (this.rentPaid) {
       this.rentPaid = false;
-      await this.hud.celebrate('goal', 'Goal complete', 'Rent paid', 'A roof for another month');
+      await this.hud.celebrate('goal', 'Goal complete', 'Rent paid', 'A roof for another week');
     }
     if (!this.state!.housed && this.location.id === 'hesterRoom') {
       await this.goTo('saltwharf', 'hester');
@@ -5493,16 +5642,16 @@ ${h.blurb}` }, ['Take it', 'Not yet']);
     s.money = Math.round((s.money - cost) * 100) / 100;
     s.rent.arrears = 0;
     s.housed = true;
-    s.rent.dueMonth = monthIndex(this.clock.date);
+    s.rent.dueMonth = weekIndex(this.clock.minutes);
     void this.hud.celebrate('goal', 'Goal complete', 'Home again', "Hester's room is yours once more");
-    await this.dialogue.say({ speaker: 'Mr. Grubb', text: `£${cost.toFixed(2)}. Here's the new key. Next month's due at the end of the month, same as ever.` });
+    await this.dialogue.say({ speaker: 'Mr. Grubb', text: `£${cost.toFixed(2)}. Here's the new key. Rent's due Sunday, same as ever.` });
     this.save();
   }
 
-  /** Collects rent at the turn of the month; returns a message for the player, if any. */
+  /** Collects rent every Sunday; returns a message for the player, if any. */
   private checkRent(): string | null {
     const s = this.state!;
-    const now = monthIndex(this.clock.date);
+    const now = weekIndex(this.clock.minutes);
     const r = s.rent;
     const pay = () => {
       s.money = Math.round((s.money - r.amount) * 100) / 100;
@@ -5513,7 +5662,7 @@ ${h.blurb}` }, ['Take it', 'Not yet']);
       if (s.money >= r.amount) {
         pay();
         this.rentPaid = true;
-        return `Rent, £${r.amount.toFixed(2)}. Paid. Pleasure, I'm sure. Same again at the end of the month.`;
+        return `Rent, £${r.amount.toFixed(2)}. Paid. Pleasure, I'm sure. Same again next Sunday.`;
       }
       r.graceUntil = this.clock.minutes + ((this.friend('grubb') || this.member('guild') ? 14 : 7) + (s.parish.rank > 0 ? 7 : 0)) * DAY;
       return `£${r.amount.toFixed(2)}, and you haven't got it. ${this.friend('grubb') ? 'Fourteen days, because I like you.' : 'Seven days.'} After that you and your things go in the gutter.`;
@@ -5572,7 +5721,7 @@ ${h.blurb}` }, ['Take it', 'Not yet']);
     }
     if (s.parish.standing !== null) out.push(`Election in ${Math.max(0, s.parish.standing - dayIndex(s.minutes))} days: ${s.parish.pledges.length} pledges, ${s.parish.crowd} from speeches`);
     if (!s.housed) out.push(`Get your room back: £${s.money.toFixed(2)} / £${s.rent.arrears.toFixed(2)}`);
-    else if (s.money < s.rent.amount) out.push(`Rent by ${this.clock.formatShortDate(this.clock.rentDue)}: £${s.money.toFixed(2)} / £${s.rent.amount.toFixed(2)}`);
+    else if (s.money < s.rent.amount) out.push(`Rent on Sunday: £${s.money.toFixed(2)} / £${s.rent.amount.toFixed(2)}`);
     if (s.jobs.length === 0) out.push('Find work: the Dock Hiring Office or the Copper Cup');
     for (const e of s.jobs) {
       const p = promotionText(s, e.jobId);
@@ -5616,7 +5765,7 @@ ${h.blurb}` }, ['Take it', 'Not yet']);
     ];
     await this.dialogue.say(
       replies[choice],
-      { speaker: P, text: 'Now. Business. Your aunt left you this room, that bed, and her debts. Mr. Grubb, the landlord, wants £0.60 by the last day of the month.' },
+      { speaker: P, text: 'Now. Business. Your aunt left you this room, that bed, and her debts. Mr. Grubb, the landlord, wants £0.30 every Sunday. A year here is four weeks: one each for autumn, winter, spring and summer.' },
       { speaker: P, text: 'You have £1.00. In Saltwharf that lasts about as long as a candle in a gale.' },
       { speaker: P, text: 'Mind yourself. Hunger, Rest, Social, Health. Neglect them and the city will finish what poverty starts.' },
       { speaker: P, text: 'Hester kept bread in the larder. Stale, but bread. After that, the market sells hot potatoes for a couple of pennies.' },
@@ -5661,7 +5810,7 @@ ${h.blurb}` }, ['Take it', 'Not yet']);
     if (!s) return;
     const esc = (t: string) => t.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
     const c = s.character;
-    const due = this.clock.formatShortDate(this.clock.rentDue);
+    const due = 'on Sunday';
     const attraction = { men: 'men', women: 'women', both: 'men and women' }[c.attraction];
     // Skills page: level, progress to the next, perks, mentors, and how you feel.
     const skills = SKILLS.map((k) => {
@@ -5676,8 +5825,8 @@ ${h.blurb}` }, ['Take it', 'Not yet']);
     const perks = PERKS_OWNED(s).map((p) => `<li><b>${esc(p.name)}</b>: ${esc(p.text)}</li>`).join('');
     const needs = (['hunger', 'rest', 'social', 'health'] as NeedId[]).map((n) => `<div class="needrow"><span>${NEED_NAMES[n]}</span><div class="sk-bar"><i style="width:${Math.round(s.needs[n])}%"></i></div><b>${Math.round(s.needs[n])}</b></div>`).join('');
     const day = dayIndex(s.minutes);
-    const age = ageOf({ birth: c.birth ?? -504 }, day);
-    const years = Math.floor(day / 24) + 1;
+    const age = ageOf({ birth: c.birth ?? -21 * DAYS_PER_YEAR }, day);
+    const years = Math.floor(day / DAYS_PER_YEAR) + 1;
     const skillsHtml = `<p class="meta">${c.gender === 'man' ? 'Man' : 'Woman'} · ${age} years old · attracted to ${attraction} · year ${years} in Saltwharf</p>
       ${skills}
       <h3>Perks</h3><ul class="perks">${perks || '<li>None yet: they come at levels 3, 6 and 10.</li>'}</ul>
@@ -5685,59 +5834,42 @@ ${h.blurb}` }, ['Take it', 'Not yet']);
     // Quests page: the main story by chapter, the side stories, favours and family.
     const nm = (id: string) => (id === 'pembleton' ? 'Pembleton' : this.short(id));
     const reqChip = (r: Req) => `<span class="req ${reqMet(s, r) ? 'ok' : 'no'}">${esc(reqText(s, r, nm))}</span>`;
+    // Only the ways you have found out about: by trying, by asking, or by being shown.
     const waysHtml = (def: MissionDef) => {
       const m = s.missions[def.id] ?? { stage: 0, started: 0, flags: {} };
       const ways = def.stages[Math.min(m.stage, def.stages.length - 1)].ways ?? [];
-      if (!ways.length) return '';
-      return `<ul class="ways">${ways.map((w) => {
-        const done = w.done?.(m);
+      const known = ways.map((w, i) => ({ w, i, done: !!w.done?.(m) })).filter(({ i, done }) => done || m.flags[`w${m.stage}:${i}`]);
+      if (!known.length) return ways.length ? '<p class="mhint">Ask around, or try it, to find out how.</p>' : '';
+      return `<ul class="ways">${known.map(({ w, done }) => {
         const ok = done || !w.any || w.any.some((r) => reqMet(s, r));
         return `<li class="${done ? 'done' : ok ? 'ok' : 'no'}">${esc(w.text)}${!done && w.any ? `<span class="reqs">${w.any.map(reqChip).join('<i>or</i>')}</span>` : ''}</li>`;
       }).join('')}</ul>`;
     };
     const chapter = currentChapter(s);
     const mains = MISSIONS.filter((d) => d.kind === 'main');
-    const OUT: Record<string, string> = { word: 'gave him his name', steel: 'put him down', coin: 'paid the Kin', mag: 'with Mag', watch: 'by the watch', named: 'named', opened: 'opened', skipped: 'passed' };
-    const mainHtml = mains.map((d) => {
-      const m = s.missions[d.id];
-      if (m?.done) return `<div class="mcard done"><b>${esc(d.title)}</b><span class="mstat">Done${m.outcome && OUT[m.outcome] ? ` · ${OUT[m.outcome]}` : ''}</span></div>`;
-      if (d === chapter) return `<div class="mcard now"><b>${esc(d.title)}</b><span class="mstat">Now · from ${esc(nm(d.giver))}</span><p class="mblurb">${esc(d.blurb)}</p><p class="mobj">${esc(objectiveOf(s, d))}</p>${waysHtml(d)}</div>`;
-      return `<div class="mcard later"><b>${esc(d.title)}</b><span class="mstat">Later</span></div>`;
-    }).join('');
-    const sides = MISSIONS.filter((d) => d.kind === 'side');
-    const sideCard = (d: MissionDef) => {
-      const st = sideStatus(s, d);
-      const m = s.missions[d.id];
-      if (st === 'active') return `<div class="mcard now"><b>${esc(d.title)}</b><span class="mstat">Under way · ${esc(nm(d.giver))}</span><p class="mobj">${esc(objectiveOf(s, d))}</p>${waysHtml(d)}</div>`;
-      if (st === 'offered') return `<div class="mcard offer"><b>${esc(d.title)}</b><span class="mstat">On offer</span><p class="mobj">${esc(d.blurb)} Talk to ${esc(nm(d.giver))}.</p></div>`;
-      if (st === 'rumour') return `<div class="mcard later"><b>${esc(d.title)}</b><span class="mstat">Rumour</span><p class="mobj">${esc(d.rumour ?? d.blurb)}</p>${(d.opens ?? []).map(reqChip).join(' ')}</div>`;
-      if (st === 'done') return `<div class="mcard done"><b>${esc(d.title)}</b><span class="mstat">${m?.outcome === 'lost' ? 'Over · it went badly' : 'Done'}</span></div>`;
-      return '';
-    };
-    const sideOrder = (d: MissionDef) => ['active', 'offered', 'rumour', 'done', 'hidden'].indexOf(sideStatus(s, d));
-    const sideHtml = [...sides].sort((a, b) => sideOrder(a) - sideOrder(b)).map(sideCard).join('') || '<p class="meta">Nothing yet.</p>';
-    const favours = s.quests.filter((q) => !q.done).map((q) => `<li>${esc(q.text)}</li>`).join('') || '<li>Nobody needs anything from you just now. Make friends, and they will.</li>';
-    const goals = this.goals().filter((g) => !g.startsWith('Favour') && !this.storyGoals().includes(g)).map((g) => `<li>${esc(g)}</li>`).join('');
+    const card = (d: MissionDef) => `<div class="mcard now"><b>${esc(d.title)}</b><p class="mobj">${esc(objectiveOf(s, d))}</p>${waysHtml(d)}</div>`;
+    const active = MISSIONS.filter((d) => d.kind === 'side' && s.missions[d.id] && !s.missions[d.id].done);
+    const done = MISSIONS.filter((d) => s.missions[d.id]?.done && !(d.kind === 'main' && s.missions[d.id].outcome === 'skipped'));
+    const favours = s.quests.filter((q) => !q.done).map((q) => `<li>${esc(q.text)}</li>`).join('');
     const missionsHtml = `
-      <h3>Act I · The Fog</h3>
-      <div class="fogline"><span>Fog Clock ${Math.round(s.story.clock)}</span><div class="sk-bar fogclock"><i style="width:${Math.round(s.story.clock)}%"></i></div></div>
-      <p class="meta">The fog is ${clockWord(s.story.clock)}. At 25, 50 and 75 an urgent call; at 100, London falls. Finishing an act pushes it back.${s.story.act1 === 'done' ? ' Act II, The Social Season, waits in Mayfield.' : ''}</p>
-      ${mainHtml}
-      <h3>Saltwharf stories</h3>
-      ${sideHtml}
-      <h3>Favours</h3><ul class="perks">${favours}</ul>
-      ${goals ? `<h3>Goals</h3><ul class="perks">${goals}</ul>` : ''}
-      <h3>Family</h3><ul class="perks">${(() => {
-        const f = s.family;
-        const items: string[] = [];
-        if (f.spouse) items.push(`Married to ${esc(this.nameOf(f.spouse))}${f.strain >= 6 ? ' (things are strained: spend an evening together)' : ''}`);
-        else if (f.engaged) items.push(`Engaged to ${esc(this.nameOf(f.engaged.with))}: the wedding is on ${this.clock.formatShortDate(new Date(1871, 9, 1 + f.engaged.day))} at eleven, at the market cross`);
-        else items.push('Unmarried. Court someone to Romance 60 and Friendship 40, then ask for their hand.');
-        for (const id of f.children) { const p = this.rec(id); if (p?.alive) items.push(`${esc(p.first)}, ${ageOf(p, day)}`); }
-        if (f.due) items.push(`A baby due in ${f.due - day} days`);
-        return items.map((x) => `<li>${x}</li>`).join('');
-      })()}</ul>
-      <h3>Days ahead</h3><p>${HOLIDAYS.map((h) => `${h.name}, ${h.date} ${h.month === 9 ? 'Oct' : 'Nov'}`).join(' · ')}. Today: ${s.weather}.</p>`;
+      ${s.story.act1 !== 'locked' ? `<div class="fogline"><span>Fog Clock ${Math.round(s.story.clock)}</span><div class="sk-bar fogclock"><i style="width:${Math.round(s.story.clock)}%"></i></div></div>` : ''}
+      <h3>The story</h3>
+      ${chapter ? card(chapter) : '<p class="meta">Act I is done. Act II waits in Mayfield.</p>'}
+      ${active.length ? `<h3>Saltwharf stories</h3>${active.map(card).join('')}` : ''}
+      ${favours ? `<h3>Favours</h3><ul class="perks">${favours}</ul>` : ''}
+      ${done.length ? `<details class="mdone"><summary>Done (${done.length})</summary><ul class="perks">${done.map((d) => `<li>${esc(d.title.replace(/^[IVX]+\. /, ''))}</li>`).join('')}</ul></details>` : ''}`;
+    void mains;
+    const familyHtml = `<h3>Family</h3><ul class="perks">${(() => {
+      const f = s.family;
+      const items: string[] = [];
+      if (f.spouse) items.push(`Married to ${esc(this.nameOf(f.spouse))}${f.strain >= 6 ? ' (things are strained: spend an evening together)' : ''}`);
+      else if (f.engaged) items.push(`Engaged to ${esc(this.nameOf(f.engaged.with))}: the wedding is ${this.clock.formatShortDate(f.engaged.day)} at eleven, at the market cross`);
+      else items.push('Unmarried.');
+      for (const id of f.children) { const p = this.rec(id); if (p?.alive) items.push(`${esc(p.first)}, ${ageOf(p, day)}`); }
+      if (f.due) items.push(`A baby due in ${f.due - day} days`);
+      return items.map((x) => `<li>${x}</li>`).join('');
+    })()}</ul>`;
+    const calendarHtml = `<h3>The week</h3><p>${esc(this.clock.formatDate())}. Rent on Sunday. Mass on Sunday at 11:00. ${HOLIDAYS.filter((h) => h.season === Math.floor(day / 7) % 4).map((h) => `${h.name} on ${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][h.weekday]}.`).join(' ')} Today: ${s.weather}.</p>`;
     // Work page: each job in full (hours, pay, the next rank and what it needs), what else is going, money and the parish.
     const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const daysText = (d: number[]) => (d.length === 6 && !d.includes(0) ? 'Mon–Sat' : d.length === 6 && !d.includes(1) ? 'every day but Monday' : d.map((x) => DAYS[x]).join(', '));
@@ -5769,7 +5901,7 @@ ${h.blurb}` }, ['Take it', 'Not yet']);
       ${others ? `<h3>Also hiring in Saltwharf</h3>${others}` : ''}
       <h3>Purse</h3><p>£${s.money.toFixed(2)}. ${rent}${s.debt > 0 ? ` You owe the hospital £${s.debt.toFixed(2)}.` : ''}</p>
       <h3>Parish</h3><p>${office ? `${office} of St. Botolph. ` : ''}${s.parish.standing !== null ? `Standing for ${OFFICES[s.parish.rank].name}: ${s.parish.pledges.length} pledged, ${s.parish.crowd} won by speeches.` : OFFICES[s.parish.rank] ? `Next: ${OFFICES[s.parish.rank].name} (Study ${OFFICES[s.parish.rank].study}, ${OFFICES[s.parish.rank].friends} friends; ask Father Hale).` : ''}${s.champion ? ` ${CHAMPION_TITLE}.` : ''}</p>`;
-    this.hud.setJournal(Hud.titleFor(s), skillsHtml, missionsHtml, this.factionsHtml(), workHtml);
+    this.hud.setJournal(Hud.titleFor(s), skillsHtml + familyHtml, missionsHtml, this.factionsHtml(), workHtml + calendarHtml);
   }
 
   // --- Creator preview ------------------------------------------------------
@@ -5954,7 +6086,7 @@ ${h.blurb}` }, ['Take it', 'Not yet']);
       }
     }
     this.prevSkills = { ...s.character.skills };
-    this.hud.update(s, this.location.name, this.clock.formatDate(), this.clock.formatTime(), this.clock.formatShortDate(this.clock.rentDue), jobLine);
+    this.hud.update(s, this.location.name, this.clock.formatDate(), this.clock.formatTime(), `Sun £${s.rent.amount.toFixed(2)}`, jobLine);
     this.renderer.render(this.location.scene, this.rig.camera);
   }
 

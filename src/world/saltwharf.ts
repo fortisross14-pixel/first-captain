@@ -47,7 +47,7 @@ const BUILDINGS: BuildingDef[] = [
   {
     id: 'hester', name: "Hester's Building", x: 9, z: 9, w: 5, d: 6, h: 6.4, doorX: 11, faceNorth: true,
     sign: "PELL'S CHANDLERY", style: { wall: C.brickRed, roof: C.roofTile, roofType: 'gable', trim: 0x2a1f18 },
-    description: "Pell's Chandlery sells candles and ship's stores downstairs. Your late aunt's room is up two flights of crooked stairs. Rent is due at the end of the month.",
+    description: "Pell's Chandlery sells candles and ship's stores downstairs. Your late aunt's room is up two flights of crooked stairs. Rent is due every Sunday.",
   },
   {
     id: 'coppercup', name: 'The Copper Cup', x: 15, z: 9, w: 7, d: 6, h: 4.6, doorX: 18, faceNorth: true,

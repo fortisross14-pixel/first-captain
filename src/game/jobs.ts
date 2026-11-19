@@ -12,7 +12,7 @@ export const GRADE_INFO: Record<Grade, { name: string; payMult: number; points: 
 export const MISSED_POINTS = -3;
 export const FIRED_AT = -6;
 /** Days before an employer will take you back after firing you. */
-export const REHIRE_BAN_DAYS = 28;
+export const REHIRE_BAN_DAYS = 7;
 
 /** Autopilot pays one grade below the last played shift, and never above Good. */
 export function autopilotGrade(last: Grade): Grade {
@@ -87,9 +87,9 @@ export const JOBS: Record<string, JobDef> = {
         'Load the barge level. A barge that lists drops my cargo in the Thames, and then I drop you in after it.',
       ],
       promoted: "You've a back on you after all. From tomorrow you're {rank}. More pay, heavier crates, same river.",
-      fired: "That's enough. Collect your pennies and don't come back this month.",
-      absentFired: "You didn't turn up. Again. You're finished here. Don't come back this month.",
-      banned: "You? After last time? Come back in a month, if you've learned to set an alarm.",
+      fired: "That's enough. Collect your pennies and don't come back this week.",
+      absentFired: "You didn't turn up. Again. You're finished here. Don't come back this week.",
+      banned: "You? After last time? Come back next week, if you've learned to set an alarm.",
       quit: "Suit yourself. There's ten behind you for every one that walks.",
     },
   },
@@ -119,7 +119,7 @@ export const JOBS: Record<string, JobDef> = {
       ],
       promoted: "The regulars like you, God knows why. You're {rank} from tomorrow night.",
       fired: "I can't keep you, love. You're costing me more than you earn.",
-      absentFired: "You left me alone with a full house. Twice. Don't bother coming back this month.",
+      absentFired: "You left me alone with a full house. Twice. Don't bother coming back this week.",
       banned: 'Not after what happened. Come back when the regulars have forgotten your face.',
       quit: "Fine. There's always some other poor soul wants the pots.",
     },

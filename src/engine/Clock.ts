@@ -1,6 +1,17 @@
-const START = new Date(1871, 9, 1, 7, 0); // 1 October 1871, 07:00
+const START = new Date(1871, 9, 1, 7, 0); // Sunday, the first day of autumn 1871, 07:00
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+export const SEASONS = ['Autumn', 'Winter', 'Spring', 'Summer'] as const;
+
+/**
+ * Saltwharf's year: 28 days, a week for each season, starting with autumn.
+ * Day 0 is a Sunday. Rent falls due every Sunday.
+ */
+export const dayOfMinutes = (minutes: number) => Math.floor((minutes + 7 * 60) / 1440);
+export const seasonOf = (day: number) => SEASONS[Math.floor(day / 7) % 4];
+export const yearOf = (day: number) => 1871 + Math.floor((day + 14) / 28);
+export const weekdayName = (day: number) => DAYS[((day % 7) + 7) % 7];
+/** "Tue · Winter 1871" */
+export const formatDay = (day: number, withYear = true) => `${weekdayName(day)} · ${seasonOf(day)}${withYear ? ` ${yearOf(day)}` : ''}`;
 
 /** In-game clock. At 1× speed one real second is one game minute, so a day lasts 24 minutes. */
 export class Clock {
@@ -32,18 +43,22 @@ export class Clock {
     return d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
   }
 
-  /** End of the current month, when rent is due. */
-  get rentDue(): Date {
-    const d = this.date;
-    return new Date(d.getFullYear(), d.getMonth() + 1, 0);
+  get day(): number {
+    return dayOfMinutes(this.minutes);
   }
 
-  formatDate(d = this.date): string {
-    return `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+  /** The next Sunday, when rent is collected (as a day index). */
+  get rentDueDay(): number {
+    return (Math.floor(this.day / 7) + 1) * 7;
   }
 
-  formatShortDate(d: Date): string {
-    return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+  formatDate(day = this.day): string {
+    return formatDay(day);
+  }
+
+  /** A day index, short: "Tue · Winter". */
+  formatShortDate(day: number): string {
+    return formatDay(day, false);
   }
 
   formatTime(): string {

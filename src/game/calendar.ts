@@ -18,30 +18,27 @@ export function rollWeather(day: number, rand = Math.random): Weather {
   return 'clear';
 }
 
-/** Day index (0 = 1 Oct 1871) to a calendar date. */
-export const dateOf = (day: number) => new Date(1871, 9, 1 + day);
-
 export interface Holiday {
   id: string;
   name: string;
-  month: number;
-  date: number;
+  /** Season (0 autumn, 1 winter, 2 spring, 3 summer) and weekday (0 Sunday). */
+  season: number;
+  weekday: number;
   text: string;
 }
 
 export const HOLIDAYS: Holiday[] = [
-  { id: 'hallows', name: 'All Hallows\' Eve', month: 9, date: 31, text: 'All Hallows\' Eve: turnip lanterns in the windows, and the dead walk where anyone can see them.' },
-  { id: 'bonfire', name: 'Bonfire Night', month: 10, date: 5, text: 'Bonfire Night: a fire at the market from six, the Guy on top, potatoes in the ashes.' },
-  { id: 'martinmas', name: 'Martinmas', month: 10, date: 11, text: 'Martinmas: hiring day. Bosses are generous, and the Copper Cup roasts a goose.' },
+  { id: 'hallows', name: 'All Hallows\' Eve', season: 0, weekday: 6, text: 'All Hallows\' Eve: turnip lanterns in the windows, and the dead walk where anyone can see them.' },
+  { id: 'bonfire', name: 'Bonfire Night', season: 1, weekday: 2, text: 'Bonfire Night: a fire at the market from six, the Guy on top, potatoes in the ashes.' },
+  { id: 'martinmas', name: 'Martinmas', season: 1, weekday: 5, text: 'Martinmas: hiring day. Bosses are generous, and the Copper Cup roasts a goose.' },
 ];
 
 export function holidayOn(day: number): Holiday | null {
-  const d = dateOf(day);
-  return HOLIDAYS.find((h) => h.month === d.getMonth() && h.date === d.getDate()) ?? null;
+  return HOLIDAYS.find((h) => Math.floor(day / 7) % 4 === h.season && day % 7 === h.weekday) ?? null;
 }
 
-/** Sunday: the open-air service at the market cross with Father Hale, 9:00–12:00. */
-export const isSunday = (day: number) => dateOf(day).getDay() === 0;
+/** Sunday: the open-air service at the market cross with Father Hale, then mass at St. Botolph's. */
+export const isSunday = (day: number) => day % 7 === 0;
 
 /** A boss's temper today: the same all day, different each day. */
 export type Mood = 'foul' | 'fair' | 'good';

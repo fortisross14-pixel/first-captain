@@ -34,6 +34,7 @@ export class Title {
             <button class="${latest ? '' : 'primary '}new">Begin a new life</button>
             ${slots.some(Boolean) ? '<button class="lives">Saved lives</button>' : ''}
             <button class="install" hidden>Install on this device</button>
+            <button class="loadfile">Load a life from a file</button><input class="loadfile-in" type="file" accept=".json,application/json" hidden />
           </div>
           <div class="slot-list" hidden></div>
           <p class="note">Three lives can be saved on this device. The game saves as you play.</p>
@@ -49,6 +50,13 @@ export class Title {
     refresh();
     window.addEventListener('pale-lamps-installable', refresh);
     inst.addEventListener('click', () => install.run());
+    const fin = this.el.querySelector('.loadfile-in') as HTMLInputElement;
+    this.el.querySelector('.loadfile')!.addEventListener('click', () => fin.click());
+    fin.addEventListener('change', async () => {
+      const f = fin.files?.[0];
+      if (f) window.dispatchEvent(new CustomEvent('pale-lamps-import', { detail: await f.text() }));
+      fin.value = '';
+    });
   }
 
   private esc(t: string): string {

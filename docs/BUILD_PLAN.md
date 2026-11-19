@@ -300,6 +300,17 @@ Renamed in M13 to match the Story Bible (the Dockers' Brotherhood became the Lam
 - [x] **Goals behind a scroll**: the goals pill is gone from the screen. A scroll icon with a count sits in the top bar; tap it for the list. A new top goal peeks out for six seconds, then folds away.
 - [x] **Smaller extras**: the date drops the district name (the map has it); the Friends toggle is a round icon; tapping anywhere else closes the needs and goals.
 
+## M20 ✅ A real week, honest shops, a quieter journal
+
+- [x] **The year is 28 days**: a week each of autumn, winter, spring and summer. The date reads "Tue · Winter 1871". Rent is weekly and due every Sunday (Hester's room £0.30, Gull Court £0.20, over the Cup £0.50). Mass on Sunday, the docks Monday to Saturday, holidays on fixed days of their season. People age a year every 28 days.
+- [x] **Shops**: tapping the keeper walks you to your side of the counter. Their trade (work, the shop, drinks, mending) is in their Business bubble. A closed place offers nothing but its opening hour.
+- [x] **More ways to be kind**: *Lend a hand* (30 minutes, once a day each) and *Treat them* (£0.02), alongside compliments, gifts and confiding.
+- [x] **Quests only show what you've unlocked**: the story's current step and the side stories under way. How to do a step stays hidden until you try it (the trunk: "You need Occult 2"), ask someone, or see the options offered. Done stories fold into one line; family moves to the Skills page and the week to the Work page.
+- [x] **Ask Pembleton**: about the trunk (the fog), about the chapter you're on, about work, and how to get better at the skills your story or your job needs. Story actions with anyone else sit in their Ask bubble, which glows when it has something for you.
+- [x] **Favours say where to find people**: whoever asks tells you where they live, and the journal notes it.
+- [x] **Rings**: people with a story step or a favour for you ring purple; the person you tap always shows their colour.
+- [x] **Saving**: also saves when the page closes, asks the browser to keep the game's storage, and offers "Save to a file" (Options) and "Load a life from a file" (title screen).
+
 ## Next
 
 The next districts (Lantern Market, then Mayfield) and Act II, "The Social Season"; businesses.

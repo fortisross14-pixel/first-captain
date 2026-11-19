@@ -186,7 +186,7 @@ function fillLives(s: GameState): void {
   s.story ??= { clock: 8, urgent: 0, trunk: false, name: false, medal: false, act1: 'locked', pages: 0 };
   s.factions ??= { deeds: {}, member: null, since: -1, dutyDue: -1, dutyDone: false, expelled: {} };
   s.family ??= { children: [], strain: 0, taught: {}, ancestors: [] };
-  s.character.birth ??= -21 * 24;
+  s.character.birth ??= -21 * 28;
   s.equip ??= {};
   s.weather ??= 'clear';
   s.tomorrow ??= 'clear';
@@ -209,7 +209,7 @@ export function newGame(character: Character): GameState {
     minutes: 0,
     location: 'hesterRoom',
     pos: { x: 1.5, z: 3.5 },
-    rent: { amount: 0.6, dueMonth: 0, graceUntil: null, arrears: 0 },
+    rent: { amount: 0.3, dueMonth: 0, graceUntil: null, arrears: 0 },
     housed: true,
     larderBread: 3,
     tutorial: { step: 'intro', askedDocks: false, askedCup: false, slept: false },
@@ -297,7 +297,7 @@ export function slotInfo(): ({ slot: number; name: string; day: number; money: n
     const s = loadGame(n) as (GameState & { savedAt?: number }) | null;
     if (!s) return null;
     const day = Math.floor((s.minutes + 420) / 1440);
-    return { slot: n, name: `${s.character.first} ${s.character.last}`, day, money: s.money, savedAt: s.savedAt ?? 0, age: Math.floor((day - (s.character.birth ?? -504)) / 24) };
+    return { slot: n, name: `${s.character.first} ${s.character.last}`, day, money: s.money, savedAt: s.savedAt ?? 0, age: Math.floor((day - (s.character.birth ?? -588)) / 28) };
   });
 }
 

@@ -134,7 +134,7 @@ export class Hud {
         <div class="celebrate" aria-live="polite"></div>
         <div class="bubbles"></div>
         <button class="rel-btn" hidden aria-pressed="false" aria-label="Show how you stand with people"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 19c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M16 4.5a3 3 0 0 1 0 6M18 13c2 .8 3 3 3 6"/><ellipse cx="9" cy="21" rx="6" ry="1.2" stroke-dasharray="2 2"/></svg><span>Friends</span></button>
-        <div class="rel-legend" hidden><i style="background:#1d7a34"></i>Close<i style="background:#7ac24a"></i>Friendly<i style="background:#d8b84a"></i>Known<i style="background:#c8402e"></i>Rival<i style="background:#8a8a8a"></i>Stranger</div>
+        <div class="rel-legend" hidden><i style="background:#1d7a34"></i>Close<i style="background:#7ac24a"></i>Friendly<i style="background:#d8b84a"></i>Known<i style="background:#c8402e"></i>Rival<i style="background:#8a8a8a"></i>Stranger<i style="background:#a66cf0"></i>Story</div>
         <button class="decor-btn" hidden aria-label="Decor"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4l10-10-4-4L4 16z"/><path d="M13 7l4 4"/></svg><span>Decor</span></button>
         <div class="decor-bar" hidden><div class="decor-title"></div><div class="decor-acts"></div></div>
         <div class="swatch-pop" hidden><div class="swatch-sheet"><h3></h3><div class="swatch-opts"></div></div></div>
@@ -164,6 +164,8 @@ export class Hud {
               <div class="opt"><span>Graphics</span><button class="quality-toggle"></button></div>
               <div class="opt"><span>Save the game</span><button class="save">Save</button></div>
               <div class="opt"><span>Install as an app</span><button class="install-btn">Install</button></div>
+              <div class="opt"><span>Keep a copy of this life</span><button class="export-btn">Save to a file</button></div>
+              <div class="opt"><span>Bring a life back</span><button class="import-btn">Load a file</button><input class="import-file" type="file" accept=".json,application/json" hidden /></div>
               <div class="opt"><span>Leave Saltwharf for now</span><button class="quit">Save &amp; quit to title</button></div>
             </div>
             <div class="actions">
@@ -289,6 +291,14 @@ export class Hud {
     this.q('.quality-toggle').addEventListener('click', () => this.onQuality && (this.q('.quality-toggle').textContent = this.onQuality()));
     this.q('.journal .save').addEventListener('click', () => this.onSave());
     this.q('.install-btn').addEventListener('click', () => this.onInstall?.());
+    this.q('.export-btn').addEventListener('click', () => this.onExport?.());
+    const file = this.q<HTMLInputElement>('.import-file');
+    this.q('.import-btn').addEventListener('click', () => file.click());
+    file.addEventListener('change', async () => {
+      const f = file.files?.[0];
+      if (f) this.onImport?.(await f.text());
+      file.value = '';
+    });
     this.q('.journal .quit').addEventListener('click', () => this.onQuit());
   }
 
@@ -400,6 +410,8 @@ export class Hud {
     pop.hidden = false;
   }
   onInstall: (() => void) | null = null;
+  onExport: (() => void) | null = null;
+  onImport: ((text: string) => void) | null = null;
   onMap: ((view: 'london' | 'district') => void) | null = null;
 
   /** The map: an SVG, a card for what you tapped, and a button to go there. */
@@ -790,6 +802,7 @@ export class Hud {
       compliment: '<path d="M12 3l2.5 5.5 6 .7-4.5 4 1.3 6-5.3-3-5.3 3 1.3-6-4.5-4 6-.7z"/>', flirt: PIE_ICONS.romance, debate: '<path d="M4 19h16M6 19V9l6-5 6 5v10M10 19v-5h4v5"/>',
       brag: '<path d="M6 20V10l3-3 3 3 3-3 3 3v10z"/>', confide: '<path d="M12 4a6 6 0 0 0-6 6v3l-2 3h16l-2-3v-3a6 6 0 0 0-6-6zM10 19a2 2 0 0 0 4 0"/>',
       business: PIE_ICONS.business, gift: PIE_ICONS.favour, insult: PIE_ICONS.mean,
+      help: '<path d="M7 12l3-3 3 3 4-4M5 19h14M8 19v-4M16 19v-6"/>', treat: '<path d="M7 9h10l-1 10H8zM9 9V7a3 3 0 0 1 6 0v2"/>',
       love: '<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" fill="currentColor"/>', good: '<path d="M5 12l4.5 4.5L19 7"/>',
       bad: '<path d="M7 17c1.5-2.5 8.5-2.5 10 0M9 10h.01M15 10h.01"/><circle cx="12" cy="12" r="8"/>', angry: '<path d="M13 3 6 13h5l-1 8 7-10h-5z" fill="currentColor"/>',
     };

@@ -12,7 +12,8 @@ import { HOME_DOORS, HOUSES } from '../world/saltwharfHomes';
  * dies of old age. Only the people of the district you are in walk the streets; the
  * rest live on as records and are simulated each night.
  */
-export const DAYS_PER_YEAR = 24;
+/** A year is four weeks: one for each season. */
+export const DAYS_PER_YEAR = 28;
 
 export interface PersonRec {
   id: string;

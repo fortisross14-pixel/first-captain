@@ -64,10 +64,10 @@ export const MISSIONS: MissionDef[] = [
     id: 'a1c1', kind: 'main', title: 'I. Hester\'s Room', giver: 'pembleton',
     blurb: 'Your aunt left you a room, a ghost, and a trunk that will not open.',
     stages: [{
-      objective: 'Open Hester\'s trunk. It will open when you are ready, or when the fog makes you ready.',
+      objective: 'Open Hester\'s trunk, in your room.',
       ways: [
-        { text: 'Have the knack for it', any: [sk('occult', 2)] },
-        { text: 'Or wait for the fog to force it: the Fog Clock at 25, a disappearance, or Hester\'s third letter', any: [{ note: 'Fog Clock 25, someone missing, or the third letter', ok: (s) => s.hesterLetters >= 3 || s.story.clock >= 25 || Object.keys(s.life.missing).length > 0 }] },
+        { text: 'The lock wants the sight', any: [sk('occult', 2)] },
+        { text: 'Or wait: Pembleton says the fog will open it for you', any: [{ note: 'Fog Clock 25, someone missing, or Hester\'s third letter', ok: (s) => s.hesterLetters >= 3 || s.story.clock >= 25 || Object.keys(s.life.missing).length > 0 }] },
       ],
     }],
   },

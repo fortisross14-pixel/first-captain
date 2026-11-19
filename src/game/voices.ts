@@ -49,7 +49,7 @@ export const VOICES: Record<string, Voice> = {
   grubb: {
     hint: 'Waistcoat buttons under strain. He calls you by your room, not your name.',
     friend: ['Ah, top floor. Paying prompt, I trust?', 'Good tenant, you. Rare.'],
-    rival: ['Rent. End of the month. Don\'t make me climb.'],
+    rival: ['Rent. Sunday. Don\'t make me climb.'],
     chat: 'Grubb tells you about his properties as if they were his children. He likes them better.',
     perk: 'Friend: two weeks\' grace on late rent instead of one.',
   },
