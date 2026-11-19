@@ -19,7 +19,8 @@ function prepared(mesh: THREE.Mesh, toTarget: THREE.Matrix4): THREE.BufferGeomet
 /** Plain materials (no glow, no transparency) can share one vertex-coloured material. */
 const plain = (m: THREE.Material): m is THREE.MeshStandardMaterial => {
   const s = m as THREE.MeshStandardMaterial;
-  return !!s.isMeshStandardMaterial && !s.transparent && (!s.emissive || s.emissive.getHex() === 0 || s.emissiveIntensity === 0) && !s.map;
+  // A glowing material stays apart even if its glow is off right now (lit windows at noon).
+  return !!s.isMeshStandardMaterial && !s.transparent && (!s.emissive || s.emissive.getHex() === 0) && !s.map;
 };
 
 const shared = new Map<string, THREE.MeshStandardMaterial>();

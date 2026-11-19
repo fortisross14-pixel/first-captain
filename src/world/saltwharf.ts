@@ -162,7 +162,7 @@ export function buildSaltwharf(): Location {
   const mapRectsLater: MapRect[] = [];
   BUILDINGS.forEach((def, i) => {
     const doorOffset = def.doorX + 0.5 - (def.x + def.w / 2);
-    const b = makeBuilding(def.w, def.d, def.h, def.style, 100 + i * 17, { doorOffset, faceNorth: def.faceNorth, sign: def.sign });
+    const b = makeBuilding(def.w, def.d, def.h, def.style, 100 + i * 17, { doorOffset, faceNorth: def.faceNorth, sign: def.sign, kind: def.id === 'warehouse' ? 'warehouse' : def.id === 'tenements' ? 'house' : undefined });
     b.position.set(def.x + def.w / 2, 0, def.z + def.d / 2);
     b.userData.placeId = def.id;
     root.add(b);
@@ -264,7 +264,7 @@ export function buildSaltwharf(): Location {
   // St. Botolph-by-the-River: the church, its spire, and the clergy house door.
   const church = new THREE.Group();
   church.userData.placeId = 'church';
-  const nave = makeBuilding(9, 5, 6.2, { wall: C.stone, roof: C.roofSlate, roofType: 'gable', trim: 0x4a4440 }, 777, { doorOffset: -0.5, faceNorth: true, sign: 'ST. BOTOLPH' });
+  const nave = makeBuilding(9, 5, 6.2, { wall: C.stone, roof: C.roofSlate, roofType: 'gable', trim: 0x4a4440 }, 777, { doorOffset: -0.5, faceNorth: true, sign: 'ST. BOTOLPH', kind: 'church' });
   nave.position.set(5.5, 0, 37.5);
   church.add(nave);
   const tower = new THREE.Mesh(new THREE.BoxGeometry(2, 9, 2), mat(C.stone));
