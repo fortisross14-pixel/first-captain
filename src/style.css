@@ -1222,3 +1222,96 @@ button:disabled { cursor: default; }
 .floater.gain { color: var(--azure-hi); text-shadow: 0 0 8px var(--azure), 0 1px 2px #000; }
 .floater { font-family: var(--f-display); font-weight: 600; letter-spacing: .04em; }
 .panel { z-index: 8; }
+
+
+/* --- Masquerade, second pass: cracked stone, stepped corners, metal rims, blue light ----- */
+:root {
+  --stone: url(/ui/stone.jpg);
+  --panel: radial-gradient(ellipse at 50% -10%, rgba(79, 159, 224, .12), transparent 60%), linear-gradient(180deg, rgba(16, 24, 44, .5), rgba(4, 7, 14, .72)), var(--stone) 0 0 / 320px repeat, #0b111f;
+  --corners: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cg%20transform%3D%22rotate%280%2012%2012%29%22%3E%3Cpath%20d%3D%22M0%207.5%20H7.5%20V0%22%20fill%3D%22none%22%20stroke%3D%22%23c8c3b6%22%20stroke-opacity%3D%22.5%22%20stroke-width%3D%221%22/%3E%3Cpath%20d%3D%22M3.5%2016%20V10.5%20H10.5%20V3.5%22%20fill%3D%22none%22%20stroke%3D%22%23e6d3a1%22%20stroke-opacity%3D%22.55%22%20stroke-width%3D%221%22/%3E%3Cpath%20d%3D%22M13%2013%20l2%20-2%20l2%202%20l-2%202%20z%22%20fill%3D%22%23a9d6ff%22%20fill-opacity%3D%22.85%22/%3E%3C/g%3E%3C/svg%3E") top left / 24px no-repeat, url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cg%20transform%3D%22rotate%2890%2012%2012%29%22%3E%3Cpath%20d%3D%22M0%207.5%20H7.5%20V0%22%20fill%3D%22none%22%20stroke%3D%22%23c8c3b6%22%20stroke-opacity%3D%22.5%22%20stroke-width%3D%221%22/%3E%3Cpath%20d%3D%22M3.5%2016%20V10.5%20H10.5%20V3.5%22%20fill%3D%22none%22%20stroke%3D%22%23e6d3a1%22%20stroke-opacity%3D%22.55%22%20stroke-width%3D%221%22/%3E%3Cpath%20d%3D%22M13%2013%20l2%20-2%20l2%202%20l-2%202%20z%22%20fill%3D%22%23a9d6ff%22%20fill-opacity%3D%22.85%22/%3E%3C/g%3E%3C/svg%3E") top right / 24px no-repeat, url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cg%20transform%3D%22rotate%28180%2012%2012%29%22%3E%3Cpath%20d%3D%22M0%207.5%20H7.5%20V0%22%20fill%3D%22none%22%20stroke%3D%22%23c8c3b6%22%20stroke-opacity%3D%22.5%22%20stroke-width%3D%221%22/%3E%3Cpath%20d%3D%22M3.5%2016%20V10.5%20H10.5%20V3.5%22%20fill%3D%22none%22%20stroke%3D%22%23e6d3a1%22%20stroke-opacity%3D%22.55%22%20stroke-width%3D%221%22/%3E%3Cpath%20d%3D%22M13%2013%20l2%20-2%20l2%202%20l-2%202%20z%22%20fill%3D%22%23a9d6ff%22%20fill-opacity%3D%22.85%22/%3E%3C/g%3E%3C/svg%3E") bottom right / 24px no-repeat, url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cg%20transform%3D%22rotate%28270%2012%2012%29%22%3E%3Cpath%20d%3D%22M0%207.5%20H7.5%20V0%22%20fill%3D%22none%22%20stroke%3D%22%23c8c3b6%22%20stroke-opacity%3D%22.5%22%20stroke-width%3D%221%22/%3E%3Cpath%20d%3D%22M3.5%2016%20V10.5%20H10.5%20V3.5%22%20fill%3D%22none%22%20stroke%3D%22%23e6d3a1%22%20stroke-opacity%3D%22.55%22%20stroke-width%3D%221%22/%3E%3Cpath%20d%3D%22M13%2013%20l2%20-2%20l2%202%20l-2%202%20z%22%20fill%3D%22%23a9d6ff%22%20fill-opacity%3D%22.85%22/%3E%3C/g%3E%3C/svg%3E") bottom left / 24px no-repeat;
+  --notch: polygon(7px 0, calc(100% - 7px) 0, calc(100% - 7px) 7px, 100% 7px, 100% calc(100% - 7px), calc(100% - 7px) calc(100% - 7px), calc(100% - 7px) 100%, 7px 100%, 7px calc(100% - 7px), 0 calc(100% - 7px), 0 7px, 7px 7px);
+  --rim: linear-gradient(180deg, #f4f0e6, #9aa0ae 42%, #3a3f4c 56%, #b8bcc6 100%);
+  --rim-gold: linear-gradient(180deg, #f8e9c0, #c2a262 40%, #5a4626 58%, #e6d3a1 100%);
+  --rim-blue: linear-gradient(180deg, #dff0ff, #6fb4ee 42%, #1d4a7a 58%, #a9d6ff 100%);
+  --disc: radial-gradient(circle at 50% 28%, #22304f, #0c1222 62%, #060a14 100%);
+  --disc-lit: radial-gradient(circle at 50% 42%, rgba(120, 190, 255, .55), rgba(30, 80, 140, .35) 45%, #08101e 78%);
+}
+
+/* Boxy sheets get the stepped corners of a carved frame. The dialogue keeps square corners, so its portrait can sit outside it. */
+.panel, .needs-pop, .decor-bar, .picker-sheet, .swatch-sheet, .journal-sheet:not(.letter), .pie-card, .goals, .toast, .map-sheet, .rel-legend { clip-path: var(--notch); border-radius: 0 !important; }
+.gs, .panel, .needs-pop, .decor-bar, .picker-sheet, .swatch-sheet, .journal-sheet:not(.letter), .journal-sheet.diary, .dialogue, .pie-card, .goals, .toast, .map-sheet, .creator-sheet {
+  background: var(--corners), var(--panel) !important;
+  border: 1px solid rgba(200, 195, 182, .38) !important;
+  outline: 1px solid rgba(230, 211, 161, .16) !important; outline-offset: -5px !important;
+}
+.topbar { background: linear-gradient(180deg, rgba(4, 6, 12, .92), rgba(4, 6, 12, .55) 75%, rgba(4, 6, 12, 0)) !important; border: 0 !important; outline: 0 !important; }
+.creator-sheet { border-width: 1px 0 0 !important; outline: 0 !important; }
+.journal, .modal, .picker, .swatch-pop { background: radial-gradient(ellipse at 50% 40%, rgba(10, 18, 36, .5), rgba(2, 4, 9, .9)); }
+
+/* Letters and the Gazette stay paper: they are things in the world, not interface. */
+.journal-sheet.letter { background: repeating-linear-gradient(180deg, transparent 0 29px, rgba(70, 60, 122, .16) 29px 30px), linear-gradient(180deg, #f3ecdc, #e2d6bb) !important; color: #1c2638 !important; border: 0 !important; outline: 0 !important; clip-path: none; }
+.journal-sheet.letter h2 { font: italic 400 28px/1.1 'IM Fell English', Georgia, serif !important; color: #1c2638 !important; letter-spacing: 0; text-align: left; }
+.journal-sheet.letter .modal-body p, .journal-sheet.letter .meta { font-family: 'IM Fell English', Georgia, serif !important; color: #1c2638 !important; }
+.journal-sheet.gazette { background: linear-gradient(180deg, #e9e2cf, #d6cbb0) !important; color: #1b1a24 !important; }
+.journal-sheet.gazette h2, .journal-sheet.gazette .meta, .journal-sheet.gazette .modal-body p { color: #1b1a24 !important; text-align: center; }
+
+/* Pill buttons with a metal rim: silver for most, gold for the one that matters. */
+.panel .actions button, .journal .actions button, .modal button, .list-row button, .dialogue .choices button,
+.title-buttons button, .creator-actions button, .mg-intro button, .fight-actions button, .seg button, .opt button, .slot-list button {
+  border: 1.5px solid transparent !important;
+  background: linear-gradient(180deg, #19233f, #0a0f1d 70%) padding-box, var(--rim) border-box !important;
+  box-shadow: inset 0 0 0 2px rgba(4, 6, 12, .8), inset 0 0 0 3px rgba(255, 255, 255, .05), 0 3px 10px rgba(0, 0, 0, .6) !important;
+  color: #ece8de !important;
+}
+.panel .actions button.primary, .journal .actions button.primary, .modal button.primary, .list-row button:first-child:last-child,
+.dialogue .choices button:first-child, .title-buttons button.primary, .creator-actions button.primary, .mg-intro button.primary, .fight-actions button.primary, .slot-list button.primary {
+  background: radial-gradient(ellipse at 50% 135%, rgba(90, 170, 240, .45), transparent 70%) padding-box, linear-gradient(180deg, #17223e, #080d1a) padding-box, var(--rim-gold) border-box !important;
+  box-shadow: inset 0 0 0 2px rgba(4, 6, 12, .75), 0 0 18px rgba(79, 159, 224, .3), 0 3px 10px rgba(0, 0, 0, .6) !important;
+  color: var(--gilt-hi) !important; text-shadow: 0 0 10px rgba(230, 211, 161, .4);
+}
+.panel .actions button:active, .journal .actions button:active, .modal button:active, .list-row button:active, .dialogue .choices button:active,
+.title-buttons button:active, .creator-actions button:active, .fight-actions button:active, .opt button:active, .slot-list button:active {
+  background: var(--disc-lit) padding-box, var(--rim-blue) border-box !important; box-shadow: 0 0 22px var(--azure-glow) !important; color: #fff !important;
+}
+.panel .actions button:disabled, .list-row button:disabled, .creator-actions button:disabled, .fight-actions button:disabled {
+  background: linear-gradient(180deg, #10172a, #070b15) padding-box, linear-gradient(180deg, rgba(200, 200, 210, .35), rgba(90, 95, 110, .25)) border-box !important;
+  box-shadow: inset 0 0 0 2px rgba(4, 6, 12, .8) !important; color: rgba(232, 228, 218, .32) !important; text-shadow: none;
+}
+
+/* Medallions: a dark disc in a silver rim; lit from inside, in a blue rim, when active. */
+.tok .hex { width: 46px !important; height: 46px !important; border: 2px solid transparent; background: var(--disc) padding-box, var(--rim) border-box !important;
+  box-shadow: inset 0 0 0 3px #060a14, inset 0 0 0 4px rgba(255, 255, 255, .08), 0 4px 12px rgba(0, 0, 0, .65) !important; }
+.tok .hexin { width: 36px !important; height: 36px !important; }
+.tok:active .hex, .tok.open .hex, .tok.flip .hex, .tok.whirl .hex { background: var(--disc-lit) padding-box, var(--rim-blue) border-box !important; box-shadow: inset 0 0 0 3px rgba(6, 10, 20, .7), 0 0 22px var(--azure-glow), 0 4px 12px rgba(0, 0, 0, .65) !important; }
+.tok:active .hexin, .tok.open .hexin { color: #fff; }
+.topbar .tok.watch .hex { width: 36px !important; height: 36px !important; }
+.topbar .tok.watch .hexin { width: 30px !important; height: 30px !important; }
+@media (orientation: portrait) { .tok .hex { width: 42px !important; height: 42px !important; } .tok .hexin { width: 34px !important; height: 34px !important; } }
+.pie-b.ic, .ibubble, .rel-btn, .decor-btn { border: 2px solid transparent !important; background: var(--disc) padding-box, var(--rim) border-box !important;
+  box-shadow: inset 0 0 0 3px #060a14, inset 0 0 0 4px rgba(255, 255, 255, .07), 0 5px 14px rgba(0, 0, 0, .65) !important; }
+.decor-btn { border-radius: 999px; }
+.pie-b:not(.ic) { border: 1.5px solid transparent !important; background: linear-gradient(180deg, #19233f, #0a0f1d) padding-box, var(--rim) border-box !important; box-shadow: inset 0 0 0 2px rgba(4, 6, 12, .8), 0 4px 12px rgba(0, 0, 0, .6) !important; }
+.pie-b.primary, .pie-b.ic.primary, .rel-btn[aria-pressed="true"], .ibubble.good { background: var(--disc-lit) padding-box, var(--rim-blue) border-box !important;
+  box-shadow: inset 0 0 0 3px rgba(6, 10, 20, .6), 0 0 26px var(--azure-glow), 0 5px 14px rgba(0, 0, 0, .65) !important; color: #fff !important; }
+.pie-b.ic.primary .t { color: #fff !important; text-shadow: 0 0 8px var(--azure); }
+.ibubble.bad { background: radial-gradient(circle at 50% 42%, rgba(240, 110, 80, .45), #160808 78%) padding-box, linear-gradient(180deg, #ffd9cc, #c0442a 45%, #4a1408 58%, #f0a090) border-box !important; box-shadow: 0 0 22px rgba(224, 87, 58, .5) !important; color: #fff !important; }
+.wellbeing { border-radius: 50%; background: var(--disc) padding-box, var(--rim) border-box; border: 1.5px solid transparent; }
+
+/* The portrait in dialogue and on a person's card: a medallion, ringed in silver, haloed in blue. */
+.dialogue .cameo { border: 2.5px solid transparent; background: var(--disc) padding-box, var(--rim) border-box !important; box-shadow: inset 0 0 0 3px #060a14, 0 0 26px var(--azure-glow), 0 8px 18px rgba(0, 0, 0, .7) !important; }
+
+/* Headings glow faintly; the journal's tabs light up like the reference's chosen row. */
+.panel h2, .journal-sheet h2, .needs-pop h3, .decor-title { text-shadow: 0 0 14px rgba(169, 214, 255, .18), 0 1px 2px #000 !important; }
+.tabs { border-bottom: 1px solid rgba(200, 195, 182, .25) !important; }
+.tabs button[aria-selected="true"] { color: #fff !important; border-bottom: 2px solid var(--azure-hi) !important; text-shadow: 0 0 12px var(--azure), 0 0 2px var(--azure-hi) !important; }
+.journal-sheet h3, .journal-sheet.diary h3 { border-bottom: 1px solid rgba(200, 195, 182, .2) !important; }
+
+/* Rows: a hairline, and a faint lift for the rows you can act on. */
+.crow { border: 1.5px solid transparent !important; background: linear-gradient(180deg, rgba(25, 35, 63, .9), rgba(10, 15, 29, .9)) padding-box, linear-gradient(180deg, rgba(240, 236, 228, .45), rgba(90, 95, 110, .3)) border-box !important; box-shadow: none !important; }
+.journal-sheet.diary .mcard.now { border: 1px solid rgba(230, 211, 161, .55) !important; background: radial-gradient(ellipse at 0% 0%, rgba(79, 159, 224, .12), transparent 60%), rgba(6, 10, 20, .45) !important; }
+.journal-sheet.diary .mcard { background: rgba(6, 10, 20, .35) !important; }
+
+/* The title: carved capitals with a cold halo over a darker world. */
+.title-screen::before { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at 50% 38%, rgba(4, 7, 14, .25), rgba(2, 4, 9, .88) 75%); }
+.title-screen h1 { color: #f1ede2 !important; text-shadow: 0 0 34px rgba(79, 159, 224, .55), 0 0 2px rgba(255, 255, 255, .7), 0 3px 6px #000 !important; }
+.title-inner { position: relative; }
