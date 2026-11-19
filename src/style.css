@@ -1031,3 +1031,194 @@ button:disabled { cursor: default; }
 /* Zoomed sheets keep within the screen (their height is measured before the zoom). */
 @media (min-width: 700px) and (min-height: 700px) and (max-aspect-ratio: 1/1) { .creator-sheet { max-height: 51%; } }
 @media (min-width: 1100px) and (min-height: 900px) and (max-aspect-ratio: 1/1) { .creator-sheet { max-height: 45%; } }
+
+
+/* ==========================================================================
+   "Masquerade, in blue and gold": a gothic interface over the world.
+   Near-black panels with thin double lines and chamfered corners, round medallions
+   that glow blue when active, Cinzel capitals, pill buttons in a hairline of silver.
+   Gold is the accent; the in-game HUD stays light so the street does the talking.
+   ========================================================================== */
+:root {
+  --night: #05070d;
+  --sheet: #0b111f;
+  --sheet-hi: #121b30;
+  --sheet-lo: #060a14;
+  --pale: #e8e4da;
+  --vane: #f1ead8;
+  --mist: #8d94a6;
+  --gilt: #b9995a;
+  --gilt-hi: #e6d3a1;
+  --gilt-lo: #6e5830;
+  --ember: #e0573a;
+  --azure: #4f9fe0;
+  --azure-hi: #a9d6ff;
+  --azure-glow: rgba(79, 159, 224, .55);
+  --line: rgba(232, 228, 218, .22);
+  --line-hi: rgba(232, 228, 218, .55);
+  --f-display: 'Cinzel', 'Trajan Pro', Georgia, serif;
+  --f-sc: 'Cinzel', 'Trajan Pro', Georgia, serif;
+  --hatch: radial-gradient(ellipse at 20% 0%, rgba(79, 159, 224, .06), transparent 55%), radial-gradient(ellipse at 100% 100%, rgba(185, 153, 90, .05), transparent 50%);
+  --panel: linear-gradient(180deg, rgba(18, 27, 48, .96), rgba(8, 12, 22, .97));
+  --corners: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2022%2022%22%3E%3Cg%20transform%3D%22rotate%280%2011%2011%29%22%3E%3Cpath%20d%3D%22M1.5%2020%20V7.5%20L7.5%201.5%20H20%22%20fill%3D%22none%22%20stroke%3D%22%23e6d3a1%22%20stroke-opacity%3D%22.75%22%20stroke-width%3D%221.1%22/%3E%3Cpath%20d%3D%22M4.5%209.5%20L9.5%204.5%22%20stroke%3D%22%23e6d3a1%22%20stroke-opacity%3D%22.45%22%20stroke-width%3D%221%22/%3E%3Cpath%20d%3D%22M7.5%207.5%20l1.6%20-1.6%20l1.6%201.6%20l-1.6%201.6%20z%22%20fill%3D%22%239fd2ff%22%20fill-opacity%3D%22.8%22/%3E%3C/g%3E%3C/svg%3E") top left / 20px no-repeat, url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2022%2022%22%3E%3Cg%20transform%3D%22rotate%2890%2011%2011%29%22%3E%3Cpath%20d%3D%22M1.5%2020%20V7.5%20L7.5%201.5%20H20%22%20fill%3D%22none%22%20stroke%3D%22%23e6d3a1%22%20stroke-opacity%3D%22.75%22%20stroke-width%3D%221.1%22/%3E%3Cpath%20d%3D%22M4.5%209.5%20L9.5%204.5%22%20stroke%3D%22%23e6d3a1%22%20stroke-opacity%3D%22.45%22%20stroke-width%3D%221%22/%3E%3Cpath%20d%3D%22M7.5%207.5%20l1.6%20-1.6%20l1.6%201.6%20l-1.6%201.6%20z%22%20fill%3D%22%239fd2ff%22%20fill-opacity%3D%22.8%22/%3E%3C/g%3E%3C/svg%3E") top right / 20px no-repeat, url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2022%2022%22%3E%3Cg%20transform%3D%22rotate%28180%2011%2011%29%22%3E%3Cpath%20d%3D%22M1.5%2020%20V7.5%20L7.5%201.5%20H20%22%20fill%3D%22none%22%20stroke%3D%22%23e6d3a1%22%20stroke-opacity%3D%22.75%22%20stroke-width%3D%221.1%22/%3E%3Cpath%20d%3D%22M4.5%209.5%20L9.5%204.5%22%20stroke%3D%22%23e6d3a1%22%20stroke-opacity%3D%22.45%22%20stroke-width%3D%221%22/%3E%3Cpath%20d%3D%22M7.5%207.5%20l1.6%20-1.6%20l1.6%201.6%20l-1.6%201.6%20z%22%20fill%3D%22%239fd2ff%22%20fill-opacity%3D%22.8%22/%3E%3C/g%3E%3C/svg%3E") bottom right / 20px no-repeat, url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2022%2022%22%3E%3Cg%20transform%3D%22rotate%28270%2011%2011%29%22%3E%3Cpath%20d%3D%22M1.5%2020%20V7.5%20L7.5%201.5%20H20%22%20fill%3D%22none%22%20stroke%3D%22%23e6d3a1%22%20stroke-opacity%3D%22.75%22%20stroke-width%3D%221.1%22/%3E%3Cpath%20d%3D%22M4.5%209.5%20L9.5%204.5%22%20stroke%3D%22%23e6d3a1%22%20stroke-opacity%3D%22.45%22%20stroke-width%3D%221%22/%3E%3Cpath%20d%3D%22M7.5%207.5%20l1.6%20-1.6%20l1.6%201.6%20l-1.6%201.6%20z%22%20fill%3D%22%239fd2ff%22%20fill-opacity%3D%22.8%22/%3E%3C/g%3E%3C/svg%3E") bottom left / 20px no-repeat;
+}
+
+/* Surfaces: one hairline, a fainter one inside, chamfered gold corners. */
+.gs, .panel, .needs-pop, .decor-bar, .picker-sheet, .swatch-sheet, .journal-sheet, .journal-sheet.diary {
+  background: var(--corners), var(--hatch), var(--panel) !important;
+  border: 1px solid var(--line); outline: 1px solid rgba(232, 228, 218, .08); outline-offset: -6px;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, .7); border-radius: 3px; color: var(--pale);
+}
+.journal, .modal { background: radial-gradient(ellipse at center, rgba(3, 5, 10, .55), rgba(3, 5, 10, .9)); }
+
+/* Headings in Cinzel; body in Garamond. */
+.panel h2, .journal-sheet h2, .journal-sheet.diary h2, .needs-pop h3, .decor-title, .swatch-sheet h3 {
+  font: 600 21px/1.15 var(--f-display) !important; letter-spacing: .08em; color: var(--pale) !important; text-shadow: none; text-align: left;
+}
+.journal-sheet.diary h2 { text-align: center; font-size: 22px !important; letter-spacing: .14em; }
+.journal-sheet h3, .journal-sheet.diary h3 { font: 600 12.5px var(--f-display); letter-spacing: .16em; color: var(--gilt) !important; border-bottom: 1px solid rgba(185, 153, 90, .3); padding-bottom: 4px; }
+.journal-sheet.diary h3::before { content: "◆ "; color: var(--azure); font-size: 9px; vertical-align: 2px; }
+.panel p, .journal-sheet.diary p, .journal-sheet.diary .meta { color: #c9c4b8 !important; }
+.journal-sheet.diary .ribbon { display: none; }
+
+/* Buttons: dark pills ringed in silver; the primary is ringed in gold with a blue glow. */
+.panel .actions button, .journal .actions button, .modal button, .list-row button, .dialogue .choices button,
+.title-buttons button, .creator-actions button, .mg-intro button, .fight-actions button, .seg button, .opt button {
+  border-radius: 999px; min-height: 44px; padding: 0 18px;
+  font: 600 13.5px/1.15 var(--f-display); letter-spacing: .07em; color: var(--pale); text-shadow: none;
+  background: linear-gradient(180deg, rgba(24, 33, 56, .96), rgba(10, 14, 26, .96));
+  box-shadow: inset 0 0 0 1px var(--line-hi), 0 2px 8px rgba(0, 0, 0, .55);
+}
+.panel .actions button.primary, .journal .actions button.primary, .modal button.primary, .list-row button:first-child:last-child,
+.dialogue .choices button:first-child, .title-buttons button.primary, .creator-actions button.primary, .mg-intro button.primary, .fight-actions button.primary {
+  color: var(--gilt-hi); text-shadow: 0 0 8px rgba(230, 211, 161, .35);
+  background: radial-gradient(ellipse at 50% 130%, rgba(79, 159, 224, .32), transparent 70%), linear-gradient(180deg, #17223e, #0a0f1d);
+  box-shadow: inset 0 0 0 1.5px var(--gilt), 0 0 16px rgba(79, 159, 224, .28), 0 2px 8px rgba(0, 0, 0, .55);
+}
+.panel .actions button:active, .journal .actions button:active, .modal button:active, .list-row button:active, .dialogue .choices button:active,
+.title-buttons button:active, .creator-actions button:active, .fight-actions button:active, .opt button:active { filter: none; box-shadow: inset 0 0 0 1.5px var(--azure-hi), 0 0 18px var(--azure-glow); }
+.panel .actions button:disabled, .list-row button:disabled, .creator-actions button:disabled, .fight-actions button:disabled {
+  color: rgba(232, 228, 218, .3); background: rgba(8, 12, 22, .9); box-shadow: inset 0 0 0 1px rgba(232, 228, 218, .14);
+}
+
+/* The top bar: no box, just a dusk gradient and the essentials. */
+.topbar { background: linear-gradient(180deg, rgba(4, 6, 12, .9), rgba(4, 6, 12, .55) 75%, rgba(4, 6, 12, 0)) !important; border: 0; outline: 0; box-shadow: none; border-radius: 0; }
+.tb-time .time, .tb-purse .money { font: 600 19px/1 var(--f-display); letter-spacing: .06em; color: var(--pale); text-shadow: 0 1px 3px #000; }
+.tb-time .date, .tb-purse .rent { font: italic 400 13.5px/1.25 var(--f-body); color: var(--mist); }
+
+/* Medallions: dark discs ringed in silver; they glow blue when pressed or open. */
+.tok .hex, .tok .hexin { clip-path: none !important; border-radius: 50%; }
+.tok .hex { background: radial-gradient(circle at 50% 30%, #1b2644, #0a0f1d 70%); box-shadow: inset 0 0 0 1px var(--line-hi), inset 0 0 0 4px #070b15, inset 0 0 0 5px rgba(232, 228, 218, .14), 0 3px 10px rgba(0, 0, 0, .6); transition: box-shadow .25s; }
+.tok .hexin { background: none; color: var(--pale); }
+.tok:active .hex, .tok.open .hex, .tok.flip .hex, .tok.whirl .hex { transform: none; box-shadow: inset 0 0 0 1.5px var(--azure-hi), inset 0 0 0 4px #070b15, 0 0 18px var(--azure-glow), 0 3px 10px rgba(0, 0, 0, .6); }
+.tok .lab { font: 600 11px/1 var(--f-display) !important; letter-spacing: .12em; color: var(--mist); text-shadow: 0 1px 2px #000; }
+.tok:active .lab { color: var(--azure-hi); }
+.tok .cnt, .goals-n { color: #05070d; background: var(--gilt-hi); }
+.dock { background: linear-gradient(180deg, transparent, rgba(4, 6, 12, .82) 55%); }
+.topbar .tok.watch .lab { color: #05070d; background: var(--gilt-hi); letter-spacing: 0; font: 600 12px/1 var(--f-body) !important; }
+.tok .w-case { fill: #0b111f; stroke: var(--line-hi); }
+
+/* The wellbeing ring: blue when well, gold when slipping, red when it hurts. */
+.wb-track { fill: rgba(6, 10, 20, .7); stroke: rgba(232, 228, 218, .14); stroke-width: 3; }
+.wb-fill { stroke: var(--azure-hi); stroke-width: 3; filter: drop-shadow(0 0 3px var(--azure)); }
+.wellbeing.fair .wb-fill { stroke: var(--gilt-hi); filter: drop-shadow(0 0 3px var(--gilt)); }
+.wellbeing.bad .wb-fill { stroke: var(--ember); filter: drop-shadow(0 0 4px var(--ember)); }
+.wb-num { font: 600 14px/1 var(--f-display); color: var(--pale); }
+.goals-btn { color: var(--pale); }
+.need-row .ni { color: var(--azure-hi); }
+.need-row .bar, .sk-bar { background: rgba(232, 228, 218, .08) !important; box-shadow: inset 0 0 0 1px rgba(232, 228, 218, .14) !important; }
+.need-row .bar i, .sk-bar i { background: linear-gradient(90deg, var(--gilt-lo), var(--gilt-hi)) !important; }
+.need-row .nh { font-family: var(--f-display); font-weight: 600; font-size: 14px; letter-spacing: .06em; }
+
+/* Goals and toasts: a dark slip with a hairline. */
+.goals { background: rgba(6, 10, 20, .9) !important; color: var(--pale) !important; border: 1px solid var(--line) !important; box-shadow: 0 6px 16px rgba(0, 0, 0, .6) !important; font: italic 400 15px/1.25 var(--f-body) !important; border-radius: 3px; }
+.goals .goals-rest { color: #c9c4b8 !important; }
+.toast { font: italic 400 16px/1.35 var(--f-body); color: var(--pale); }
+
+/* Round toggles over the street. */
+.decor-btn, .rel-btn { background: radial-gradient(circle at 50% 30%, #1b2644, #0a0f1d 70%); color: var(--pale); box-shadow: inset 0 0 0 1px var(--line-hi), 0 4px 12px rgba(0, 0, 0, .6); font-family: var(--f-display); font-weight: 600; font-size: 13px; letter-spacing: .08em; }
+.rel-btn[aria-pressed="true"] { color: var(--azure-hi); background: radial-gradient(circle at 50% 30%, #1b2644, #0a0f1d 70%); box-shadow: inset 0 0 0 1.5px var(--azure-hi), 0 0 18px var(--azure-glow); }
+.rel-legend { background: rgba(6, 10, 20, .88); box-shadow: inset 0 0 0 1px var(--line); }
+
+/* Dialogue: a dark card; the portrait in a ringed medallion with a blue halo; the name in capitals. */
+.dialogue { color: var(--pale) !important; background: var(--corners), var(--hatch), var(--panel) !important; border: 1px solid var(--line) !important; box-shadow: 0 14px 34px rgba(0, 0, 0, .7) !important; border-radius: 3px; }
+.dialogue .cameo { border-radius: 50%; height: 92px; background: radial-gradient(circle at 50% 35%, #1d2c52, #0a0f1d 70%); box-shadow: 0 0 0 3px #0b111f, 0 0 0 4px var(--line-hi), 0 0 0 7px #0b111f, 0 0 0 8px rgba(232, 228, 218, .18), 0 0 22px var(--azure-glow) !important; }
+.dialogue .speaker { font: 600 20px/1 var(--f-display) !important; letter-spacing: .1em; color: var(--pale) !important; top: -30px !important; text-shadow: 0 2px 4px #000; }
+.dialogue .text { color: var(--pale) !important; }
+.dialogue .hint { color: var(--mist) !important; }
+.dialogue .cameo .mono { font-family: var(--f-display); font-weight: 600; color: var(--gilt-hi); }
+.bubble { color: var(--pale); background: rgba(8, 12, 22, .94); border: 1px solid var(--line); box-shadow: 0 4px 12px rgba(0, 0, 0, .6); }
+.bubble::after { background: rgba(8, 12, 22, .94); }
+.bubble b { font: 600 12.5px/1 var(--f-display); letter-spacing: .08em; color: var(--gilt-hi); }
+.ibubble { color: var(--azure-hi); background: radial-gradient(circle at 50% 30%, #1b2644, #0a0f1d 70%) !important; box-shadow: inset 0 0 0 1px var(--line-hi), 0 0 14px var(--azure-glow) !important; }
+.ibubble::after { background: #0a0f1d; box-shadow: 0 0 0 1px var(--line-hi); }
+.ibubble.good { color: var(--azure-hi); }
+.ibubble.bad { color: var(--ember); box-shadow: inset 0 0 0 1px rgba(224, 87, 58, .7), 0 0 14px rgba(224, 87, 58, .45) !important; }
+
+/* The interaction pie: medallions; the one that matters glows. */
+.pie-b { color: var(--pale); background: radial-gradient(circle at 50% 30%, #1b2644, #0a0f1d 72%); box-shadow: inset 0 0 0 1px var(--line-hi), inset 0 0 0 4px #070b15, inset 0 0 0 5px rgba(232, 228, 218, .12), 0 5px 14px rgba(0, 0, 0, .65); }
+.pie-b .t { font-family: var(--f-display); font-weight: 600; letter-spacing: .05em; color: var(--pale); }
+.pie-b.ic { color: var(--pale); }
+.pie-b.ic .t { font: 600 10.5px/1.05 var(--f-display); letter-spacing: .08em; color: var(--pale); }
+.pie-b .s { color: var(--mist); }
+.pie-b.primary, .pie-b.ic.primary { color: var(--azure-hi); background: radial-gradient(circle at 50% 30%, #1d2c52, #0a0f1d 72%); box-shadow: inset 0 0 0 1.5px var(--azure-hi), inset 0 0 0 4px #070b15, 0 0 22px var(--azure-glow), 0 5px 14px rgba(0, 0, 0, .65); }
+.pie-b.ic.primary .t { color: var(--azure-hi); }
+.pie-card { color: var(--pale) !important; background: var(--corners), var(--hatch), var(--panel) !important; border: 1px solid var(--line) !important; box-shadow: 0 10px 26px rgba(0, 0, 0, .7) !important; }
+.pie-card b { font: 600 19px/1.1 var(--f-display) !important; letter-spacing: .1em; color: var(--pale) !important; }
+.pie-card span { font: 600 11.5px var(--f-display) !important; letter-spacing: .14em; color: var(--gilt) !important; }
+.pie-card p { color: #c9c4b8 !important; }
+
+/* The journal on dark pages. */
+.journal-sheet.diary { color: var(--pale); }
+.tabs { border-bottom: 1px solid var(--line); gap: 2px; }
+.tabs button { background: none !important; box-shadow: none !important; border-radius: 0; color: var(--mist) !important; font: 600 12.5px var(--f-display) !important; letter-spacing: .1em; border-bottom: 2px solid transparent; }
+.tabs button[aria-selected="true"] { color: var(--pale) !important; border-bottom-color: var(--gilt-hi); text-shadow: 0 0 10px var(--azure-glow); }
+.journal-sheet.diary .mcard { background: rgba(232, 228, 218, .025) !important; border-color: var(--line) !important; box-shadow: none !important; }
+.journal-sheet.diary .mcard.now { background: rgba(79, 159, 224, .05) !important; border-color: rgba(230, 211, 161, .5) !important; box-shadow: 0 0 14px rgba(79, 159, 224, .12) !important; }
+.journal-sheet.diary .mcard b { font: 600 14.5px var(--f-display); letter-spacing: .05em; color: var(--pale) !important; }
+.journal-sheet.diary .mcard .mstat, .journal-sheet.diary .mblurb { color: var(--mist) !important; }
+.journal-sheet.diary .mobj, .journal-sheet.diary .ways li, .journal-sheet.diary ul.perks li, .journal-sheet.diary .jobdl dd { color: #d6d1c5 !important; }
+.journal-sheet.diary .ways li::before { color: var(--mist) !important; }
+.journal-sheet.diary .ways li.ok::before { color: var(--azure-hi) !important; }
+.journal-sheet.diary .ways li.done { color: var(--mist) !important; }
+.journal-sheet.diary .req.ok, .req.ok { color: var(--azure-hi) !important; background: rgba(79, 159, 224, .14) !important; box-shadow: inset 0 0 0 1px rgba(169, 214, 255, .55) !important; }
+.journal-sheet.diary .req.no, .req.no { color: #e8a898 !important; background: rgba(224, 87, 58, .08) !important; box-shadow: inset 0 0 0 1px rgba(224, 87, 58, .45) !important; }
+.journal-sheet.diary .jobdl dt { color: var(--gilt) !important; font-family: var(--f-display); font-weight: 600; letter-spacing: .08em; font-size: 11.5px; }
+.journal-sheet.diary .ladder, .journal-sheet.diary .rung.past { color: var(--mist) !important; }
+.journal-sheet.diary .rung.here { color: var(--gilt-hi) !important; }
+.journal-sheet.diary .fogline { color: var(--mist) !important; }
+.journal-sheet.diary .opt { color: var(--pale); border-bottom-color: var(--line); font-family: var(--f-display); font-size: 14px; font-weight: 600; letter-spacing: .06em; }
+.sk-h { font-family: var(--f-display); font-weight: 600; font-size: 14.5px; letter-spacing: .05em; }
+.sk-sub, .sk-h small { color: var(--mist) !important; }
+.sk-sub em { color: var(--gilt-hi) !important; }
+.lr-label { font: 600 15px/1.2 var(--f-display); letter-spacing: .04em; color: var(--pale); }
+.lr-sub { color: var(--mist); }
+.list-row { border-bottom-color: var(--line); }
+.slot { background: rgba(232, 228, 218, .03); box-shadow: inset 0 0 0 1px var(--line); }
+.slot span { color: var(--gilt); font-family: var(--f-display); font-weight: 600; }
+
+/* Celebrations: capitals with a blue halo, a gold medallion instead of wax. */
+.cel .tt { font: 600 34px/1.1 var(--f-display); letter-spacing: .08em; color: var(--pale); text-shadow: 0 0 22px var(--azure-glow), 0 2px 3px #000; }
+.cel .k { font: 600 13px var(--f-display); letter-spacing: .22em; color: var(--gilt); }
+.cel .ss { color: #c9c4b8; }
+.cel .motes span { background: var(--azure-hi); box-shadow: 0 0 10px var(--azure); }
+.cel-promotion .stamp, .cel-goal .seal, .stamp-slot.on { color: #05070d; background: radial-gradient(circle at 40% 30%, #f3e6c0, var(--gilt) 60%, var(--gilt-lo)); box-shadow: inset 0 0 0 2px rgba(5, 7, 13, .5), 0 0 22px var(--azure-glow), 0 6px 14px rgba(0, 0, 0, .6); font-family: var(--f-display); font-weight: 600; text-shadow: none; }
+
+/* Title and creator. */
+.title-screen h1 { font: 600 clamp(36px, 11vw, 84px)/1.02 var(--f-display) !important; letter-spacing: .06em; color: var(--pale); text-shadow: 0 0 28px var(--azure-glow), 0 0 2px rgba(255, 255, 255, .6); font-style: normal; }
+.title-screen .kicker, .title-screen .sub { font-family: var(--f-display); font-weight: 600; letter-spacing: .2em; color: var(--gilt); font-size: 12.5px; }
+.title-screen .sub { font: italic 400 16px var(--f-body); letter-spacing: 0; color: #c9c4b8; }
+.creator-sheet { background: var(--corners), var(--hatch), var(--panel) !important; border-top: 1px solid var(--line) !important; box-shadow: 0 -10px 30px rgba(0, 0, 0, .65) !important; }
+.creator h2 { font: 600 24px var(--f-display); letter-spacing: .1em; color: var(--pale); text-shadow: none; font-style: normal; }
+.creator h3 { font-family: var(--f-display); letter-spacing: .14em; color: var(--gilt); }
+.creator input { font-family: var(--f-body); font-size: 17px; background: rgba(4, 6, 12, .7); border: 0; box-shadow: inset 0 0 0 1px var(--line); border-radius: 3px; color: var(--pale); }
+.crow { background: rgba(232, 228, 218, .025) !important; box-shadow: inset 0 0 0 1px var(--line) !important; border-radius: 999px !important; }
+.crow .lbl { font: 600 13.5px var(--f-display); letter-spacing: .08em; color: var(--mist); }
+.crow .val { font: 400 16px var(--f-body); color: var(--pale); }
+.crow .chev { color: var(--gilt); }
+.crow .dot { box-shadow: 0 0 0 2px #0b111f, 0 0 0 3px var(--line-hi); }
+
+/* Floaters. */
+.floater.gain { color: var(--azure-hi); text-shadow: 0 0 8px var(--azure), 0 1px 2px #000; }
+.floater { font-family: var(--f-display); font-weight: 600; letter-spacing: .04em; }
+.panel { z-index: 8; }
