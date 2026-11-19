@@ -97,7 +97,7 @@ export class Hud {
         </div>
         <div class="needs-pop" hidden role="dialog" aria-label="How you are">
           <h3>How you are</h3>
-          ${NEEDS.map((n) => `<div class="need-row" data-need="${n}"><span class="ni">${ICONS[n]}</span><div class="nt"><div class="nh"><b>${NEED_NAMES[n]}</b><span class="nv"></span></div><div class="bar"><i></i></div><div class="nhint">${NEED_HINTS[n]}</div></div></div>`).join('')}
+          ${NEEDS.map((n) => `<div class="need-row" data-need="${n}"><span class="ni">${ICONS[n]}</span><div class="nt"><div class="nh"><b>${NEED_NAMES[n]}</b><span class="nv"></span><button class="n-info" aria-label="How to fill ${NEED_NAMES[n]}">i</button></div><div class="bar"><i></i></div><div class="nhint" hidden>${NEED_HINTS[n]}</div></div></div>`).join('')}
         </div>
         <button class="goals" aria-expanded="false" hidden>
           <span class="goals-first"></span>
@@ -238,7 +238,15 @@ export class Hud {
       setGoalsOpen(false);
       this.needsOpen = !this.needsOpen;
     });
-    this.q('.needs-pop').addEventListener('click', () => (this.needsOpen = false));
+    this.q('.needs-pop').addEventListener('click', (e) => {
+      const ib = (e.target as HTMLElement).closest('.n-info');
+      if (ib) {
+        const hint = ib.closest('.need-row')!.querySelector('.nhint') as HTMLElement;
+        hint.hidden = !hint.hidden;
+        return;
+      }
+      this.needsOpen = false;
+    });
     // Tapping anywhere else folds the needs and goals away again.
     document.addEventListener('pointerdown', (e) => {
       const t = e.target as HTMLElement;
@@ -472,6 +480,8 @@ export class Hud {
         sb.className = 'lr-sub';
         sb.textContent = r.sub;
         text.append(l, sb);
+        text.className = 'lr-text';
+        text.addEventListener('click', () => row.classList.toggle('open'));
         const btns = document.createElement('div');
         btns.className = 'lr-actions';
         for (const a of r.actions) {
@@ -695,13 +705,18 @@ export class Hud {
    * The Sims-style interaction pie: a cameo of the person in the middle, a ring of
    * bubbles around them; groups open a second ring, and the middle takes you back.
    */
-  showPie(info: { name: string; relation: string; note: string; portrait: string | null; x: number; y: number }, items: PieItem[]): void {
+  showPie(info: { name: string; relation: string; note: string; meters?: [string, number][]; details?: string[]; portrait: string | null; x: number; y: number }, items: PieItem[]): void {
     this.q('.panel').hidden = true;
     const pie = this.q('.pie');
     const ring = pie.querySelector('.pie-ring') as HTMLElement;
     const card = pie.querySelector('.pie-card') as HTMLElement;
     const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
-    card.innerHTML = `<b>${esc(info.name)}</b><span>${esc(info.relation)}</span><p>${esc(info.note)}</p>`;
+    const meters = (info.meters ?? []).map(([k, v]) => `<div class="pc-m${k === 'Rivalry' ? ' riv' : ''}"><em>${k}</em><i><s style="width:${Math.round(Math.max(0, Math.min(100, v)))}%"></s></i></div>`).join('');
+    card.innerHTML = `<button class="pc-info" aria-label="More about them" aria-expanded="false">i</button><b>${esc(info.name)}</b><span>${esc(info.relation)}</span>${info.note ? `<p>${esc(info.note)}</p>` : ''}${meters ? `<div class="pc-meters">${meters}</div>` : ''}<div class="pc-more" hidden>${(info.details ?? []).map((d) => `<p>${esc(d)}</p>`).join('')}</div>`;
+    const more = card.querySelector('.pc-more') as HTMLElement;
+    const ib = card.querySelector('.pc-info') as HTMLElement;
+    ib.hidden = !(info.details ?? []).length;
+    ib.addEventListener('click', (e) => { e.stopPropagation(); more.hidden = !more.hidden; ib.setAttribute('aria-expanded', String(!more.hidden)); });
     const vw = window.innerWidth;
     const vh = window.innerHeight;
     const render = (list: PieItem[], group: PieItem | null) => {

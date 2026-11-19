@@ -18,6 +18,9 @@ export interface Relation {
   day: number;
   /** Last day you spent time with them; friendships fade without it. */
   seen?: number;
+  /** What you've found they like and dislike (interaction ids). */
+  likes?: string[];
+  dislikes?: string[];
 }
 
 export const newRelation = (): Relation => ({ friendship: 0, romance: 0, rivalry: 0, business: 0, met: false, today: 0, day: -1 });

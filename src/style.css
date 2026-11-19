@@ -1315,3 +1315,24 @@ button:disabled { cursor: default; }
 .title-screen::before { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at 50% 38%, rgba(4, 7, 14, .25), rgba(2, 4, 9, .88) 75%); }
 .title-screen h1 { color: #f1ede2 !important; text-shadow: 0 0 34px rgba(79, 159, 224, .55), 0 0 2px rgba(255, 255, 255, .7), 0 3px 6px #000 !important; }
 .title-inner { position: relative; }
+
+/* --- Less text on a phone screen ---------------------------------------------- */
+.pc-info, .n-info { flex: none; display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; font: italic 600 15px/1 Georgia, serif; color: var(--azure-hi);
+  border: 1.5px solid transparent; background: var(--disc) padding-box, var(--rim) border-box; box-shadow: 0 0 10px rgba(79, 159, 224, .25); }
+.pc-info { position: absolute; top: 8px; right: 12px; }
+.pc-info[aria-expanded="true"] { background: var(--disc-lit) padding-box, var(--rim-blue) border-box; color: #fff; }
+.pc-info[hidden] { display: none; }
+.n-info { width: 24px; height: 24px; font-size: 13px; margin-left: 8px; }
+.need-row .nh { align-items: center; }
+.need-row .nh .nv { margin-left: auto; }
+.pc-meters { display: grid; gap: 5px; margin: 8px auto 2px; max-width: 280px; }
+.pc-m { display: grid; grid-template-columns: 82px 1fr; align-items: center; gap: 8px; text-align: left; }
+.pc-m em { font: 600 10.5px var(--f-display); font-style: normal; letter-spacing: .1em; color: var(--mist); }
+.pc-m i { height: 5px; background: rgba(232, 228, 218, .08); box-shadow: inset 0 0 0 1px rgba(232, 228, 218, .14); }
+.pc-m s { display: block; height: 100%; text-decoration: none; background: linear-gradient(90deg, #1d4a7a, var(--azure-hi)); box-shadow: 0 0 6px var(--azure); }
+.pc-m.riv s { background: linear-gradient(90deg, #4a1408, var(--ember)); box-shadow: 0 0 6px var(--ember); }
+.pc-more { margin-top: 6px; border-top: 1px solid var(--line); padding-top: 4px; }
+.pc-more p { margin: 3px 0 0 !important; font: italic 400 14px/1.35 var(--f-body) !important; }
+.lr-sub { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+.list-row.open .lr-sub { -webkit-line-clamp: unset; display: block; }
+.lr-text { cursor: pointer; min-width: 0; }

@@ -48,7 +48,7 @@ import { buildHesterRoom } from '../world/hesterRoom';
 import { HOMES_TO_LET, type HomeId } from '../world/homes';
 import type { Location, Place } from '../world/location';
 import { buildSaltwharf } from '../world/saltwharf';
-import { makeDoorIcon } from '../world/doorIcon';
+import { makeDoorIcon, type DoorIconKind } from '../world/doorIcon';
 import { FLOOR_COLORS, FURNITURE, WALL_COLORS, defaultLayout, footprint, type FurnitureType } from '../world/furniture';
 import { SPOTS, rummage } from '../world/scavenge';
 import { EXITS, ROUTE_TO } from '../world/exits';
@@ -230,16 +230,23 @@ export class Game {
     this.portraits = new Portraits(this.renderer);
     this.dialogue.portraitFor = (name) => this.portraitOf(name);
     // Ways in and out are marked: the stairs down from Hester's room, and her door from the street.
-    const icon = (loc: LocationId, kind: 'exit' | 'home', x: number, y: number, z: number, place: string, to: [LocationId, string]) => {
+    const icon = (loc: LocationId, kind: DoorIconKind, x: number, y: number, z: number, place: string, to: [LocationId, string]) => {
       const sp = makeDoorIcon(kind);
       sp.position.set(x, y, z);
       this.locations[loc].scene.add(sp);
       this.doorIcons.push({ sprite: sp, y, loc, place, to });
     };
-    icon('hesterRoom', 'exit', 0.45, 1.55, 1.5, 'door', ['saltwharf', 'hester']);
-    icon('saltwharf', 'home', 11.5, 2.7, 8.95, 'hester', ['hesterRoom', 'door']);
+    // Every way in has a medallion: the street doors of every building you can enter, the stairs
+    // between floors, your own door, and the way out of every room.
+    icon('hesterRoom', 'down', 0.45, 1.55, 1.5, 'door', ['saltwharf', 'hester']);
     icon('saltwharf', 'home', 3.5, 2.7, 16.95, 'tenements', ['hesterRoom', 'door']);
-    for (const def of INTERIORS) icon(`int:${def.id}`, 'exit', def.w / 2, 1.3, 0.25, 'exit', ['saltwharf', def.id]);
+    for (const def of INTERIORS) {
+      icon(`int:${def.id}`, 'exit', def.w / 2, 1.3, 0.25, 'exit', ['saltwharf', def.id]);
+      const pl = this.locations.saltwharf.places.find((p) => p.id === def.id);
+      if (pl) icon('saltwharf', 'enter', pl.faceTo.x, 2.75, pl.faceTo.z - 0.05, def.id, [`int:${def.id}`, 'door']);
+      const st = this.locations[`int:${def.id}`].places.find((p) => p.id === 'stairs');
+      if (st) icon(`int:${def.id}`, 'up', st.faceTo.x, 2.1, 2.3, 'stairs', ['hesterRoom', 'door']);
+    }
     new Input(this.renderer.domElement, (x, y) => this.tap(x, y), (f) => this.rig.zoomBy(f));
 
     window.addEventListener('resize', () => this.resize());
@@ -394,6 +401,22 @@ export class Game {
         this.leaveHome();
         return;
       }
+      const place = this.location.places.find((p) => p.id === d.place);
+      const mine = HOMES_TO_LET[this.residence()].building;
+      // A shop that's shut: your own front door still lets you up; otherwise the door says when it opens.
+      if (d.to[0].startsWith('int:')) {
+        const def = INTERIORS.find((x) => `int:${x.id}` === d.to[0]);
+        if (def && !isOpen(def, this.clock.hour)) {
+          if (def.id === mine && this.state!.housed) this.exitThrough(d.place, ['hesterRoom', 'door']);
+          else if (place) this.goToPlace(place);
+          return;
+        }
+      }
+      // Stairs up to rooms: yours if you rent them; otherwise the landlord's offer.
+      if (d.to[0] === 'hesterRoom' && (this.location.id === 'saltwharf' ? d.place : this.location.id.slice(4)) !== mine) {
+        if (place) this.goToPlace(place);
+        return;
+      }
       if (d.to[0] === 'saltwharf' || this.state!.housed) {
         this.exitThrough(d.place, d.to);
         return;
@@ -510,35 +533,50 @@ export class Game {
     const people = s.people.filter((p) => p.alive && p.home === key && p.district === 'Saltwharf');
     const met = (id: string) => !!s.relations?.[id]?.met;
     const actions: Action[] = [];
-    for (const p of people) {
-      const age = ageOf(p, day);
+    // You only know who lives here once someone has told you, or answered the door.
+    const knownHere = people.filter((p) => s.known[p.id]?.home && ageOf(p, day) >= 3);
+    const unknown = people.filter((p) => !s.known[p.id]?.home && ageOf(p, day) >= 3);
+    const isHome = (p: PersonRec) => {
       const npc = this.npcs.find((n) => n.res.id === p.id);
-      const known = met(p.id);
-      const who = known ? this.nameOf(p.id) : age < 16 ? `the ${p.last} ${p.gender === 'man' ? 'boy' : 'girl'}` : p.gender === 'man' ? `Mr. ${p.last}` : p.spouse || p.widowed ? `Mrs. ${p.last}` : `Miss ${p.last}`;
-      if (age < 3) continue;
+      return !!npc && !npc.visible && this.stopFor(npc.res, h) === null && h >= 7 && h < 22;
+    };
+    const answer = (p: PersonRec) => {
+      const npc = this.npcs.find((n) => n.res.id === p.id)!;
+      npc.callOut(place.door);
+      npc.walker.faceToward({ x: this.player!.position.x, z: this.player!.position.y });
+      s.known[p.id] = { ...(s.known[p.id] ?? {}), home: true };
+      this.hud.toast(`${met(p.id) ? this.first(p.id) : 'Someone'} opens the door.`, 2000);
+      this.approach(npc);
+    };
+    for (const p of knownHere) {
       actions.push({
-        label: `Knock for ${known ? this.short(p.id) : who}${!known && people.filter((q) => q.last === p.last && q.gender === p.gender && ageOf(q, day) >= 16 === age >= 16).length > 1 ? ` (${age})` : ''}`,
+        label: `Knock for ${this.short(p.id)}`,
         onClick: () => {
           this.hud.hidePlace();
           sfx('drop');
           this.pumpKnock(key);
-          const out = npc ? npc.visible || this.stopFor(npc.res, h) !== null : true;
-          if (!npc || out || h >= 22 || h < 7) {
-            const l = this.lifeOf(p.id);
-            void this.dialogue.say({ speaker: '', text: h >= 22 || h < 7 ? 'A light goes on upstairs, then off again. Nobody comes down at this hour.' : `Nobody answers.${known && l.now !== 'Indoors somewhere' ? ` ${l.now}.` : ''}` });
-            return;
-          }
-          npc.callOut(place.door);
-          npc.walker.faceToward({ x: this.player!.position.x, z: this.player!.position.y });
-          s.known[p.id] = { ...(s.known[p.id] ?? {}), home: true };
-          this.hud.toast(`${known ? this.first(p.id) : `Someone`} opens the door.`, 2000);
-          this.approach(npc);
+          if (isHome(p)) return answer(p);
+          const l = this.lifeOf(p.id);
+          void this.dialogue.say({ speaker: '', text: h >= 22 || h < 7 ? 'A light goes on upstairs, then off again. Nobody comes down at this hour.' : `Nobody answers.${l.now !== 'Indoors somewhere' ? ` ${l.now}.` : ''}` });
         },
       });
     }
-    const names = people.map((p) => (met(p.id) ? this.first(p.id) : null)).filter(Boolean);
+    if (unknown.length) actions.push({
+      label: knownHere.length ? 'Knock for someone else' : 'Knock, and see who answers',
+      onClick: () => {
+        this.hud.hidePlace();
+        sfx('drop');
+        this.pumpKnock(key);
+        const home = unknown.filter(isHome);
+        if (!home.length) {
+          void this.dialogue.say({ speaker: '', text: h >= 22 || h < 7 ? 'A light goes on upstairs, then off again. Nobody comes down at this hour.' : 'You knock twice. Nobody answers.' });
+          return;
+        }
+        answer(home[Math.floor(Math.random() * home.length)]);
+      },
+    });
     const desc = people.length
-      ? `${place.description} The ${[...new Set(people.map((p) => p.last))].slice(0, 3).join(', ')} famil${new Set(people.map((p) => p.last)).size > 1 ? 'ies live' : 'y lives'} here${names.length ? ` (you know ${names.join(', ')})` : ''}.`
+      ? `${place.description}${knownHere.length ? ` You know who lives here: ${knownHere.map((p) => this.first(p.id)).join(', ')}.` : ''}`
       : `${place.description} Empty, and to let. A card in the window: "Apply Mr. Grubb."`;
     if (place.id === 'tenements') actions.push(...this.streetActions('tenements', (label, fn, opts) => ({ label, onClick: () => { this.hud.hidePlace(); void fn(); }, ...opts })));
     this.hud.showPlace({ ...place, description: desc }, actions);
@@ -2157,7 +2195,8 @@ ${h.blurb}` }, ['Take it', 'Not yet']);
     const id = npc.res.id;
     const r = this.rel(id);
     const k = (s.known[id] ??= {});
-    k.home = k.home || r.friendship >= 5 || Math.random() < 0.6;
+    // Where someone lives is told to friends, not strangers.
+    k.home = k.home || r.friendship >= 15;
     k.work = true;
     k.haunt = k.haunt || r.friendship >= 10 || Math.random() < 0.5;
     const l = this.lifeOf(id);
@@ -2165,7 +2204,7 @@ ${h.blurb}` }, ['Take it', 'Not yet']);
     r.today++;
     this.markUsed(`life:${id}`);
     const fam = l.family.length ? ` ${l.family[0][0].toUpperCase()}${l.family[0].slice(1)}.` : '';
-    await this.dialogue.say({ speaker: npc.res.name, text: `"${l.age !== null ? `${l.age} years, and ` : ''}${l.work === '?' ? 'I get by' : `I work at ${l.work}`}. ${l.home === '?' ? 'Where I live is my business.' : `I live in ${l.home}.`}${l.haunt === '?' ? '' : ` Most evenings you'll find me ${/^(by|wherever|outside|in|on|at) /.test(l.haunt) ? l.haunt : `at ${l.haunt}`}.`}"${fam}\nAdded to their card in People.` });
+    await this.dialogue.say({ speaker: npc.res.name, text: `"${l.age !== null ? `${l.age} years, and ` : ''}${l.work === '?' ? 'I get by' : `I work at ${l.work}`}. ${l.home === '?' ? 'Where I live is my business, until I know you better.' : `I live in ${l.home}.`}${l.haunt === '?' ? '' : ` Most evenings you'll find me ${/^(by|wherever|outside|in|on|at) /.test(l.haunt) ? l.haunt : `at ${l.haunt}`}.`}"${fam}\nAdded to their card in People.` });
     if (npc.held) this.showPerson(npc);
   }
 
@@ -3758,9 +3797,9 @@ ${h.blurb}` }, ['Take it', 'Not yet']);
       r.day = today;
       r.today = 0;
     }
+    const firstMeet = !r.met;
     if (!r.met) {
       r.met = true;
-      this.hud.toast(`You meet ${p.name}: ${p.role.charAt(0).toLowerCase()}${p.role.slice(1)}.`, 3500);
     }
     const traits = knownTraits(p, r);
     const v = VOICES[p.id];
@@ -3814,10 +3853,22 @@ ${h.blurb}` }, ['Take it', 'Not yet']);
     ];
     const head = new THREE.Vector3(npc.walker.position.x, 1.5, npc.walker.position.y).project(this.rig.camera);
     const life = this.lifeOf(p.id);
+    // The card: one sentence when you first meet; after that, just where you stand, details behind a tap.
+    const lab = (id: string) => INTERACTIONS.find((x) => x.id === id)?.label.toLowerCase() ?? id;
+    const details = [
+      `${p.role}.${doing}`,
+      traits.length ? `Seems ${traits.join(', ').toLowerCase()}.` : v.hint,
+      r.likes?.length ? `Likes: ${r.likes.map(lab).join(', ')}.` : '',
+      r.dislikes?.length ? `Doesn't like: ${r.dislikes.map(lab).join(', ')}.` : '',
+      life.work !== '?' ? `Works at ${life.work}.` : '',
+      life.home !== '?' ? `Lives in ${life.home}.` : '',
+    ].filter(Boolean);
     this.hud.showPie({
       name: p.name,
       relation: `${relationLabel(r)}${life.age !== null ? ` · ${life.age}` : ''}`,
-      note: tired ? `${p.role}.${doing} They've had enough of you for today.` : `${p.role}.${doing}${traits.length ? ` ${traits.join(', ')}.` : ` ${v.hint}`}`,
+      note: tired ? 'They\'ve had enough of you for today.' : firstMeet ? v.hint : '',
+      meters: firstMeet ? [] : [['Friendship', r.friendship], ...(r.romance > 0 ? [['Romance', r.romance] as [string, number]] : []), ...(r.rivalry > 0 ? [['Rivalry', r.rivalry] as [string, number]] : [])],
+      details,
       portrait: this.portraitOf(p.name),
       x: (head.x * 0.5 + 0.5) * window.innerWidth,
       y: (-head.y * 0.5 + 0.5) * window.innerHeight,
@@ -4249,6 +4300,9 @@ ${h.blurb}` }, ['Take it', 'Not yet']);
       this.hud.floater(`${v > 0 ? '+' : '−'}${Math.round(Math.abs(v))} ${names[m]}`, them.x, them.y - 10 - k * 22, good ? 'gain' : 'loss');
       k++;
     }
+    // Remember what landed, so their card can say so.
+    if (out.liked) r.likes = [...new Set([...(r.likes ?? []), i.id])];
+    if (out.disliked) r.dislikes = [...new Set([...(r.dislikes ?? []), i.id])];
     if (out.liked || out.disliked) this.hud.floater(out.disliked ? 'They didn\'t like that' : out.success ? 'They liked that' : 'Not today', them.x, them.y - 10 - k * 22, out.disliked || !out.success ? 'loss' : 'gain');
     if (xp.length) this.hud.toast(xp.join(' '), 2500);
     await new Promise((r2) => setTimeout(r2, 900));
